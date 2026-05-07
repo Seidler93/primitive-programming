@@ -4,6 +4,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Dumbbell,
+  ArrowLeft,
   LogOut,
   PencilLine,
   Plus,
@@ -18,6 +19,7 @@ import {
   loadCustomWorkouts,
   loadWorkoutLogs,
   login,
+  loginDev,
   logout,
   observeAuth,
   saveCustomWorkout,
@@ -30,6 +32,23 @@ const maxFields = [
   { key: "backSquat", label: "Back Squat" },
   { key: "frontSquat", label: "Front Squat" },
 ];
+
+function workoutDraftKey(userId, date) {
+  return `primitive-programming:workout-draft:${userId}:${date}`;
+}
+
+function loadWorkoutDraft(userId, date) {
+  try {
+    const raw = localStorage.getItem(workoutDraftKey(userId, date));
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveWorkoutDraft(userId, date, draft) {
+  localStorage.setItem(workoutDraftKey(userId, date), JSON.stringify(draft));
+}
 
 function formatDate(date) {
   return new Intl.DateTimeFormat("en-US", {
@@ -44,6 +63,46 @@ function groupByDate(items) {
     map[item.date] = [...(map[item.date] || []), item];
     return map;
   }, {});
+}
+
+function dateRange(startDate, endDate) {
+  const range = [];
+  for (const day = new Date(startDate); day <= endDate; day.setDate(day.getDate() + 1)) {
+    range.push(day.toISOString().slice(0, 10));
+  }
+  return range;
+}
+
+function startOfWeekMonday(date) {
+  const day = new Date(date);
+  const offset = (day.getDay() + 6) % 7;
+  day.setDate(day.getDate() - offset);
+  return day;
+}
+
+function endOfWeekSunday(date) {
+  const day = new Date(date);
+  const offset = (7 - day.getDay()) % 7;
+  day.setDate(day.getDate() + offset);
+  return day;
+}
+
+function calendarWindow(todayValue = new Date()) {
+  const today = new Date(todayValue);
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1, 12);
+  const currentMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 12);
+  const finalWeekStart = new Date(currentMonthEnd);
+  finalWeekStart.setDate(currentMonthEnd.getDate() - 6);
+  const start = startOfWeekMonday(monthStart);
+
+  if (today >= finalWeekStart) {
+    return {
+      start,
+      end: endOfWeekSunday(new Date(today.getFullYear(), today.getMonth() + 2, 0, 12)),
+    };
+  }
+
+  return { start, end: endOfWeekSunday(currentMonthEnd) };
 }
 
 function inferMaxKey(exercise, text = "") {
@@ -64,17 +123,55 @@ function percentages(item) {
   }));
 }
 
+function highNumber(value) {
+  const numbers = `${value}`.match(/\d+/g);
+  return numbers ? Number(numbers[numbers.length - 1]) : 1;
+}
+
+function setRows(item) {
+  const text = item.prescription.replace(/–/g, "-");
+  const setsByReps = [...text.matchAll(/(\d+(?:-\d+)?)\s*x\s*(\d+(?:-\d+)?(?:\+\d+)*)/gi)].at(-1);
+  if (setsByReps) {
+    const count = Math.min(highNumber(setsByReps[1]), 12);
+    return Array.from({ length: count }, (_, index) => ({
+      key: `${item.id}:${index + 1}`,
+      reps: setsByReps[2],
+    }));
+  }
+
+  const setsOnly = /x\s*(\d+(?:-\d+)?)\s*sets?/i.exec(text);
+  if (setsOnly) {
+    const count = Math.min(highNumber(setsOnly[1]), 12);
+    return Array.from({ length: count }, (_, index) => ({
+      key: `${item.id}:${index + 1}`,
+      reps: "set",
+    }));
+  }
+
+  const singles = /(\d+(?:-\d+)?)\s*singles?/i.exec(text);
+  if (singles) {
+    const count = Math.min(highNumber(singles[1]), 12);
+    return Array.from({ length: count }, (_, index) => ({
+      key: `${item.id}:${index + 1}`,
+      reps: "1",
+    }));
+  }
+
+  return [{ key: `${item.id}:1`, reps: /single/i.test(text) ? "1" : item.prescription }];
+}
+
 function prescribedPreview(item, maxes) {
   const maxKey = inferMaxKey(item.exercise, `${item.prescription} ${item.intensity}`);
-  const max = Number(maxes[maxKey]);
+  const max = Number(maxes[maxKey]?.value ?? maxes[maxKey]);
   const percents = percentages(item);
   if (!maxKey || !max || percents.length === 0) return "";
+  const unit = maxes[maxKey]?.unit || "";
   return percents
     .slice(0, 2)
     .map(({ low, high }) => {
       const lowWeight = Math.round((max * low) / 100);
       const highWeight = Math.round((max * high) / 100);
-      return low === high ? `${low}%: ${lowWeight}` : `${low}-${high}%: ${lowWeight}-${highWeight}`;
+      return low === high ? `${low}%: ${lowWeight}${unit}` : `${low}-${high}%: ${lowWeight}-${highWeight}${unit}`;
     })
     .join(" | ");
 }
@@ -102,6 +199,12 @@ function AuthCard({ onAuthed }) {
     } catch (err) {
       setError(err.message);
     }
+  }
+
+  async function devLogin(role) {
+    setError("");
+    const user = await loginDev(role);
+    onAuthed(user);
   }
 
   return (
@@ -132,13 +235,21 @@ function AuthCard({ onAuthed }) {
         <button className="text-button" type="button" onClick={() => setMode(mode === "login" ? "signup" : "login")}>
           {mode === "login" ? "Need an account?" : "Already have an account?"}
         </button>
+        <div className="dev-login-row" aria-label="Development login options">
+          <button className="secondary" type="button" onClick={() => devLogin("athlete")}>
+            Dev Athlete
+          </button>
+          <button className="secondary" type="button" onClick={() => devLogin("coach")}>
+            Dev Coach
+          </button>
+        </div>
         {!hasFirebaseConfig && <p className="demo-note">Demo mode is active until Firebase env vars are added.</p>}
       </section>
     </main>
   );
 }
 
-function CalendarStrip({ dates, selectedDate, setSelectedDate, logs }) {
+function CalendarStrip({ dates, selectedDate, onSelectDate, logs, workoutsByDate }) {
   return (
     <section className="calendar-band" aria-label="Workout calendar">
       <div className="section-heading">
@@ -148,14 +259,15 @@ function CalendarStrip({ dates, selectedDate, setSelectedDate, logs }) {
       <div className="date-grid">
         {dates.map((date) => (
           <button
-            className={`date-tile ${selectedDate === date ? "selected" : ""}`}
+            className={`date-tile ${workoutsByDate[date] ? "" : "empty"} ${selectedDate === date ? "selected" : ""}`}
             key={date}
-            onClick={() => setSelectedDate(date)}
+            onClick={() => onSelectDate(date)}
             type="button"
           >
+            {workoutsByDate[date] && <Dumbbell className="workout-day-icon" size={14} aria-hidden="true" />}
             <span>{formatDate(date).split(",")[0]}</span>
             <strong>{new Date(`${date}T12:00:00`).getDate()}</strong>
-            {logs[date]?.completed && <CheckCircle2 size={16} />}
+            {logs[date]?.completed && <CheckCircle2 className="complete-day-icon" size={16} />}
           </button>
         ))}
       </div>
@@ -165,20 +277,31 @@ function CalendarStrip({ dates, selectedDate, setSelectedDate, logs }) {
 
 function WorkoutView({ workout, date, user, logs, setLogs }) {
   const existing = logs[date] || {};
-  const [started, setStarted] = useState(false);
-  const [maxes, setMaxes] = useState(existing.maxes || {});
-  const [loads, setLoads] = useState(existing.loads || {});
-  const [notes, setNotes] = useState(existing.notes || "");
+  const initialDraft = loadWorkoutDraft(user.uid, date);
+  const [hydratedDraftFor, setHydratedDraftFor] = useState(`${user.uid}:${date}`);
+  const [started, setStarted] = useState(initialDraft.started || false);
+  const [maxes, setMaxes] = useState(initialDraft.maxes || existing.maxes || {});
+  const [loads, setLoads] = useState(initialDraft.loads || existing.loads || {});
+  const [notes, setNotes] = useState(initialDraft.notes ?? existing.notes ?? "");
   const requiredMaxes = useMemo(() => needsMaxes(workout), [workout]);
-  const missingMaxes = requiredMaxes.filter((key) => !Number(maxes[key]));
+  const maxValue = (key) => maxes[key]?.value ?? maxes[key] ?? "";
+  const maxUnit = (key) => maxes[key]?.unit || "kg";
+  const missingMaxes = requiredMaxes.filter((key) => !Number(maxValue(key)));
   const workoutTitle = workout[0] ? `${workout[0].focus} - Week ${workout[0].week}` : "No workout";
 
   useEffect(() => {
-    setStarted(false);
-    setMaxes(existing.maxes || {});
-    setLoads(existing.loads || {});
-    setNotes(existing.notes || "");
-  }, [date]);
+    const draft = loadWorkoutDraft(user.uid, date);
+    setStarted(draft.started || false);
+    setMaxes(draft.maxes || existing.maxes || {});
+    setLoads(draft.loads || existing.loads || {});
+    setNotes(draft.notes ?? existing.notes ?? "");
+    setHydratedDraftFor(`${user.uid}:${date}`);
+  }, [date, user.uid]);
+
+  useEffect(() => {
+    if (hydratedDraftFor !== `${user.uid}:${date}`) return;
+    saveWorkoutDraft(user.uid, date, { started, maxes, loads, notes });
+  }, [date, hydratedDraftFor, loads, maxes, notes, started, user.uid]);
 
   async function persist(payload = {}) {
     const next = { ...existing, maxes, loads, notes, ...payload, updatedAt: new Date().toISOString() };
@@ -205,18 +328,36 @@ function WorkoutView({ workout, date, user, logs, setLogs }) {
                 return (
                   <label key={key}>
                     {field.label} max
-                    <input
-                      value={maxes[key] || ""}
-                      onChange={(event) => setMaxes({ ...maxes, [key]: event.target.value })}
-                      inputMode="decimal"
-                      placeholder="kg or lb"
-                    />
+                    <span className="max-input-row">
+                      <input
+                        value={maxValue(key)}
+                        onChange={(event) => setMaxes({ ...maxes, [key]: { value: event.target.value, unit: maxUnit(key) } })}
+                        inputMode="decimal"
+                        placeholder="Max"
+                      />
+                      <select
+                        value={maxUnit(key)}
+                        onChange={(event) => setMaxes({ ...maxes, [key]: { value: maxValue(key), unit: event.target.value } })}
+                        aria-label={`${field.label} unit`}
+                      >
+                        <option value="kg">kg</option>
+                        <option value="lb">lb</option>
+                      </select>
+                    </span>
                   </label>
                 );
               })}
             </div>
           )}
-          <button className="primary" type="button" disabled={missingMaxes.length > 0} onClick={() => setStarted(true)}>
+          <button
+            className="primary"
+            type="button"
+            disabled={missingMaxes.length > 0}
+            onClick={() => {
+              setStarted(true);
+              saveWorkoutDraft(user.uid, date, { started: true, maxes, loads, notes });
+            }}
+          >
             <Dumbbell size={18} />
             Start workout
           </button>
@@ -235,8 +376,7 @@ function WorkoutView({ workout, date, user, logs, setLogs }) {
           <div className="exercise-table">
             <div className="table-head">
               <span>Exercise</span>
-              <span>Reps</span>
-              <span>Weight</span>
+              <span>Sets</span>
             </div>
             {workout.map((item) => (
               <div className="exercise-row" key={item.id}>
@@ -244,13 +384,20 @@ function WorkoutView({ workout, date, user, logs, setLogs }) {
                   <strong>{item.exercise}</strong>
                   <small>{item.intensity} | {item.notes}</small>
                 </div>
-                <span>{item.prescription}</span>
-                <input
-                  value={loads[item.id] || ""}
-                  onChange={(event) => setLoads({ ...loads, [item.id]: event.target.value })}
-                  onBlur={() => persist()}
-                  placeholder={prescribedPreview(item, maxes) || "Actual"}
-                />
+                <div className="set-list">
+                  <p>{item.prescription}</p>
+                  {setRows(item).map((set) => (
+                    <label className="set-row" key={set.key}>
+                      <span>{set.reps}</span>
+                      <input
+                        value={loads[set.key] ?? (set.key.endsWith(":1") ? loads[item.id] || "" : "")}
+                        onChange={(event) => setLoads({ ...loads, [set.key]: event.target.value })}
+                        onBlur={() => persist()}
+                        placeholder={prescribedPreview(item, maxes) || "Actual"}
+                      />
+                    </label>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
@@ -373,10 +520,18 @@ function App() {
 
   const allWorkouts = useMemo(() => [...importedProgram, ...customWorkouts], [customWorkouts]);
   const workoutsByDate = useMemo(() => groupByDate(allWorkouts), [allWorkouts]);
-  const dates = useMemo(() => Object.keys(workoutsByDate).sort(), [workoutsByDate]);
+  const dates = useMemo(() => {
+    const { start, end } = calendarWindow();
+    return dateRange(start, end);
+  }, []);
   const selectedWorkout = workoutsByDate[selectedDate] || [];
   const today = new Date().toISOString().slice(0, 10);
   const todayTarget = workoutsByDate[today] ? today : dates.find((date) => date >= today) || dates[0];
+
+  function openWorkout(date) {
+    setSelectedDate(date);
+    setView("workout");
+  }
 
   if (checking) return <main className="loading">Loading...</main>;
   if (!user) return <AuthCard onAuthed={hydrateUser} />;
@@ -389,6 +544,12 @@ function App() {
           <span>Primitive Programming</span>
         </div>
         <div className="nav-actions">
+          {view === "workout" && (
+            <button className="nav-button" onClick={() => setView("client")} type="button">
+              <ArrowLeft size={17} />
+              Back
+            </button>
+          )}
           {isTrainer && (
             <button className={view === "trainer" ? "nav-button active" : "nav-button"} onClick={() => setView(view === "trainer" ? "client" : "trainer")} type="button">
               <PencilLine size={17} />
@@ -404,16 +565,17 @@ function App() {
 
       {view === "trainer" ? (
         <TrainerCreator onCreated={refreshCustomWorkouts} />
+      ) : view === "workout" ? (
+        <WorkoutView workout={selectedWorkout} date={selectedDate} user={user} logs={logs} setLogs={setLogs} />
       ) : (
         <>
-          <CalendarStrip dates={dates} selectedDate={selectedDate} setSelectedDate={setSelectedDate} logs={logs} />
+          <CalendarStrip dates={dates} selectedDate={selectedDate} onSelectDate={openWorkout} logs={logs} workoutsByDate={workoutsByDate} />
           <div className="today-row">
-            <button className="primary" type="button" onClick={() => setSelectedDate(todayTarget)}>
+            <button className="primary" type="button" onClick={() => openWorkout(todayTarget)}>
               <CalendarDays size={18} />
               View today's workout
             </button>
           </div>
-          <WorkoutView workout={selectedWorkout} date={selectedDate} user={user} logs={logs} setLogs={setLogs} />
         </>
       )}
     </main>

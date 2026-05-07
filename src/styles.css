@@ -104,7 +104,8 @@ label {
 }
 
 input,
-textarea {
+textarea,
+select {
   width: 100%;
   border: 1px solid #cbd4cd;
   border-radius: 8px;
@@ -115,7 +116,8 @@ textarea {
 }
 
 input:focus,
-textarea:focus {
+textarea:focus,
+select:focus {
   border-color: #19524b;
   box-shadow: 0 0 0 3px rgba(25, 82, 75, 0.14);
 }
@@ -168,6 +170,13 @@ textarea:focus {
   background: transparent;
   color: #19524b;
   font-weight: 800;
+}
+
+.dev-login-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
 }
 
 .error {
@@ -224,7 +233,7 @@ textarea:focus {
 
 .date-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -233,7 +242,7 @@ textarea:focus {
   display: grid;
   gap: 3px;
   min-height: 82px;
-  padding: 10px;
+  padding: 10px 30px 10px 10px;
   text-align: left;
   color: #25302a;
   background: #fff;
@@ -246,6 +255,17 @@ textarea:focus {
   border-color: #19524b;
 }
 
+.date-tile.empty {
+  color: #7b857e;
+  background: #f9faf8;
+}
+
+.date-tile.empty.selected {
+  color: #fff;
+  background: #4e5b54;
+  border-color: #4e5b54;
+}
+
 .date-tile span {
   font-size: 0.78rem;
   font-weight: 800;
@@ -255,7 +275,14 @@ textarea:focus {
   font-size: 1.45rem;
 }
 
-.date-tile svg {
+.workout-day-icon {
+  position: absolute;
+  right: 9px;
+  top: 9px;
+  opacity: 0.78;
+}
+
+.complete-day-icon {
   position: absolute;
   right: 9px;
   bottom: 9px;
@@ -283,7 +310,13 @@ textarea:focus {
 }
 
 .max-grid {
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  grid-template-columns: 1fr;
+}
+
+.max-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px;
+  gap: 8px;
 }
 
 .workout-title-row {
@@ -311,9 +344,9 @@ textarea:focus {
 .table-head,
 .exercise-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.2fr) minmax(170px, 1fr) minmax(180px, 0.8fr);
+  grid-template-columns: minmax(180px, 0.85fr) minmax(260px, 1.35fr);
   gap: 12px;
-  align-items: center;
+  align-items: start;
 }
 
 .table-head {
@@ -334,6 +367,27 @@ textarea:focus {
   display: block;
   margin-top: 4px;
   color: #66736b;
+}
+
+.set-list {
+  display: grid;
+  gap: 8px;
+}
+
+.set-list p {
+  margin: 0;
+  color: #4e5b54;
+  font-weight: 800;
+}
+
+.set-row {
+  grid-template-columns: minmax(64px, 0.35fr) minmax(0, 1fr);
+  align-items: center;
+}
+
+.set-row span {
+  color: #2e3933;
+  font-weight: 900;
 }
 
 .notes-field {
@@ -382,5 +436,39 @@ textarea:focus {
 
   .today-row .primary {
     width: 100%;
+  }
+
+  .date-grid {
+    gap: 6px;
+  }
+
+  .date-tile {
+    min-height: 68px;
+    padding: 8px 22px 8px 8px;
+  }
+
+  .date-tile span {
+    font-size: 0.68rem;
+  }
+
+  .date-tile strong {
+    font-size: 1.1rem;
+  }
+
+  .workout-day-icon,
+  .complete-day-icon {
+    right: 6px;
+  }
+
+  .workout-day-icon {
+    top: 7px;
+  }
+
+  .complete-day-icon {
+    bottom: 7px;
+  }
+
+  .dev-login-row {
+    grid-template-columns: 1fr;
   }
 }
