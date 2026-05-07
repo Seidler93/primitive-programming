@@ -50,6 +50,23 @@ function saveWorkoutDraft(userId, date, draft) {
   localStorage.setItem(workoutDraftKey(userId, date), JSON.stringify(draft));
 }
 
+function userMaxesKey(userId) {
+  return `primitive-programming:maxes:${userId}`;
+}
+
+function loadUserMaxes(userId) {
+  try {
+    const raw = localStorage.getItem(userMaxesKey(userId));
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveUserMaxes(userId, maxes) {
+  localStorage.setItem(userMaxesKey(userId), JSON.stringify(maxes));
+}
+
 function formatDate(date) {
   return new Intl.DateTimeFormat("en-US", {
     weekday: "long",
@@ -87,22 +104,39 @@ function endOfWeekSunday(date) {
   return day;
 }
 
-function calendarWindow(todayValue = new Date()) {
-  const today = new Date(todayValue);
-  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1, 12);
-  const currentMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 12);
-  const finalWeekStart = new Date(currentMonthEnd);
-  finalWeekStart.setDate(currentMonthEnd.getDate() - 6);
-  const start = startOfWeekMonday(monthStart);
+function monthLabel(date) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric",
+  }).format(date);
+}
 
-  if (today >= finalWeekStart) {
-    return {
-      start,
-      end: endOfWeekSunday(new Date(today.getFullYear(), today.getMonth() + 2, 0, 12)),
-    };
+function calendarSections(workoutDates, todayValue = new Date()) {
+  const today = new Date(todayValue);
+  const startMonth = new Date(today.getFullYear(), today.getMonth(), 1, 12);
+  const latestWorkout = workoutDates
+    .map((date) => new Date(`${date}T12:00:00`))
+    .filter((date) => date >= startMonth)
+    .sort((a, b) => b - a)[0];
+  const endMonth = latestWorkout || startMonth;
+  const sections = [];
+
+  for (
+    const month = new Date(startMonth);
+    month <= endMonth;
+    month.setMonth(month.getMonth() + 1)
+  ) {
+    const monthStart = new Date(month.getFullYear(), month.getMonth(), 1, 12);
+    const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 0, 12);
+    sections.push({
+      key: `${monthStart.getFullYear()}-${monthStart.getMonth()}`,
+      label: monthLabel(monthStart),
+      month: monthStart.getMonth(),
+      dates: dateRange(startOfWeekMonday(monthStart), endOfWeekSunday(monthEnd)),
+    });
   }
 
-  return { start, end: endOfWeekSunday(currentMonthEnd) };
+  return sections;
 }
 
 function inferMaxKey(exercise, text = "") {
@@ -249,38 +283,48 @@ function AuthCard({ onAuthed }) {
   );
 }
 
-function CalendarStrip({ dates, selectedDate, onSelectDate, logs, workoutsByDate }) {
+function CalendarStrip({ sections, selectedDate, onSelectDate, logs, workoutsByDate }) {
   return (
     <section className="calendar-band" aria-label="Workout calendar">
       <div className="section-heading">
         <CalendarDays size={20} />
         <h2>Calendar</h2>
       </div>
-      <div className="date-grid">
-        {dates.map((date) => (
-          <button
-            className={`date-tile ${workoutsByDate[date] ? "" : "empty"} ${selectedDate === date ? "selected" : ""}`}
-            key={date}
-            onClick={() => onSelectDate(date)}
-            type="button"
-          >
-            {workoutsByDate[date] && <Dumbbell className="workout-day-icon" size={14} aria-hidden="true" />}
-            <span>{formatDate(date).split(",")[0]}</span>
-            <strong>{new Date(`${date}T12:00:00`).getDate()}</strong>
-            {logs[date]?.completed && <CheckCircle2 className="complete-day-icon" size={16} />}
-          </button>
+      <div className="month-stack">
+        {sections.map((section) => (
+          <div className="calendar-month" key={section.key}>
+            <h3>{section.label}</h3>
+            <div className="date-grid">
+              {section.dates.map((date) => {
+                const isOutsideMonth = new Date(`${date}T12:00:00`).getMonth() !== section.month;
+                return (
+                  <button
+                    className={`date-tile ${workoutsByDate[date] ? "" : "empty"} ${isOutsideMonth ? "outside-month" : ""} ${selectedDate === date && !isOutsideMonth ? "selected" : ""}`}
+                    key={`${section.key}-${date}`}
+                    onClick={() => onSelectDate(date)}
+                    type="button"
+                  >
+                    <span>{formatDate(date).slice(0, 3)}</span>
+                    <strong>{new Date(`${date}T12:00:00`).getDate()}</strong>
+                    {logs[date]?.completed && <CheckCircle2 className="complete-day-icon" size={16} />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         ))}
       </div>
     </section>
   );
 }
 
-function WorkoutView({ workout, date, user, logs, setLogs }) {
+function WorkoutView({ workout, date, user, logs, setLogs, onDone }) {
   const existing = logs[date] || {};
   const initialDraft = loadWorkoutDraft(user.uid, date);
+  const savedMaxes = loadUserMaxes(user.uid);
   const [hydratedDraftFor, setHydratedDraftFor] = useState(`${user.uid}:${date}`);
   const [started, setStarted] = useState(initialDraft.started || false);
-  const [maxes, setMaxes] = useState(initialDraft.maxes || existing.maxes || {});
+  const [maxes, setMaxes] = useState(initialDraft.maxes || existing.maxes || savedMaxes);
   const [loads, setLoads] = useState(initialDraft.loads || existing.loads || {});
   const [notes, setNotes] = useState(initialDraft.notes ?? existing.notes ?? "");
   const requiredMaxes = useMemo(() => needsMaxes(workout), [workout]);
@@ -292,7 +336,7 @@ function WorkoutView({ workout, date, user, logs, setLogs }) {
   useEffect(() => {
     const draft = loadWorkoutDraft(user.uid, date);
     setStarted(draft.started || false);
-    setMaxes(draft.maxes || existing.maxes || {});
+    setMaxes(draft.maxes || existing.maxes || loadUserMaxes(user.uid));
     setLoads(draft.loads || existing.loads || {});
     setNotes(draft.notes ?? existing.notes ?? "");
     setHydratedDraftFor(`${user.uid}:${date}`);
@@ -301,12 +345,18 @@ function WorkoutView({ workout, date, user, logs, setLogs }) {
   useEffect(() => {
     if (hydratedDraftFor !== `${user.uid}:${date}`) return;
     saveWorkoutDraft(user.uid, date, { started, maxes, loads, notes });
+    saveUserMaxes(user.uid, maxes);
   }, [date, hydratedDraftFor, loads, maxes, notes, started, user.uid]);
 
   async function persist(payload = {}) {
     const next = { ...existing, maxes, loads, notes, ...payload, updatedAt: new Date().toISOString() };
     setLogs({ ...logs, [date]: next });
     await saveWorkoutLog(user.uid, date, next);
+  }
+
+  async function finishWorkout(payload = {}) {
+    await persist(payload);
+    onDone();
   }
 
   if (!workout.length) {
@@ -369,7 +419,7 @@ function WorkoutView({ workout, date, user, logs, setLogs }) {
               <p className="eyebrow">{formatDate(date)} | {workout[0].phase}</p>
               <h2>{workoutTitle}</h2>
             </div>
-            <button className="icon-button" type="button" onClick={() => persist({ completed: true })} aria-label="Mark complete" title="Mark complete">
+            <button className="icon-button" type="button" onClick={() => finishWorkout({ completed: true })} aria-label="Mark complete" title="Mark complete">
               <CheckCircle2 size={20} />
             </button>
           </div>
@@ -405,7 +455,7 @@ function WorkoutView({ workout, date, user, logs, setLogs }) {
             Session notes
             <textarea value={notes} onChange={(event) => setNotes(event.target.value)} onBlur={() => persist()} rows={3} />
           </label>
-          <button className="secondary" type="button" onClick={() => persist()}>
+          <button className="secondary" type="button" onClick={() => finishWorkout()}>
             <Save size={18} />
             Save workout
           </button>
@@ -520,10 +570,9 @@ function App() {
 
   const allWorkouts = useMemo(() => [...importedProgram, ...customWorkouts], [customWorkouts]);
   const workoutsByDate = useMemo(() => groupByDate(allWorkouts), [allWorkouts]);
-  const dates = useMemo(() => {
-    const { start, end } = calendarWindow();
-    return dateRange(start, end);
-  }, []);
+  const workoutDates = useMemo(() => Object.keys(workoutsByDate).sort(), [workoutsByDate]);
+  const calendarMonths = useMemo(() => calendarSections(workoutDates), [workoutDates]);
+  const dates = useMemo(() => calendarMonths.flatMap((section) => section.dates), [calendarMonths]);
   const selectedWorkout = workoutsByDate[selectedDate] || [];
   const today = new Date().toISOString().slice(0, 10);
   const todayTarget = workoutsByDate[today] ? today : dates.find((date) => date >= today) || dates[0];
@@ -566,16 +615,16 @@ function App() {
       {view === "trainer" ? (
         <TrainerCreator onCreated={refreshCustomWorkouts} />
       ) : view === "workout" ? (
-        <WorkoutView workout={selectedWorkout} date={selectedDate} user={user} logs={logs} setLogs={setLogs} />
+        <WorkoutView workout={selectedWorkout} date={selectedDate} user={user} logs={logs} setLogs={setLogs} onDone={() => setView("client")} />
       ) : (
         <>
-          <CalendarStrip dates={dates} selectedDate={selectedDate} onSelectDate={openWorkout} logs={logs} workoutsByDate={workoutsByDate} />
           <div className="today-row">
             <button className="primary" type="button" onClick={() => openWorkout(todayTarget)}>
               <CalendarDays size={18} />
               View today's workout
             </button>
           </div>
+          <CalendarStrip sections={calendarMonths} selectedDate={selectedDate} onSelectDate={openWorkout} logs={logs} workoutsByDate={workoutsByDate} />
         </>
       )}
     </main>

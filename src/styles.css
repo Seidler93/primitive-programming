@@ -231,6 +231,25 @@ select:focus {
   font-size: 1.05rem;
 }
 
+.month-stack {
+  display: grid;
+  gap: 28px;
+}
+
+.calendar-month {
+  display: grid;
+  gap: 10px;
+}
+
+.calendar-month h3 {
+  margin: 0;
+  color: #66736b;
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
 .date-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -249,6 +268,20 @@ select:focus {
   border: 1px solid #dbe1dd;
 }
 
+.date-tile:not(.empty)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  opacity: 0.08;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17.596 12.768a2 2 0 1 0 2.829-2.829l-1.768-1.767a2 2 0 0 0 2.828-2.829l-2.828-2.828a2 2 0 0 0-2.829 2.828l-1.767-1.768a2 2 0 1 0-2.829 2.829z'/%3E%3Cpath d='m2.5 21.5 1.4-1.4'/%3E%3Cpath d='m20.1 3.9 1.4-1.4'/%3E%3Cpath d='M5.343 21.485a2 2 0 1 0 2.829-2.828l1.767 1.768a2 2 0 1 0 2.829-2.829l-6.364-6.364a2 2 0 1 0-2.829 2.829l1.768 1.767a2 2 0 0 0-2.828 2.829z'/%3E%3Cpath d='m9.6 14.4 4.8-4.8'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+  pointer-events: none;
+}
+
+.date-tile > * {
+  position: relative;
+}
+
 .date-tile.selected {
   color: #fff;
   background: #19524b;
@@ -258,6 +291,10 @@ select:focus {
 .date-tile.empty {
   color: #7b857e;
   background: #f9faf8;
+}
+
+.date-tile.outside-month {
+  opacity: 0.48;
 }
 
 .date-tile.empty.selected {
@@ -275,13 +312,6 @@ select:focus {
   font-size: 1.45rem;
 }
 
-.workout-day-icon {
-  position: absolute;
-  right: 9px;
-  top: 9px;
-  opacity: 0.78;
-}
-
 .complete-day-icon {
   position: absolute;
   right: 9px;
@@ -290,7 +320,7 @@ select:focus {
 
 .today-row {
   width: min(1180px, calc(100% - 32px));
-  margin: 0 auto 18px;
+  margin: 24px auto 0;
   justify-content: flex-end;
 }
 
@@ -455,13 +485,8 @@ select:focus {
     font-size: 1.1rem;
   }
 
-  .workout-day-icon,
   .complete-day-icon {
     right: 6px;
-  }
-
-  .workout-day-icon {
-    top: 7px;
   }
 
   .complete-day-icon {
