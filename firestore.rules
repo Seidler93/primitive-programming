@@ -1,0 +1,36 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function isTrainer() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/trainers/$(request.auth.uid));
+    }
+
+    match /users/{userId}/{document=**} {
+      allow read, write: if isOwner(userId) || isTrainer();
+    }
+
+    match /programs/{programId} {
+      allow read: if signedIn();
+      allow write: if isTrainer();
+      match /workouts/{workoutId} {
+        allow read: if signedIn();
+        allow write: if isTrainer();
+      }
+    }
+
+    match /trainers/{trainerId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+  }
+}

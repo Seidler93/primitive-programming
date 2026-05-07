@@ -1,0 +1,386 @@
+:root {
+  color: #17211b;
+  background: #f6f3ee;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.auth-shell,
+.loading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    linear-gradient(120deg, rgba(25, 82, 75, 0.82), rgba(16, 20, 18, 0.76)),
+    url("https://images.unsplash.com/photo-1534258936925-c58bed479fcb?auto=format&fit=crop&w=1600&q=80") center/cover;
+}
+
+.auth-panel {
+  width: min(100%, 520px);
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  border-radius: 8px;
+  padding: 28px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.18);
+}
+
+.brand-lockup,
+.nav-brand,
+.section-heading,
+.nav-actions,
+.today-row,
+.workout-title-row {
+  display: flex;
+  align-items: center;
+}
+
+.brand-lockup {
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.brand-lockup p,
+.eyebrow {
+  margin: 0 0 4px;
+  color: #66736b;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0;
+  font-weight: 800;
+}
+
+.brand-lockup h1,
+.workout-panel h2,
+.creator-panel h2 {
+  margin: 0;
+  line-height: 1.08;
+}
+
+.brand-mark {
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: #19524b;
+}
+
+.auth-form,
+.creator-form,
+.max-grid {
+  display: grid;
+  gap: 14px;
+}
+
+label {
+  display: grid;
+  gap: 7px;
+  color: #2e3933;
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+
+input,
+textarea {
+  width: 100%;
+  border: 1px solid #cbd4cd;
+  border-radius: 8px;
+  background: #fff;
+  color: #17211b;
+  padding: 12px 13px;
+  outline: none;
+}
+
+input:focus,
+textarea:focus {
+  border-color: #19524b;
+  box-shadow: 0 0 0 3px rgba(25, 82, 75, 0.14);
+}
+
+.primary,
+.secondary,
+.nav-button,
+.icon-button,
+.date-tile,
+.text-button {
+  border: 0;
+  border-radius: 8px;
+  min-height: 42px;
+}
+
+.primary,
+.secondary,
+.nav-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 0 16px;
+  font-weight: 850;
+}
+
+.primary {
+  color: #fff;
+  background: #19524b;
+}
+
+.primary:disabled {
+  cursor: not-allowed;
+  background: #9aa7a0;
+}
+
+.secondary,
+.nav-button {
+  color: #19524b;
+  background: #e5eee9;
+}
+
+.nav-button.active {
+  color: #fff;
+  background: #19524b;
+}
+
+.text-button {
+  margin-top: 16px;
+  background: transparent;
+  color: #19524b;
+  font-weight: 800;
+}
+
+.error {
+  color: #a42929;
+  margin: 0;
+}
+
+.demo-note {
+  color: #66736b;
+  margin: 18px 0 0;
+}
+
+.app-shell {
+  min-height: 100vh;
+  background: #f6f3ee;
+}
+
+.top-nav {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 68px;
+  padding: 0 clamp(16px, 5vw, 56px);
+  color: #fff;
+  background: #17211b;
+}
+
+.nav-brand,
+.nav-actions {
+  gap: 10px;
+}
+
+.calendar-band,
+.workout-panel,
+.creator-panel,
+.empty-state {
+  width: min(1180px, calc(100% - 32px));
+  margin: 24px auto;
+}
+
+.section-heading {
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.section-heading h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.date-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 10px;
+}
+
+.date-tile {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  min-height: 82px;
+  padding: 10px;
+  text-align: left;
+  color: #25302a;
+  background: #fff;
+  border: 1px solid #dbe1dd;
+}
+
+.date-tile.selected {
+  color: #fff;
+  background: #19524b;
+  border-color: #19524b;
+}
+
+.date-tile span {
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.date-tile strong {
+  font-size: 1.45rem;
+}
+
+.date-tile svg {
+  position: absolute;
+  right: 9px;
+  bottom: 9px;
+}
+
+.today-row {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto 18px;
+  justify-content: flex-end;
+}
+
+.workout-panel,
+.creator-panel,
+.empty-state {
+  background: #fff;
+  border: 1px solid #dbe1dd;
+  border-radius: 8px;
+  padding: clamp(16px, 3vw, 28px);
+  box-shadow: 0 16px 45px rgba(23, 33, 27, 0.08);
+}
+
+.start-panel {
+  display: grid;
+  gap: 20px;
+}
+
+.max-grid {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.workout-title-row {
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.icon-button {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  color: #19524b;
+  background: #e5eee9;
+}
+
+.exercise-table {
+  display: grid;
+  border: 1px solid #dbe1dd;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.table-head,
+.exercise-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(170px, 1fr) minmax(180px, 0.8fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.table-head {
+  padding: 12px 14px;
+  color: #4e5b54;
+  background: #edf2ef;
+  font-size: 0.8rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.exercise-row {
+  padding: 14px;
+  border-top: 1px solid #e8ece9;
+}
+
+.exercise-row small {
+  display: block;
+  margin-top: 4px;
+  color: #66736b;
+}
+
+.notes-field {
+  margin-top: 18px;
+}
+
+.workout-panel .secondary {
+  margin-top: 14px;
+}
+
+.creator-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.creator-form .wide,
+.creator-form button {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 760px) {
+  .top-nav,
+  .nav-actions {
+    flex-wrap: wrap;
+  }
+
+  .top-nav {
+    padding-block: 12px;
+  }
+
+  .table-head {
+    display: none;
+  }
+
+  .exercise-row,
+  .creator-form {
+    grid-template-columns: 1fr;
+  }
+
+  .exercise-row {
+    align-items: stretch;
+  }
+
+  .today-row {
+    justify-content: stretch;
+  }
+
+  .today-row .primary {
+    width: 100%;
+  }
+}
