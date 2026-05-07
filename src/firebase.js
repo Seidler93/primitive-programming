@@ -36,6 +36,16 @@ export const db = app ? getFirestore(app) : null;
 
 const localKey = (key) => `primitive-programming:${key}`;
 const isDevUserId = (userId = "") => userId.startsWith("dev-");
+const readTimeoutMs = 3500;
+
+function withTimeout(promise, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(message)), readTimeoutMs);
+    }),
+  ]);
+}
 
 function devUser(role) {
   return {
@@ -83,7 +93,10 @@ export async function logout() {
 export async function loadWorkoutLogs(userId) {
   if (db && !isDevUserId(userId)) {
     try {
-      const snapshot = await getDocs(collection(db, "users", userId, "logs"));
+      const snapshot = await withTimeout(
+        getDocs(collection(db, "users", userId, "logs")),
+        "Workout logs request timed out.",
+      );
       return Object.fromEntries(snapshot.docs.map((item) => [item.id, item.data()]));
     } catch (error) {
       console.warn("Falling back to local workout logs.", error);
@@ -99,11 +112,75 @@ export async function saveWorkoutLog(userId, date, payload) {
   localStorage.setItem(localKey(`logs:${userId}`), JSON.stringify(logs));
 }
 
+export async function loadUserProfile(userId) {
+  if (db && !isDevUserId(userId)) {
+    try {
+      const snapshot = await withTimeout(
+        getDoc(doc(db, "users", userId, "profile", "details")),
+        "User profile request timed out.",
+      );
+      return snapshot.exists() ? snapshot.data() : {};
+    } catch (error) {
+      console.warn("Falling back to local user profile.", error);
+    }
+  }
+  try {
+    return JSON.parse(localStorage.getItem(localKey(`profile:${userId}`)) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+export async function saveUserProfile(userId, profile) {
+  const payload = { ...profile, updatedAt: new Date().toISOString() };
+  if (db && !isDevUserId(userId)) {
+    try {
+      await setDoc(doc(db, "users", userId, "profile", "details"), payload, { merge: true });
+      return payload;
+    } catch (error) {
+      console.warn("Falling back to local user profile.", error);
+    }
+  }
+  localStorage.setItem(localKey(`profile:${userId}`), JSON.stringify(payload));
+  return payload;
+}
+
+export async function loadPrograms() {
+  if (db) {
+    try {
+      const snapshot = await withTimeout(getDocs(collection(db, "programs")), "Programs request timed out.");
+      return snapshot.docs
+        .map((item) => ({ id: item.id, ...item.data() }))
+        .filter((item) => item.name);
+    } catch (error) {
+      console.warn("Falling back to local programs.", error);
+    }
+  }
+  return JSON.parse(localStorage.getItem(localKey("programs")) || "[]");
+}
+
+export async function saveProgram(program) {
+  const id = program.id || program.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || `program-${Date.now()}`;
+  const payload = { ...program, id };
+  if (db) {
+    try {
+      await setDoc(doc(db, "programs", id), payload, { merge: true });
+      return payload;
+    } catch (error) {
+      console.warn("Falling back to local programs.", error);
+    }
+  }
+  const programs = await loadPrograms();
+  const next = [...programs.filter((item) => item.id !== id), payload];
+  localStorage.setItem(localKey("programs"), JSON.stringify(next));
+  return payload;
+}
+
 export async function loadCustomWorkouts(programId = "default") {
   if (db) {
     try {
       const q = query(collection(db, "programs", programId, "workouts"), orderBy("date"));
-      const snapshot = await getDocs(q);
+      const snapshot = await withTimeout(getDocs(q), "Custom workouts request timed out.");
       return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
     } catch (error) {
       console.warn("Falling back to local custom workouts.", error);
@@ -133,6 +210,11 @@ export async function isTrainerUser(user) {
   const configuredEmail = import.meta.env.VITE_TRAINER_EMAIL;
   if (configuredEmail && user?.email?.toLowerCase() === configuredEmail.toLowerCase()) return true;
   if (!db || !user?.uid) return false;
-  const trainerDoc = await getDoc(doc(db, "trainers", user.uid));
-  return trainerDoc.exists();
+  try {
+    const trainerDoc = await withTimeout(getDoc(doc(db, "trainers", user.uid)), "Trainer lookup timed out.");
+    return trainerDoc.exists();
+  } catch (error) {
+    console.warn("Falling back to athlete role.", error);
+    return false;
+  }
 }

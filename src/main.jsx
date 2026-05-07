@@ -3,35 +3,47 @@ import { createRoot } from "react-dom/client";
 import {
   CalendarDays,
   CheckCircle2,
+  ClipboardList,
   Dumbbell,
   ArrowLeft,
   LogOut,
   PencilLine,
   Plus,
   Save,
+  Settings,
+  Trophy,
   UserRound,
 } from "lucide-react";
 import "./styles.css";
+import packageInfo from "../package.json";
 import { importedProgram } from "./programData";
 import {
   hasFirebaseConfig,
   isTrainerUser,
   loadCustomWorkouts,
+  loadPrograms,
+  loadUserProfile,
   loadWorkoutLogs,
   login,
   loginDev,
   logout,
   observeAuth,
+  saveProgram,
   saveCustomWorkout,
   saveWorkoutLog,
+  saveUserProfile,
 } from "./firebase";
 
 const maxFields = [
+  { key: "backSquat", label: "Squat" },
+  { key: "bench", label: "Bench" },
+  { key: "deadlift", label: "Deadlift" },
+  { key: "cleanJerk", label: "Clean and Jerk" },
   { key: "snatch", label: "Snatch" },
-  { key: "cleanJerk", label: "Clean & Jerk" },
-  { key: "backSquat", label: "Back Squat" },
   { key: "frontSquat", label: "Front Squat" },
 ];
+
+const appVersion = packageInfo.version;
 
 function workoutDraftKey(userId, date) {
   return `primitive-programming:workout-draft:${userId}:${date}`;
@@ -65,6 +77,42 @@ function loadUserMaxes(userId) {
 
 function saveUserMaxes(userId, maxes) {
   localStorage.setItem(userMaxesKey(userId), JSON.stringify(maxes));
+}
+
+function mergeUserProfile(user, profile = {}) {
+  if (!user?.uid) return user;
+  return {
+    ...user,
+    uid: user.uid,
+    email: profile.email || user.email || "",
+    displayName: profile.displayName || user.displayName || "",
+    photoURL: profile.photoURL || user.photoURL || "",
+  };
+}
+
+function imageFileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const image = new Image();
+      image.onload = () => {
+        const size = 512;
+        const scale = Math.min(size / image.width, size / image.height, 1);
+        const width = Math.max(1, Math.round(image.width * scale));
+        const height = Math.max(1, Math.round(image.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext("2d");
+        context.drawImage(image, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", 0.86));
+      };
+      image.onerror = reject;
+      image.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 function formatDate(date) {
@@ -143,6 +191,9 @@ function inferMaxKey(exercise, text = "") {
   const value = `${exercise} ${text}`.toLowerCase();
   if (value.includes("front squat")) return "frontSquat";
   if (value.includes("back squat")) return "backSquat";
+  if (value.includes("squat")) return "backSquat";
+  if (value.includes("bench")) return "bench";
+  if (value.includes("deadlift")) return "deadlift";
   if (value.includes("clean") || value.includes("jerk")) return "cleanJerk";
   if (value.includes("snatch")) return "snatch";
   return "";
@@ -208,6 +259,22 @@ function prescribedPreview(item, maxes) {
       return low === high ? `${low}%: ${lowWeight}${unit}` : `${low}-${high}%: ${lowWeight}-${highWeight}${unit}`;
     })
     .join(" | ");
+}
+
+function programSlug(value) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || `program-${Date.now()}`;
+}
+
+function progressSummary(workouts, logs) {
+  const dates = [...new Set(workouts.map((item) => item.date))].sort();
+  const completed = dates.filter((date) => logs[date]?.completed).length;
+  const nextDate = dates.find((date) => !logs[date]?.completed);
+  return {
+    total: dates.length,
+    completed,
+    percent: dates.length ? Math.round((completed / dates.length) * 100) : 0,
+    nextDate,
+  };
 }
 
 function needsMaxes(workout) {
@@ -327,6 +394,14 @@ function WorkoutView({ workout, date, user, logs, setLogs, onDone }) {
   const [maxes, setMaxes] = useState(initialDraft.maxes || existing.maxes || savedMaxes);
   const [loads, setLoads] = useState(initialDraft.loads || existing.loads || {});
   const [notes, setNotes] = useState(initialDraft.notes ?? existing.notes ?? "");
+  const [programmedSetCounts, setProgrammedSetCounts] = useState(initialDraft.programmedSetCounts || existing.programmedSetCounts || {});
+  const [customExercises, setCustomExercises] = useState(initialDraft.customExercises || existing.customExercises || []);
+  const [showAddExercise, setShowAddExercise] = useState(false);
+  const [newExerciseName, setNewExerciseName] = useState("");
+  const [newExerciseTracksWeight, setNewExerciseTracksWeight] = useState(true);
+  const [editingExerciseId, setEditingExerciseId] = useState("");
+  const [editExerciseName, setEditExerciseName] = useState("");
+  const [editExerciseTracksWeight, setEditExerciseTracksWeight] = useState(true);
   const requiredMaxes = useMemo(() => needsMaxes(workout), [workout]);
   const maxValue = (key) => maxes[key]?.value ?? maxes[key] ?? "";
   const maxUnit = (key) => maxes[key]?.unit || "kg";
@@ -339,17 +414,25 @@ function WorkoutView({ workout, date, user, logs, setLogs, onDone }) {
     setMaxes(draft.maxes || existing.maxes || loadUserMaxes(user.uid));
     setLoads(draft.loads || existing.loads || {});
     setNotes(draft.notes ?? existing.notes ?? "");
+    setProgrammedSetCounts(draft.programmedSetCounts || existing.programmedSetCounts || {});
+    setCustomExercises(draft.customExercises || existing.customExercises || []);
+    setShowAddExercise(false);
+    setNewExerciseName("");
+    setNewExerciseTracksWeight(true);
+    setEditingExerciseId("");
+    setEditExerciseName("");
+    setEditExerciseTracksWeight(true);
     setHydratedDraftFor(`${user.uid}:${date}`);
   }, [date, user.uid]);
 
   useEffect(() => {
     if (hydratedDraftFor !== `${user.uid}:${date}`) return;
-    saveWorkoutDraft(user.uid, date, { started, maxes, loads, notes });
+    saveWorkoutDraft(user.uid, date, { started, maxes, loads, notes, programmedSetCounts, customExercises });
     saveUserMaxes(user.uid, maxes);
-  }, [date, hydratedDraftFor, loads, maxes, notes, started, user.uid]);
+  }, [customExercises, date, hydratedDraftFor, loads, maxes, notes, programmedSetCounts, started, user.uid]);
 
   async function persist(payload = {}) {
-    const next = { ...existing, maxes, loads, notes, ...payload, updatedAt: new Date().toISOString() };
+    const next = { ...existing, maxes, loads, notes, programmedSetCounts, customExercises, ...payload, updatedAt: new Date().toISOString() };
     setLogs({ ...logs, [date]: next });
     await saveWorkoutLog(user.uid, date, next);
   }
@@ -357,6 +440,103 @@ function WorkoutView({ workout, date, user, logs, setLogs, onDone }) {
   async function finishWorkout(payload = {}) {
     await persist(payload);
     onDone();
+  }
+
+  function addCustomExercise(event) {
+    event.preventDefault();
+    const name = newExerciseName.trim();
+    if (!name) return;
+    setCustomExercises([
+      ...customExercises,
+      {
+        id: `session-${Date.now()}`,
+        name,
+        trackWeights: newExerciseTracksWeight,
+        sets: [{ id: `${Date.now()}-1`, reps: "", weight: "", done: false }],
+      },
+    ]);
+    setNewExerciseName("");
+    setNewExerciseTracksWeight(true);
+    setShowAddExercise(false);
+  }
+
+  function updateCustomExercise(exerciseId, updater) {
+    setCustomExercises(customExercises.map((exercise) => (
+      exercise.id === exerciseId ? updater(exercise) : exercise
+    )));
+  }
+
+  function updateCustomSet(exerciseId, setId, patch) {
+    updateCustomExercise(exerciseId, (exercise) => ({
+      ...exercise,
+      sets: exercise.sets.map((set) => (set.id === setId ? { ...set, ...patch } : set)),
+    }));
+  }
+
+  function addCustomSet(exerciseId) {
+    updateCustomExercise(exerciseId, (exercise) => ({
+      ...exercise,
+      sets: [
+        ...exercise.sets,
+        { id: `${Date.now()}-${exercise.sets.length + 1}`, reps: exercise.sets.at(-1)?.reps || "", weight: "", done: false },
+      ],
+    }));
+  }
+
+  function removeCustomSet(exerciseId) {
+    updateCustomExercise(exerciseId, (exercise) => ({
+      ...exercise,
+      sets: exercise.sets.length > 1 ? exercise.sets.slice(0, -1) : exercise.sets,
+    }));
+  }
+
+  function programmedRows(item) {
+    const rows = setRows(item);
+    const count = Math.max(rows.length, programmedSetCounts[item.id] || rows.length);
+    const lastReps = rows.at(-1)?.reps || item.prescription;
+    return Array.from({ length: count }, (_, index) => rows[index] || {
+      key: `${item.id}:${index + 1}`,
+      reps: lastReps,
+    });
+  }
+
+  function addProgrammedSet(item) {
+    setProgrammedSetCounts({
+      ...programmedSetCounts,
+      [item.id]: programmedRows(item).length + 1,
+    });
+  }
+
+  function removeProgrammedSet(item) {
+    const baseCount = setRows(item).length;
+    const currentCount = programmedRows(item).length;
+    if (currentCount <= baseCount) return;
+    const nextCounts = { ...programmedSetCounts, [item.id]: currentCount - 1 };
+    if (nextCounts[item.id] <= baseCount) delete nextCounts[item.id];
+    setProgrammedSetCounts(nextCounts);
+  }
+
+  function openEditExercise(exercise) {
+    setEditingExerciseId(exercise.id);
+    setEditExerciseName(exercise.name);
+    setEditExerciseTracksWeight(exercise.trackWeights);
+  }
+
+  function saveEditedExercise(event) {
+    event.preventDefault();
+    const name = editExerciseName.trim();
+    if (!name) return;
+    updateCustomExercise(editingExerciseId, (exercise) => ({
+      ...exercise,
+      name,
+      trackWeights: editExerciseTracksWeight,
+    }));
+    setEditingExerciseId("");
+  }
+
+  function removeEditedExercise() {
+    setCustomExercises(customExercises.filter((exercise) => exercise.id !== editingExerciseId));
+    setEditingExerciseId("");
   }
 
   if (!workout.length) {
@@ -405,7 +585,7 @@ function WorkoutView({ workout, date, user, logs, setLogs, onDone }) {
             disabled={missingMaxes.length > 0}
             onClick={() => {
               setStarted(true);
-              saveWorkoutDraft(user.uid, date, { started: true, maxes, loads, notes });
+              saveWorkoutDraft(user.uid, date, { started: true, maxes, loads, notes, programmedSetCounts, customExercises });
             }}
           >
             <Dumbbell size={18} />
@@ -436,8 +616,8 @@ function WorkoutView({ workout, date, user, logs, setLogs, onDone }) {
                 </div>
                 <div className="set-list">
                   <p>{item.prescription}</p>
-                  {setRows(item).map((set) => (
-                    <label className="set-row" key={set.key}>
+                  {programmedRows(item).map((set) => (
+                    <label className="set-row tracked-set-row" key={set.key}>
                       <span>{set.reps}</span>
                       <input
                         value={loads[set.key] ?? (set.key.endsWith(":1") ? loads[item.id] || "" : "")}
@@ -445,11 +625,82 @@ function WorkoutView({ workout, date, user, logs, setLogs, onDone }) {
                         onBlur={() => persist()}
                         placeholder={prescribedPreview(item, maxes) || "Actual"}
                       />
+                      <input
+                        checked={Boolean(loads[`${set.key}:done`])}
+                        onChange={(event) => setLoads({ ...loads, [`${set.key}:done`]: event.target.checked })}
+                        onBlur={() => persist()}
+                        type="checkbox"
+                      />
                     </label>
                   ))}
+                  <div className="set-action-row">
+                    <div className="set-action-group">
+                      <button className="quiet-button" type="button" onClick={() => addProgrammedSet(item)}>
+                        <Plus size={16} />
+                        Add set
+                      </button>
+                      <button className="quiet-button danger-text-button" type="button" onClick={() => removeProgrammedSet(item)} disabled={programmedRows(item).length <= setRows(item).length}>
+                        Remove set
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}
+            {customExercises.map((exercise) => (
+              <div className="exercise-row custom-exercise-row" key={exercise.id}>
+                <div>
+                  <strong>{exercise.name}</strong>
+                  <small>{exercise.trackWeights ? "Session exercise | Track weights" : "Session exercise | Completion only"}</small>
+                </div>
+                <div className="set-list">
+                  {exercise.sets.map((set) => (
+                    <label className={`set-row ${exercise.trackWeights ? "tracked-set-row" : "check-set-row"}`} key={set.id}>
+                      <input
+                        value={set.reps}
+                        onChange={(event) => updateCustomSet(exercise.id, set.id, { reps: event.target.value })}
+                        onBlur={() => persist()}
+                        placeholder="Reps"
+                      />
+                      {exercise.trackWeights && (
+                        <input
+                          value={set.weight}
+                          onChange={(event) => updateCustomSet(exercise.id, set.id, { weight: event.target.value })}
+                          onBlur={() => persist()}
+                          placeholder="Weight"
+                        />
+                      )}
+                      <input
+                        checked={set.done}
+                        onChange={(event) => updateCustomSet(exercise.id, set.id, { done: event.target.checked })}
+                        onBlur={() => persist()}
+                        type="checkbox"
+                      />
+                    </label>
+                  ))}
+                  <div className="set-action-row">
+                    <div className="set-action-group">
+                      <button className="quiet-button" type="button" onClick={() => addCustomSet(exercise.id)}>
+                        <Plus size={16} />
+                        Add set
+                      </button>
+                      <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomSet(exercise.id)} disabled={exercise.sets.length <= 1}>
+                        Remove set
+                      </button>
+                    </div>
+                    <button className="icon-button quiet-icon-button" type="button" onClick={() => openEditExercise(exercise)} aria-label={`Edit ${exercise.name}`} title="Edit exercise">
+                      <PencilLine size={18} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            <div className="add-exercise-row">
+              <button className="secondary" type="button" onClick={() => setShowAddExercise(true)}>
+                <Plus size={18} />
+                Add exercise
+              </button>
+            </div>
           </div>
           <label className="notes-field">
             Session notes
@@ -459,22 +710,125 @@ function WorkoutView({ workout, date, user, logs, setLogs, onDone }) {
             <Save size={18} />
             Save workout
           </button>
+          {showAddExercise && (
+            <div className="modal-backdrop" role="presentation">
+              <div className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="add-exercise-title">
+                <div>
+                  <p className="eyebrow">Session exercise</p>
+                  <h2 id="add-exercise-title">Add exercise</h2>
+                </div>
+                <form className="modal-form" onSubmit={addCustomExercise}>
+                  <label>
+                    Exercise name
+                    <input
+                      value={newExerciseName}
+                      onChange={(event) => setNewExerciseName(event.target.value)}
+                      placeholder="Accessory, abs, extra pulls"
+                      required
+                    />
+                  </label>
+                  <label className="checkbox-field">
+                    <input
+                      checked={newExerciseTracksWeight}
+                      onChange={(event) => setNewExerciseTracksWeight(event.target.checked)}
+                      type="checkbox"
+                    />
+                    Track weights used
+                  </label>
+                  <button className="primary" type="submit">
+                    <Plus size={18} />
+                    Add exercise
+                  </button>
+                  <button className="text-button" type="button" onClick={() => setShowAddExercise(false)}>
+                    Cancel
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+          {editingExerciseId && (
+            <div className="modal-backdrop" role="presentation">
+              <div className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="edit-exercise-title">
+                <div>
+                  <p className="eyebrow">Session exercise</p>
+                  <h2 id="edit-exercise-title">Edit exercise</h2>
+                </div>
+                <form className="modal-form" onSubmit={saveEditedExercise}>
+                  <label>
+                    Exercise name
+                    <input
+                      value={editExerciseName}
+                      onChange={(event) => setEditExerciseName(event.target.value)}
+                      required
+                    />
+                  </label>
+                  <label className="checkbox-field">
+                    <input
+                      checked={editExerciseTracksWeight}
+                      onChange={(event) => setEditExerciseTracksWeight(event.target.checked)}
+                      type="checkbox"
+                    />
+                    Track weights used
+                  </label>
+                  <button className="primary" type="submit">
+                    <Save size={18} />
+                    Save changes
+                  </button>
+                  <button className="danger-button" type="button" onClick={removeEditedExercise}>
+                    Remove exercise
+                  </button>
+                  <button className="text-button" type="button" onClick={() => setEditingExerciseId("")}>
+                    Cancel
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
         </>
       )}
     </section>
   );
 }
 
-function TrainerCreator({ onCreated }) {
+function ProgramsPage({ programs, workouts, logs, onProgramCreated, onWorkoutCreated }) {
+  const [programName, setProgramName] = useState("");
+  const [athleteEmail, setAthleteEmail] = useState("dev-athlete@primitive.local");
+  const [startDate, setStartDate] = useState("2026-05-11");
+  const [programGoal, setProgramGoal] = useState("");
+  const [programNotes, setProgramNotes] = useState("");
+  const [workoutProgramId, setWorkoutProgramId] = useState("default");
   const [date, setDate] = useState("2026-05-11");
   const [focus, setFocus] = useState("");
   const [exercise, setExercise] = useState("");
   const [prescription, setPrescription] = useState("");
   const [intensity, setIntensity] = useState("");
   const [notes, setNotes] = useState("");
-  const [clientEmail, setClientEmail] = useState("default");
+  const defaultProgram = { id: "default", name: "Default Program", athleteEmail: "dev-athlete@primitive.local" };
+  const programOptions = [defaultProgram, ...programs.filter((program) => program.id !== "default")];
+  const createdProgramIds = new Set(programs.map((program) => program.id));
+  const visiblePrograms = programOptions.filter((program) => program.id === "default" || createdProgramIds.has(program.id));
+  const currentWorkoutProgram = programOptions.find((program) => program.id === workoutProgramId) || defaultProgram;
 
-  async function submit(event) {
+  async function createProgram(event) {
+    event.preventDefault();
+    const program = {
+      id: programSlug(programName),
+      name: programName,
+      athleteEmail,
+      startDate,
+      goal: programGoal,
+      notes: programNotes,
+      createdAt: new Date().toISOString(),
+    };
+    const savedProgram = await saveProgram(program);
+    setWorkoutProgramId(savedProgram.id);
+    setProgramName("");
+    setProgramGoal("");
+    setProgramNotes("");
+    onProgramCreated();
+  }
+
+  async function createWorkout(event) {
     event.preventDefault();
     const workout = {
       date,
@@ -483,57 +837,423 @@ function TrainerCreator({ onCreated }) {
       prescription,
       intensity,
       notes,
+      programId: workoutProgramId || "default",
       day: new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date(`${date}T12:00:00`)),
-      phase: "Custom",
+      phase: currentWorkoutProgram.name,
       week: "Custom",
     };
-    await saveCustomWorkout(clientEmail || "default", workout);
+    await saveCustomWorkout(workoutProgramId || "default", workout);
     setExercise("");
     setPrescription("");
     setIntensity("");
     setNotes("");
-    onCreated();
+    onWorkoutCreated();
   }
 
   return (
-    <section className="creator-panel">
+    <section className="programs-panel">
       <div className="section-heading">
-        <PencilLine size={20} />
-        <h2>Workout Creator</h2>
+        <ClipboardList size={20} />
+        <h2>Programs</h2>
       </div>
-      <form onSubmit={submit} className="creator-form">
+
+      <div className="programs-layout">
+        <div className="program-section">
+          <div className="program-section-title">
+            <h3>Created Programs</h3>
+            <span>{visiblePrograms.length}</span>
+          </div>
+          <div className="program-card-grid">
+            {visiblePrograms.map((program) => {
+              const programWorkouts = workouts.filter((item) => (item.programId || "default") === program.id);
+              const summary = progressSummary(programWorkouts, logs);
+              return (
+                <article className="program-card" key={program.id}>
+                  <div>
+                    <p className="eyebrow">{program.athleteEmail || "No athlete assigned"}</p>
+                    <h4>{program.name}</h4>
+                  </div>
+                  <div className="progress-meter" aria-label={`${summary.percent}% complete`}>
+                    <span style={{ width: `${summary.percent}%` }} />
+                  </div>
+                  <dl className="program-stats">
+                    <div>
+                      <dt>Complete</dt>
+                      <dd>{summary.completed}/{summary.total}</dd>
+                    </div>
+                    <div>
+                      <dt>Next</dt>
+                      <dd>{summary.nextDate ? formatDate(summary.nextDate) : "All caught up"}</dd>
+                    </div>
+                  </dl>
+                  {program.goal && <p className="program-note">{program.goal}</p>}
+                </article>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="program-section">
+          <div className="program-section-title">
+            <h3>Athlete Progress</h3>
+          </div>
+          <div className="progress-list">
+            {visiblePrograms.map((program) => {
+              const programWorkouts = workouts.filter((item) => (item.programId || "default") === program.id);
+              const summary = progressSummary(programWorkouts, logs);
+              return (
+                <div className="progress-row" key={program.id}>
+                  <div>
+                    <strong>{program.athleteEmail || "Unassigned athlete"}</strong>
+                    <span>{program.name}</span>
+                  </div>
+                  <b>{summary.percent}%</b>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="program-section">
+          <div className="program-section-title">
+            <h3>Create Program</h3>
+          </div>
+          <form onSubmit={createProgram} className="creator-form">
+            <label>
+              Program name
+              <input value={programName} onChange={(event) => setProgramName(event.target.value)} placeholder="Summer Strength Block" required />
+            </label>
+            <label>
+              Athlete email
+              <input value={athleteEmail} onChange={(event) => setAthleteEmail(event.target.value)} type="email" />
+            </label>
+            <label>
+              Start date
+              <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+            </label>
+            <label>
+              Goal
+              <input value={programGoal} onChange={(event) => setProgramGoal(event.target.value)} placeholder="Build volume before max-out week" />
+            </label>
+            <label className="wide">
+              Coach notes
+              <textarea value={programNotes} onChange={(event) => setProgramNotes(event.target.value)} rows={3} />
+            </label>
+            <button className="primary" type="submit">
+              <Plus size={18} />
+              Create program
+            </button>
+          </form>
+        </div>
+
+        <div className="program-section">
+          <div className="program-section-title">
+            <h3>Create Workout</h3>
+          </div>
+          <form onSubmit={createWorkout} className="creator-form">
+            <label>
+              Program
+              <select value={workoutProgramId} onChange={(event) => setWorkoutProgramId(event.target.value)}>
+                {programOptions.map((program) => (
+                  <option key={program.id} value={program.id}>{program.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Date
+              <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+            </label>
+            <label>
+              Workout name
+              <input value={focus} onChange={(event) => setFocus(event.target.value)} placeholder="Heavy Snatch + Back Squat" required />
+            </label>
+            <label>
+              Exercise
+              <input value={exercise} onChange={(event) => setExercise(event.target.value)} placeholder="Snatch" required />
+            </label>
+            <label>
+              Reps / prescription
+              <input value={prescription} onChange={(event) => setPrescription(event.target.value)} placeholder="4 x 2 @ 80%" required />
+            </label>
+            <label>
+              Intensity
+              <input value={intensity} onChange={(event) => setIntensity(event.target.value)} placeholder="75-85%" />
+            </label>
+            <label className="wide">
+              Coach notes
+              <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} />
+            </label>
+            <button className="primary" type="submit">
+              <Plus size={18} />
+              Add workout exercise
+            </button>
+          </form>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ProfileAvatar({ user, iconSize = 34 }) {
+  return (
+    <span className="profile-avatar">
+      {user.photoURL ? <img src={user.photoURL} alt="" /> : <UserRound size={iconSize} />}
+    </span>
+  );
+}
+
+function ProfilePage({ user, isTrainer, logs, onOpenEdit, onOpenMaxes, onOpenSettings }) {
+  const maxes = loadUserMaxes(user.uid);
+  const completedCount = Object.values(logs).filter((log) => log.completed).length;
+  const lastUpdated = Object.values(logs)
+    .map((log) => log.updatedAt)
+    .filter(Boolean)
+    .sort()
+    .at(-1);
+
+  return (
+    <section className="profile-panel">
+      <div className="profile-header">
+        <ProfileAvatar user={user} />
+        <div>
+          <p className="eyebrow">{isTrainer ? "Coach profile" : "Athlete profile"}</p>
+          <h2>{user.displayName || user.email || "Profile"}</h2>
+        </div>
+      </div>
+
+      <div className="profile-actions">
+        <button className="primary" type="button" onClick={onOpenEdit}>
+          <PencilLine size={18} />
+          Edit
+        </button>
+        <button className="primary" type="button" onClick={onOpenMaxes}>
+          <Trophy size={18} />
+          Maxes
+        </button>
+        <button className="secondary" type="button" onClick={onOpenSettings}>
+          <Settings size={18} />
+          Settings
+        </button>
+      </div>
+
+      <div className="profile-grid">
+        <div className="profile-block">
+          <h3>Account</h3>
+          <dl className="profile-list">
+            <div>
+              <dt>Email</dt>
+              <dd>{user.email || "No email on file"}</dd>
+            </div>
+            <div>
+              <dt>Role</dt>
+              <dd>{isTrainer ? "Coach" : "Athlete"}</dd>
+            </div>
+            <div>
+              <dt>User ID</dt>
+              <dd>{user.uid}</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div className="profile-block">
+          <h3>Training</h3>
+          <dl className="profile-list">
+            <div>
+              <dt>Completed workouts</dt>
+              <dd>{completedCount}</dd>
+            </div>
+            <div>
+              <dt>Logged sessions</dt>
+              <dd>{Object.keys(logs).length}</dd>
+            </div>
+            <div>
+              <dt>Last updated</dt>
+              <dd>{lastUpdated ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(lastUpdated)) : "Not logged yet"}</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+
+      <div className="profile-block">
+        <h3>Saved Maxes</h3>
+        <div className="profile-max-grid">
+          {maxFields.map((field) => {
+            const max = maxes[field.key];
+            const value = max?.value ?? max ?? "";
+            const unit = max?.unit || "";
+            return (
+              <div className="profile-max" key={field.key}>
+                <span>{field.label}</span>
+                <strong>{value ? `${value}${unit}` : "-"}</strong>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ProfileEditPage({ user, onProfileSaved }) {
+  const [displayName, setDisplayName] = useState(user.displayName || "");
+  const [email, setEmail] = useState(user.email || "");
+  const [photoURL, setPhotoURL] = useState(user.photoURL || "");
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [imageError, setImageError] = useState("");
+
+  async function handlePictureUpload(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImageError("");
+    setSaved(false);
+    try {
+      setPhotoURL(await imageFileToDataUrl(file));
+    } catch {
+      setImageError("Could not read that picture.");
+    }
+  }
+
+  async function persistProfile(event) {
+    event.preventDefault();
+    setSaving(true);
+    setSaved(false);
+    setImageError("");
+    const profile = {
+      displayName: displayName.trim(),
+      email: email.trim(),
+      photoURL: photoURL.trim(),
+    };
+    try {
+      const savedProfile = await saveUserProfile(user.uid, profile);
+      onProfileSaved(savedProfile);
+      setSaved(true);
+    } catch {
+      setImageError("Could not save your profile picture.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="profile-panel settings-panel">
+      <div className="profile-header">
+        <ProfileAvatar user={{ ...user, photoURL }} />
+        <div>
+          <p className="eyebrow">Profile details</p>
+          <h2>Edit profile</h2>
+        </div>
+      </div>
+
+      <form className="profile-edit-form" onSubmit={persistProfile}>
         <label>
-          Client program id or email
-          <input value={clientEmail} onChange={(event) => setClientEmail(event.target.value)} />
+          Name
+          <input value={displayName} onChange={(event) => { setSaved(false); setDisplayName(event.target.value); }} placeholder="Your name" />
         </label>
         <label>
-          Date
-          <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
-        </label>
-        <label>
-          Workout name
-          <input value={focus} onChange={(event) => setFocus(event.target.value)} placeholder="Heavy Snatch + Back Squat" required />
-        </label>
-        <label>
-          Exercise
-          <input value={exercise} onChange={(event) => setExercise(event.target.value)} placeholder="Snatch" required />
-        </label>
-        <label>
-          Reps / prescription
-          <input value={prescription} onChange={(event) => setPrescription(event.target.value)} placeholder="4 x 2 @ 80%" required />
-        </label>
-        <label>
-          Intensity
-          <input value={intensity} onChange={(event) => setIntensity(event.target.value)} placeholder="75-85%" />
+          Email
+          <input value={email} onChange={(event) => { setSaved(false); setEmail(event.target.value); }} type="email" placeholder="you@example.com" />
         </label>
         <label className="wide">
-          Coach notes
-          <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} />
+          Profile picture URL
+          <input value={photoURL} onChange={(event) => { setSaved(false); setPhotoURL(event.target.value); }} placeholder="https://..." />
         </label>
-        <button className="primary" type="submit">
-          <Plus size={18} />
-          Add exercise
+        <label className="wide">
+          Upload profile picture
+          <input type="file" accept="image/*" onChange={handlePictureUpload} />
+        </label>
+        <button className="primary" type="submit" disabled={saving}>
+          <Save size={18} />
+          {saving ? "Saving..." : "Save profile"}
         </button>
+        {saved && <p className="save-status">Profile saved.</p>}
+        {imageError && <p className="form-error">{imageError}</p>}
+      </form>
+    </section>
+  );
+}
+
+function SettingsPage({ onLogout }) {
+  return (
+    <section className="profile-panel settings-panel">
+      <div className="profile-header">
+        <span className="profile-avatar">
+          <Settings size={34} />
+        </span>
+        <div>
+          <p className="eyebrow">Profile settings</p>
+          <h2>Settings</h2>
+        </div>
+      </div>
+
+      <div className="settings-actions">
+        <button className="secondary" type="button" onClick={onLogout}>
+          <LogOut size={18} />
+          Log out
+        </button>
+      </div>
+
+      <p className="app-version">Version {appVersion}</p>
+    </section>
+  );
+}
+
+function MaxesPage({ user }) {
+  const [maxes, setMaxes] = useState(() => loadUserMaxes(user.uid));
+  const [saved, setSaved] = useState(false);
+  const maxValue = (key) => maxes[key]?.value ?? maxes[key] ?? "";
+  const maxUnit = (key) => maxes[key]?.unit || "kg";
+
+  function updateMax(key, value, unit = maxUnit(key)) {
+    setSaved(false);
+    setMaxes({ ...maxes, [key]: { value, unit } });
+  }
+
+  function persistMaxes(event) {
+    event.preventDefault();
+    saveUserMaxes(user.uid, maxes);
+    setSaved(true);
+  }
+
+  return (
+    <section className="profile-panel maxes-panel">
+      <div className="profile-header">
+        <span className="profile-avatar">
+          <Trophy size={34} />
+        </span>
+        <div>
+          <p className="eyebrow">Profile maxes</p>
+          <h2>Training max weights</h2>
+        </div>
+      </div>
+
+      <form className="maxes-form" onSubmit={persistMaxes}>
+        {maxFields.map((field) => (
+          <label className="maxes-field" key={field.key}>
+            {field.label}
+            <span className="max-input-row">
+              <input
+                value={maxValue(field.key)}
+                onChange={(event) => updateMax(field.key, event.target.value)}
+                inputMode="decimal"
+                placeholder="Max"
+              />
+              <select
+                value={maxUnit(field.key)}
+                onChange={(event) => updateMax(field.key, maxValue(field.key), event.target.value)}
+                aria-label={`${field.label} unit`}
+              >
+                <option value="kg">kg</option>
+                <option value="lb">lb</option>
+              </select>
+            </span>
+          </label>
+        ))}
+        <button className="primary" type="submit">
+          <Save size={18} />
+          Save maxes
+        </button>
+        {saved && <p className="save-status">Maxes saved.</p>}
       </form>
     </section>
   );
@@ -544,27 +1264,61 @@ function App() {
   const [checking, setChecking] = useState(true);
   const [isTrainer, setIsTrainer] = useState(false);
   const [logs, setLogs] = useState({});
+  const [athleteProgressLogs, setAthleteProgressLogs] = useState({});
   const [customWorkouts, setCustomWorkouts] = useState([]);
+  const [programs, setPrograms] = useState([]);
+  const [programWorkouts, setProgramWorkouts] = useState([]);
   const [selectedDate, setSelectedDate] = useState("2026-05-11");
   const [view, setView] = useState("client");
 
   async function hydrateUser(nextUser) {
-    setUser(nextUser);
-    if (nextUser) {
-      setLogs(await loadWorkoutLogs(nextUser.uid));
-      setIsTrainer(await isTrainerUser(nextUser));
-      await refreshCustomWorkouts();
+    if (!nextUser) {
+      setUser(null);
+      setLogs({});
+      setAthleteProgressLogs({});
+      setIsTrainer(false);
+      setCustomWorkouts([]);
+      setPrograms([]);
+      setProgramWorkouts([]);
+      return;
     }
+
+    const profile = await loadUserProfile(nextUser.uid);
+    const profiledUser = mergeUserProfile(nextUser, profile);
+    setUser(profiledUser);
+
+    const [nextLogs, nextTrainer, nextCustomWorkouts, nextPrograms] = await Promise.all([
+      loadWorkoutLogs(nextUser.uid),
+      isTrainerUser(nextUser),
+      loadCustomWorkouts("default"),
+      loadPrograms(),
+    ]);
+
+    setLogs(nextLogs);
+    setIsTrainer(nextTrainer);
+    setAthleteProgressLogs(nextTrainer ? await loadWorkoutLogs("dev-athlete") : nextLogs);
+    setCustomWorkouts(nextCustomWorkouts);
+    setPrograms(nextPrograms);
+    const programWorkoutLists = await Promise.all(nextPrograms.map((program) => loadCustomWorkouts(program.id)));
+    setProgramWorkouts(programWorkoutLists.flat());
   }
 
   async function refreshCustomWorkouts() {
-    setCustomWorkouts(await loadCustomWorkouts("default"));
+    const [nextDefaultWorkouts, nextPrograms] = await Promise.all([
+      loadCustomWorkouts("default"),
+      loadPrograms(),
+    ]);
+    const programWorkoutLists = await Promise.all(nextPrograms.map((program) => loadCustomWorkouts(program.id)));
+    setCustomWorkouts(nextDefaultWorkouts);
+    setPrograms(nextPrograms);
+    setProgramWorkouts(programWorkoutLists.flat());
   }
 
   useEffect(() => {
-    return observeAuth(async (nextUser) => {
-      await hydrateUser(nextUser);
+    return observeAuth((nextUser) => {
+      setUser(mergeUserProfile(nextUser));
       setChecking(false);
+      hydrateUser(nextUser);
     });
   }, []);
 
@@ -582,6 +1336,23 @@ function App() {
     setView("workout");
   }
 
+  function handleProfileSaved(profile) {
+    setUser((currentUser) => ({ ...currentUser, ...profile }));
+  }
+
+  async function handleLogout() {
+    await logout();
+    setView("client");
+    setUser(null);
+    setLogs({});
+    setAthleteProgressLogs({});
+    setIsTrainer(false);
+    setCustomWorkouts([]);
+    setPrograms([]);
+    setProgramWorkouts([]);
+    setChecking(false);
+  }
+
   if (checking) return <main className="loading">Loading...</main>;
   if (!user) return <AuthCard onAuthed={hydrateUser} />;
 
@@ -593,27 +1364,45 @@ function App() {
           <span>Primitive Programming</span>
         </div>
         <div className="nav-actions">
-          {view === "workout" && (
+          {view !== "client" && (
             <button className="nav-button" onClick={() => setView("client")} type="button">
               <ArrowLeft size={17} />
               Back
             </button>
           )}
           {isTrainer && (
-            <button className={view === "trainer" ? "nav-button active" : "nav-button"} onClick={() => setView(view === "trainer" ? "client" : "trainer")} type="button">
-              <PencilLine size={17} />
-              Creator
+            <button
+              className={view === "programs" ? "nav-button nav-icon active" : "nav-button nav-icon"}
+              onClick={() => setView(view === "programs" ? "client" : "programs")}
+              type="button"
+              aria-label="Open programs"
+              title="Programs"
+            >
+              <ClipboardList size={17} />
             </button>
           )}
-          <button className="nav-button" onClick={logout} type="button">
-            <LogOut size={17} />
-            Log out
+          <button className={view === "profile" ? "nav-button nav-icon active" : "nav-button nav-icon"} onClick={() => setView("profile")} type="button" aria-label="Open profile" title="Profile">
+            <UserRound size={17} />
           </button>
         </div>
       </nav>
 
-      {view === "trainer" ? (
-        <TrainerCreator onCreated={refreshCustomWorkouts} />
+      {view === "profile" ? (
+        <ProfilePage user={user} isTrainer={isTrainer} logs={logs} onOpenEdit={() => setView("edit-profile")} onOpenMaxes={() => setView("maxes")} onOpenSettings={() => setView("settings")} />
+      ) : view === "edit-profile" ? (
+        <ProfileEditPage user={user} onProfileSaved={handleProfileSaved} />
+      ) : view === "maxes" ? (
+        <MaxesPage user={user} />
+      ) : view === "settings" ? (
+        <SettingsPage onLogout={handleLogout} />
+      ) : view === "programs" ? (
+        <ProgramsPage
+          programs={programs}
+          workouts={[...importedProgram, ...customWorkouts, ...programWorkouts]}
+          logs={athleteProgressLogs}
+          onProgramCreated={refreshCustomWorkouts}
+          onWorkoutCreated={refreshCustomWorkouts}
+        />
       ) : view === "workout" ? (
         <WorkoutView workout={selectedWorkout} date={selectedDate} user={user} logs={logs} setLogs={setLogs} onDone={() => setView("client")} />
       ) : (
