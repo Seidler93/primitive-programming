@@ -7,12 +7,14 @@ import {
   Dumbbell,
   ArrowLeft,
   LogOut,
+  Minus,
   PencilLine,
   Plus,
   Save,
   Settings,
   Trophy,
   UserRound,
+  UsersRound,
 } from "lucide-react";
 import "./styles.css";
 import packageInfo from "../package.json";
@@ -45,21 +47,27 @@ const maxFields = [
 
 const appVersion = packageInfo.version;
 
-function workoutDraftKey(userId, date) {
-  return `primitive-programming:workout-draft:${userId}:${date}`;
+function workoutDraftKey(userId, date, workoutKey = "default") {
+  return `primitive-programming:workout-draft:${userId}:${date}:${workoutKey}`;
 }
 
-function loadWorkoutDraft(userId, date) {
+function loadWorkoutDraft(userId, date, workoutKey = "default") {
   try {
-    const raw = localStorage.getItem(workoutDraftKey(userId, date));
-    return raw ? JSON.parse(raw) : {};
+    const raw = localStorage.getItem(workoutDraftKey(userId, date, workoutKey));
+    if (raw) return JSON.parse(raw);
+    const legacyRaw = workoutKey === "default" ? null : localStorage.getItem(`primitive-programming:workout-draft:${userId}:${date}`);
+    return legacyRaw ? JSON.parse(legacyRaw) : {};
   } catch {
     return {};
   }
 }
 
-function saveWorkoutDraft(userId, date, draft) {
-  localStorage.setItem(workoutDraftKey(userId, date), JSON.stringify(draft));
+function saveWorkoutDraft(userId, date, workoutKey, draft) {
+  localStorage.setItem(workoutDraftKey(userId, date, workoutKey), JSON.stringify(draft));
+}
+
+function workoutLogKey(date, workoutKey) {
+  return workoutKey === "blank" ? `${date}:custom` : date;
 }
 
 function userMaxesKey(userId) {
@@ -128,6 +136,35 @@ function groupByDate(items) {
     map[item.date] = [...(map[item.date] || []), item];
     return map;
   }, {});
+}
+
+function workoutGroupKey(item) {
+  return [
+    item.programId || "default",
+    item.date,
+    item.week || "",
+    item.phase || "",
+    item.focus || "Workout",
+  ].join("|");
+}
+
+function groupWorkouts(items) {
+  return Object.values(items.reduce((map, item) => {
+    const key = workoutGroupKey(item);
+    if (!map[key]) {
+      map[key] = {
+        key,
+        date: item.date,
+        title: item.focus || "Workout",
+        phase: item.phase || "Program",
+        week: item.week,
+        programId: item.programId || "default",
+        items: [],
+      };
+    }
+    map[key].items.push(item);
+    return map;
+  }, {}));
 }
 
 function dateRange(startDate, endDate) {
@@ -385,12 +422,54 @@ function CalendarStrip({ sections, selectedDate, onSelectDate, logs, workoutsByD
   );
 }
 
-function WorkoutView({ workout, date, user, logs, setLogs, onDone }) {
-  const existing = logs[date] || {};
-  const initialDraft = loadWorkoutDraft(user.uid, date);
+function WorkoutListView({ date, workoutGroups, logs, programs, onOpenWorkout, onAddWorkout }) {
+  const hasPlannedWorkout = workoutGroups.length > 0;
+  const programName = (programId) => {
+    if (!programId || programId === "default") return "Default Program";
+    return programs.find((program) => program.id === programId)?.name || "Program";
+  };
+
+  return (
+    <section className="workout-list-panel">
+      <div className="section-heading">
+        <CalendarDays size={20} />
+        <h2>{formatDate(date)}</h2>
+      </div>
+      {hasPlannedWorkout ? (
+        <div className="workout-card-list">
+          {workoutGroups.map((group) => (
+            <button className="workout-card-button" type="button" key={group.key} onClick={() => onOpenWorkout(group.key)}>
+              <div>
+                <p className="eyebrow">{programName(group.programId)}</p>
+                <h3>{group.title}</h3>
+                <span>{group.week ? `Week ${group.week}` : group.phase} | {group.items.length} exercises</span>
+              </div>
+              {logs[date]?.completed ? <CheckCircle2 size={20} /> : <Dumbbell size={20} />}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="empty-list-copy">No workouts are scheduled for this day.</p>
+      )}
+      <button className="add-workout-button" type="button" onClick={onAddWorkout}>
+        <Plus size={20} />
+        <div>
+          <h3>Add workout</h3>
+          <span>Create your own workout for this day</span>
+        </div>
+      </button>
+    </section>
+  );
+}
+
+function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone }) {
+  const logKey = workoutLogKey(date, workoutKey);
+  const existing = logs[logKey] || {};
+  const initialDraft = loadWorkoutDraft(user.uid, date, workoutKey);
   const savedMaxes = loadUserMaxes(user.uid);
-  const [hydratedDraftFor, setHydratedDraftFor] = useState(`${user.uid}:${date}`);
-  const [started, setStarted] = useState(initialDraft.started || false);
+  const [hydratedDraftFor, setHydratedDraftFor] = useState(`${user.uid}:${date}:${workoutKey}`);
+  const isBlankWorkout = workout.length === 0;
+  const [started, setStarted] = useState(initialDraft.started || isBlankWorkout);
   const [maxes, setMaxes] = useState(initialDraft.maxes || existing.maxes || savedMaxes);
   const [loads, setLoads] = useState(initialDraft.loads || existing.loads || {});
   const [notes, setNotes] = useState(initialDraft.notes ?? existing.notes ?? "");
@@ -406,11 +485,12 @@ function WorkoutView({ workout, date, user, logs, setLogs, onDone }) {
   const maxValue = (key) => maxes[key]?.value ?? maxes[key] ?? "";
   const maxUnit = (key) => maxes[key]?.unit || "kg";
   const missingMaxes = requiredMaxes.filter((key) => !Number(maxValue(key)));
-  const workoutTitle = workout[0] ? `${workout[0].focus} - Week ${workout[0].week}` : "No workout";
+  const workoutPhase = workout[0]?.phase || "Custom workout";
+  const workoutTitle = workout[0] ? `${workout[0].focus} - Week ${workout[0].week}` : "Create workout";
 
   useEffect(() => {
-    const draft = loadWorkoutDraft(user.uid, date);
-    setStarted(draft.started || false);
+    const draft = loadWorkoutDraft(user.uid, date, workoutKey);
+    setStarted(draft.started || workout.length === 0);
     setMaxes(draft.maxes || existing.maxes || loadUserMaxes(user.uid));
     setLoads(draft.loads || existing.loads || {});
     setNotes(draft.notes ?? existing.notes ?? "");
@@ -422,19 +502,27 @@ function WorkoutView({ workout, date, user, logs, setLogs, onDone }) {
     setEditingExerciseId("");
     setEditExerciseName("");
     setEditExerciseTracksWeight(true);
-    setHydratedDraftFor(`${user.uid}:${date}`);
-  }, [date, user.uid]);
+    setHydratedDraftFor(`${user.uid}:${date}:${workoutKey}`);
+  }, [date, user.uid, workout.length, workoutKey]);
 
   useEffect(() => {
-    if (hydratedDraftFor !== `${user.uid}:${date}`) return;
-    saveWorkoutDraft(user.uid, date, { started, maxes, loads, notes, programmedSetCounts, customExercises });
+    if (hydratedDraftFor !== `${user.uid}:${date}:${workoutKey}`) return;
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, programmedSetCounts, customExercises });
     saveUserMaxes(user.uid, maxes);
-  }, [customExercises, date, hydratedDraftFor, loads, maxes, notes, programmedSetCounts, started, user.uid]);
+  }, [customExercises, date, hydratedDraftFor, loads, maxes, notes, programmedSetCounts, started, user.uid, workoutKey]);
 
-  async function persist(payload = {}) {
-    const next = { ...existing, maxes, loads, notes, programmedSetCounts, customExercises, ...payload, updatedAt: new Date().toISOString() };
-    setLogs({ ...logs, [date]: next });
-    await saveWorkoutLog(user.uid, date, next);
+  async function persist(payload = {}, stateOverrides = {}) {
+    const nextState = {
+      maxes,
+      loads,
+      notes,
+      programmedSetCounts,
+      customExercises,
+      ...stateOverrides,
+    };
+    const next = { ...existing, ...nextState, ...payload, updatedAt: new Date().toISOString() };
+    setLogs({ ...logs, [logKey]: next });
+    await saveWorkoutLog(user.uid, logKey, next);
   }
 
   async function finishWorkout(payload = {}) {
@@ -501,10 +589,13 @@ function WorkoutView({ workout, date, user, logs, setLogs, onDone }) {
   }
 
   function addProgrammedSet(item) {
-    setProgrammedSetCounts({
+    const nextCounts = {
       ...programmedSetCounts,
       [item.id]: programmedRows(item).length + 1,
-    });
+    };
+    setProgrammedSetCounts(nextCounts);
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, programmedSetCounts: nextCounts, customExercises });
+    void persist({}, { programmedSetCounts: nextCounts });
   }
 
   function removeProgrammedSet(item) {
@@ -514,6 +605,8 @@ function WorkoutView({ workout, date, user, logs, setLogs, onDone }) {
     const nextCounts = { ...programmedSetCounts, [item.id]: currentCount - 1 };
     if (nextCounts[item.id] <= baseCount) delete nextCounts[item.id];
     setProgrammedSetCounts(nextCounts);
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, programmedSetCounts: nextCounts, customExercises });
+    void persist({}, { programmedSetCounts: nextCounts });
   }
 
   function openEditExercise(exercise) {
@@ -539,16 +632,12 @@ function WorkoutView({ workout, date, user, logs, setLogs, onDone }) {
     setEditingExerciseId("");
   }
 
-  if (!workout.length) {
-    return <section className="empty-state">No workout is scheduled for {formatDate(date)}.</section>;
-  }
-
   return (
     <section className="workout-panel">
       {!started ? (
         <div className="start-panel">
           <div>
-            <p className="eyebrow">{formatDate(date)} | {workout[0].phase}</p>
+            <p className="eyebrow">{formatDate(date)} | {workoutPhase}</p>
             <h2>{workoutTitle}</h2>
           </div>
           {requiredMaxes.length > 0 && (
@@ -585,7 +674,7 @@ function WorkoutView({ workout, date, user, logs, setLogs, onDone }) {
             disabled={missingMaxes.length > 0}
             onClick={() => {
               setStarted(true);
-              saveWorkoutDraft(user.uid, date, { started: true, maxes, loads, notes, programmedSetCounts, customExercises });
+              saveWorkoutDraft(user.uid, date, workoutKey, { started: true, maxes, loads, notes, programmedSetCounts, customExercises });
             }}
           >
             <Dumbbell size={18} />
@@ -596,7 +685,7 @@ function WorkoutView({ workout, date, user, logs, setLogs, onDone }) {
         <>
           <div className="workout-title-row">
             <div>
-              <p className="eyebrow">{formatDate(date)} | {workout[0].phase}</p>
+              <p className="eyebrow">{formatDate(date)} | {workoutPhase}</p>
               <h2>{workoutTitle}</h2>
             </div>
             <button className="icon-button" type="button" onClick={() => finishWorkout({ completed: true })} aria-label="Mark complete" title="Mark complete">
@@ -608,6 +697,9 @@ function WorkoutView({ workout, date, user, logs, setLogs, onDone }) {
               <span>Exercise</span>
               <span>Sets</span>
             </div>
+            {isBlankWorkout && customExercises.length === 0 && (
+              <p className="empty-list-copy">No exercises yet. Add the first exercise below.</p>
+            )}
             {workout.map((item) => (
               <div className="exercise-row" key={item.id}>
                 <div>
@@ -640,6 +732,7 @@ function WorkoutView({ workout, date, user, logs, setLogs, onDone }) {
                         Add set
                       </button>
                       <button className="quiet-button danger-text-button" type="button" onClick={() => removeProgrammedSet(item)} disabled={programmedRows(item).length <= setRows(item).length}>
+                        <Minus size={16} />
                         Remove set
                       </button>
                     </div>
@@ -685,6 +778,7 @@ function WorkoutView({ workout, date, user, logs, setLogs, onDone }) {
                         Add set
                       </button>
                       <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomSet(exercise.id)} disabled={exercise.sets.length <= 1}>
+                        <Minus size={16} />
                         Remove set
                       </button>
                     </div>
@@ -994,6 +1088,63 @@ function ProgramsPage({ programs, workouts, logs, onProgramCreated, onWorkoutCre
   );
 }
 
+function AthletesPage({ programs, workouts, logs }) {
+  const defaultProgram = { id: "default", name: "Default Program", athleteEmail: "dev-athlete@primitive.local" };
+  const programOptions = [defaultProgram, ...programs.filter((program) => program.id !== "default")];
+  const athletes = Array.from(
+    programOptions.reduce((map, program) => {
+      const email = program.athleteEmail || "Unassigned athlete";
+      const current = map.get(email) || { email, programs: [], workouts: [] };
+      const programWorkouts = workouts.filter((item) => (item.programId || "default") === program.id);
+      current.programs.push(program);
+      current.workouts.push(...programWorkouts);
+      map.set(email, current);
+      return map;
+    }, new Map()).values(),
+  ).sort((a, b) => a.email.localeCompare(b.email));
+
+  return (
+    <section className="programs-panel">
+      <div className="section-heading">
+        <UsersRound size={20} />
+        <h2>Athletes</h2>
+      </div>
+
+      {athletes.length ? (
+        <div className="program-card-grid">
+          {athletes.map((athlete) => {
+            const summary = progressSummary(athlete.workouts, logs);
+            return (
+              <article className="program-card" key={athlete.email}>
+                <div>
+                  <p className="eyebrow">{athlete.programs.length} program{athlete.programs.length === 1 ? "" : "s"}</p>
+                  <h4>{athlete.email}</h4>
+                </div>
+                <div className="progress-meter" aria-label={`${summary.percent}% complete`}>
+                  <span style={{ width: `${summary.percent}%` }} />
+                </div>
+                <dl className="program-stats">
+                  <div>
+                    <dt>Complete</dt>
+                    <dd>{summary.completed}/{summary.total}</dd>
+                  </div>
+                  <div>
+                    <dt>Next</dt>
+                    <dd>{summary.nextDate ? formatDate(summary.nextDate) : "All caught up"}</dd>
+                  </div>
+                </dl>
+                <p className="program-note">{athlete.programs.map((program) => program.name).join(", ")}</p>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="empty-list-copy">No athletes assigned yet.</p>
+      )}
+    </section>
+  );
+}
+
 function ProfileAvatar({ user, iconSize = 34 }) {
   return (
     <span className="profile-avatar">
@@ -1269,6 +1420,7 @@ function App() {
   const [programs, setPrograms] = useState([]);
   const [programWorkouts, setProgramWorkouts] = useState([]);
   const [selectedDate, setSelectedDate] = useState("2026-05-11");
+  const [selectedWorkoutKey, setSelectedWorkoutKey] = useState("");
   const [view, setView] = useState("client");
 
   async function hydrateUser(nextUser) {
@@ -1322,17 +1474,32 @@ function App() {
     });
   }, []);
 
-  const allWorkouts = useMemo(() => [...importedProgram, ...customWorkouts], [customWorkouts]);
+  const allWorkouts = useMemo(() => [...importedProgram, ...customWorkouts, ...programWorkouts], [customWorkouts, programWorkouts]);
   const workoutsByDate = useMemo(() => groupByDate(allWorkouts), [allWorkouts]);
   const workoutDates = useMemo(() => Object.keys(workoutsByDate).sort(), [workoutsByDate]);
   const calendarMonths = useMemo(() => calendarSections(workoutDates), [workoutDates]);
   const dates = useMemo(() => calendarMonths.flatMap((section) => section.dates), [calendarMonths]);
-  const selectedWorkout = workoutsByDate[selectedDate] || [];
+  const selectedWorkoutGroups = useMemo(() => groupWorkouts(workoutsByDate[selectedDate] || []), [selectedDate, workoutsByDate]);
+  const selectedWorkout = selectedWorkoutKey === "blank"
+    ? []
+    : selectedWorkoutGroups.find((group) => group.key === selectedWorkoutKey)?.items || selectedWorkoutGroups[0]?.items || [];
+  const activeWorkoutKey = selectedWorkoutKey || selectedWorkoutGroups[0]?.key || "blank";
   const today = new Date().toISOString().slice(0, 10);
   const todayTarget = workoutsByDate[today] ? today : dates.find((date) => date >= today) || dates[0];
 
-  function openWorkout(date) {
+  function openWorkoutList(date) {
     setSelectedDate(date);
+    setSelectedWorkoutKey("");
+    setView("workout-list");
+  }
+
+  function openWorkout(key) {
+    setSelectedWorkoutKey(key);
+    setView("workout");
+  }
+
+  function openBlankWorkout() {
+    setSelectedWorkoutKey("blank");
     setView("workout");
   }
 
@@ -1371,15 +1538,26 @@ function App() {
             </button>
           )}
           {isTrainer && (
-            <button
-              className={view === "programs" ? "nav-button nav-icon active" : "nav-button nav-icon"}
-              onClick={() => setView(view === "programs" ? "client" : "programs")}
-              type="button"
-              aria-label="Open programs"
-              title="Programs"
-            >
-              <ClipboardList size={17} />
-            </button>
+            <>
+              <button
+                className={view === "athletes" ? "nav-button active" : "nav-button"}
+                onClick={() => setView(view === "athletes" ? "client" : "athletes")}
+                type="button"
+                title="View all athletes"
+              >
+                <UsersRound size={17} />
+                Athletes
+              </button>
+              <button
+                className={view === "programs" ? "nav-button nav-icon active" : "nav-button nav-icon"}
+                onClick={() => setView(view === "programs" ? "client" : "programs")}
+                type="button"
+                aria-label="Open programs"
+                title="Programs"
+              >
+                <ClipboardList size={17} />
+              </button>
+            </>
           )}
           <button className={view === "profile" ? "nav-button nav-icon active" : "nav-button nav-icon"} onClick={() => setView("profile")} type="button" aria-label="Open profile" title="Profile">
             <UserRound size={17} />
@@ -1403,17 +1581,21 @@ function App() {
           onProgramCreated={refreshCustomWorkouts}
           onWorkoutCreated={refreshCustomWorkouts}
         />
+      ) : view === "athletes" ? (
+        <AthletesPage programs={programs} workouts={[...importedProgram, ...customWorkouts, ...programWorkouts]} logs={athleteProgressLogs} />
+      ) : view === "workout-list" ? (
+        <WorkoutListView date={selectedDate} workoutGroups={selectedWorkoutGroups} logs={logs} programs={programs} onOpenWorkout={openWorkout} onAddWorkout={openBlankWorkout} />
       ) : view === "workout" ? (
-        <WorkoutView workout={selectedWorkout} date={selectedDate} user={user} logs={logs} setLogs={setLogs} onDone={() => setView("client")} />
+        <WorkoutView workout={selectedWorkout} workoutKey={activeWorkoutKey} date={selectedDate} user={user} logs={logs} setLogs={setLogs} onDone={() => setView("client")} />
       ) : (
         <>
           <div className="today-row">
-            <button className="primary" type="button" onClick={() => openWorkout(todayTarget)}>
+            <button className="primary" type="button" onClick={() => openWorkoutList(todayTarget)}>
               <CalendarDays size={18} />
               View today's workout
             </button>
           </div>
-          <CalendarStrip sections={calendarMonths} selectedDate={selectedDate} onSelectDate={openWorkout} logs={logs} workoutsByDate={workoutsByDate} />
+          <CalendarStrip sections={calendarMonths} selectedDate={selectedDate} onSelectDate={openWorkoutList} logs={logs} workoutsByDate={workoutsByDate} />
         </>
       )}
     </main>

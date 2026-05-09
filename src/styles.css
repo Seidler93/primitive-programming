@@ -284,6 +284,7 @@ select:focus {
 }
 
 .calendar-band,
+.workout-list-panel,
 .workout-panel,
 .creator-panel,
 .programs-panel,
@@ -397,6 +398,7 @@ select:focus {
 }
 
 .workout-panel,
+.workout-list-panel,
 .creator-panel,
 .programs-panel,
 .profile-panel,
@@ -597,6 +599,71 @@ select:focus {
 
 .workout-panel .secondary {
   margin-top: 14px;
+}
+
+.workout-list-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.workout-card-list {
+  display: grid;
+  gap: 12px;
+}
+
+.workout-card-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  min-height: 92px;
+  padding: 16px;
+  text-align: left;
+  color: #f3eefb;
+  background: #14101a;
+  border: 1px solid #3a2948;
+  border-radius: 8px;
+}
+
+.add-workout-button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 76px;
+  padding: 16px;
+  text-align: left;
+  color: #f3eefb;
+  background: #201728;
+  border: 1px dashed #7c5aa0;
+  border-radius: 8px;
+}
+
+.workout-card-button:hover,
+.workout-card-button:focus-visible,
+.add-workout-button:hover,
+.add-workout-button:focus-visible {
+  border-color: #8b5cf6;
+  background: #1f1728;
+}
+
+.workout-card-button h3,
+.add-workout-button h3 {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+}
+
+.workout-card-button span,
+.add-workout-button span,
+.empty-list-copy {
+  color: #b9a9c9;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.empty-list-copy {
+  margin: 0;
 }
 
 .creator-form {
