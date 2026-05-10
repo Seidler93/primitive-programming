@@ -9,6 +9,7 @@ import {
   Dumbbell,
   ArrowLeft,
   LogOut,
+  Menu,
   Minus,
   PencilLine,
   Plus,
@@ -471,7 +472,7 @@ function CalendarStrip({ sections, selectedDate, onSelectDate, logs, workoutsByD
                 const isOutsideMonth = new Date(`${date}T12:00:00`).getMonth() !== section.month;
                 return (
                   <button
-                    className={`date-tile ${workoutsByDate[date] ? "" : "empty"} ${isOutsideMonth ? "outside-month" : ""} ${selectedDate === date && !isOutsideMonth ? "selected" : ""}`}
+                    className={`date-tile ${workoutsByDate[date] ? "" : "empty"} ${logs[date]?.completed ? "completed" : ""} ${isOutsideMonth ? "outside-month" : ""} ${selectedDate === date && !isOutsideMonth ? "selected" : ""}`}
                     key={`${section.key}-${date}`}
                     onClick={() => onSelectDate(date)}
                     type="button"
@@ -803,6 +804,17 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
     return reps.length ? reps.join(", ") : "No sets";
   }
 
+  function isProgrammedExerciseComplete(item) {
+    const programmedComplete = programmedRows(item).every((set) => Boolean(loads[`${set.key}:done`]));
+    const warmups = warmupRows(item);
+    const warmupsComplete = warmups.length === 0 || warmups.every((set) => Boolean(loads[`${set.key}:done`]));
+    return programmedRows(item).length > 0 && programmedComplete && warmupsComplete;
+  }
+
+  function isCustomExerciseComplete(exercise) {
+    return exercise.sets.length > 0 && exercise.sets.every((set) => Boolean(set.done));
+  }
+
   function programmedExercise(item) {
     return {
       ...item,
@@ -1000,7 +1012,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
               <p className="empty-list-copy">No exercises yet. Add the first exercise below.</p>
             )}
             {customExercises.filter((exercise) => exercise.section === "warmup").map((exercise) => (
-              <div className={`exercise-row custom-exercise-row warmup-exercise-row ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] ? "collapsed" : ""}`} key={exercise.id}>
+              <div className={`exercise-row custom-exercise-row warmup-exercise-row ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] ? "collapsed" : ""} ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] && isCustomExerciseComplete(exercise) ? "exercise-complete" : ""}`} key={exercise.id}>
                 <div className="exercise-info" onClick={() => toggleExerciseCollapse(exerciseCollapseId("custom", exercise.id))} role="button" tabIndex={0}>
                   <div>
                     <strong>{exercise.name}</strong>
@@ -1084,7 +1096,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
               const menuId = exerciseMenuId("programmed", item.id);
               const collapseId = exerciseCollapseId("programmed", item.id);
               return (
-              <div className={`exercise-row ${collapsedExercises[collapseId] ? "collapsed" : ""}`} key={item.id}>
+              <div className={`exercise-row ${collapsedExercises[collapseId] ? "collapsed" : ""} ${collapsedExercises[collapseId] && isProgrammedExerciseComplete(item) ? "exercise-complete" : ""}`} key={item.id}>
                 <div className="exercise-info" onClick={() => toggleExerciseCollapse(collapseId)} role="button" tabIndex={0}>
                   <div>
                     <strong>{displayItem.exercise}</strong>
@@ -1206,7 +1218,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
               );
             })}
             {customExercises.filter((exercise) => exercise.section !== "warmup" && exercise.section !== "cardio").map((exercise) => (
-              <div className={`exercise-row custom-exercise-row ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] ? "collapsed" : ""}`} key={exercise.id}>
+              <div className={`exercise-row custom-exercise-row ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] ? "collapsed" : ""} ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] && isCustomExerciseComplete(exercise) ? "exercise-complete" : ""}`} key={exercise.id}>
                 <div className="exercise-info" onClick={() => toggleExerciseCollapse(exerciseCollapseId("custom", exercise.id))} role="button" tabIndex={0}>
                   <div>
                     <strong>{exercise.name}</strong>
@@ -1292,7 +1304,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
               </button>
             </div>
             {customExercises.filter((exercise) => exercise.section === "cardio").map((exercise) => (
-              <div className={`exercise-row custom-exercise-row cardio-exercise-row ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] ? "collapsed" : ""}`} key={exercise.id}>
+              <div className={`exercise-row custom-exercise-row cardio-exercise-row ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] ? "collapsed" : ""} ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] && isCustomExerciseComplete(exercise) ? "exercise-complete" : ""}`} key={exercise.id}>
                 <div className="exercise-info" onClick={() => toggleExerciseCollapse(exerciseCollapseId("custom", exercise.id))} role="button" tabIndex={0}>
                   <div>
                     <strong>{exercise.name}</strong>
@@ -2206,11 +2218,15 @@ function App() {
   const [serviceWorkerRegistration, setServiceWorkerRegistration] = useState(null);
   const [updateRegistration, setUpdateRegistration] = useState(null);
   const [notificationMessage, setNotificationMessage] = useState("");
+  const [showNavMenu, setShowNavMenu] = useState(false);
   const [timerMode, setTimerMode] = useState("countup");
   const [countdownSeconds, setCountdownSeconds] = useState(180);
   const [intervalWorkSeconds, setIntervalWorkSeconds] = useState(60);
   const [intervalRestSeconds, setIntervalRestSeconds] = useState(30);
   const [intervalPhase, setIntervalPhase] = useState("work");
+  const [intervalRounds, setIntervalRounds] = useState(5);
+  const [intervalCurrentRound, setIntervalCurrentRound] = useState(1);
+  const [intervalEndless, setIntervalEndless] = useState(true);
   const [showTimerSettings, setShowTimerSettings] = useState(false);
   const [longPressTimer, setLongPressTimer] = useState(null);
   const [timerPressHandled, setTimerPressHandled] = useState(false);
@@ -2222,7 +2238,9 @@ function App() {
   const timerElapsedSeconds = timerBankedSeconds + (timerRunning ? Math.floor((timerNow - timerStartedAt) / 1000) : 0);
   const activeIntervalSeconds = intervalPhase === "work" ? intervalWorkSeconds : intervalRestSeconds;
   const timerSeconds = timerMode === "countup" ? timerElapsedSeconds : Math.max(0, (timerMode === "countdown" ? countdownSeconds : activeIntervalSeconds) - timerElapsedSeconds);
-  const timerLabel = timerMode === "interval" ? `${intervalPhase === "work" ? "W" : "R"} ${formatTimer(timerSeconds)}` : formatTimer(timerSeconds);
+  const timerLabel = timerMode === "interval" ? `${intervalPhase === "work" ? "W" : "R"}${intervalEndless ? "" : intervalCurrentRound} ${formatTimer(timerSeconds)}` : formatTimer(timerSeconds);
+  const countdownMinutes = Math.floor(countdownSeconds / 60);
+  const countdownRemainderSeconds = countdownSeconds % 60;
 
   async function hydrateUser(nextUser) {
     if (!nextUser) {
@@ -2313,11 +2331,22 @@ function App() {
     if (timerElapsedSeconds < targetSeconds) return;
 
     if (timerMode === "interval") {
-      setIntervalPhase((phase) => (phase === "work" ? "rest" : "work"));
+      if (intervalPhase === "work") {
+        setIntervalPhase("rest");
+      } else {
+        const nextRound = intervalCurrentRound + 1;
+        if (!intervalEndless && nextRound > intervalRounds) {
+          setIntervalPhase("work");
+          setIntervalCurrentRound(1);
+        } else {
+          setIntervalPhase("work");
+          setIntervalCurrentRound(nextRound);
+        }
+      }
     }
     setTimerStartedAt(null);
     setTimerBankedSeconds(0);
-  }, [activeIntervalSeconds, countdownSeconds, timerElapsedSeconds, timerMode, timerRunning]);
+  }, [activeIntervalSeconds, countdownSeconds, intervalCurrentRound, intervalEndless, intervalPhase, intervalRounds, timerElapsedSeconds, timerMode, timerRunning]);
 
   const allWorkouts = useMemo(() => [...importedProgram, ...customWorkouts, ...programWorkouts], [customWorkouts, programWorkouts]);
   const workoutsByDate = useMemo(() => groupByDate(allWorkouts), [allWorkouts]);
@@ -2373,7 +2402,10 @@ function App() {
     setTimerStartedAt(null);
     setTimerBankedSeconds(0);
     setTimerNow(Date.now());
-    if (timerMode === "interval") setIntervalPhase("work");
+    if (timerMode === "interval") {
+      setIntervalPhase("work");
+      setIntervalCurrentRound(1);
+    }
   }
 
   function toggleTimer() {
@@ -2420,6 +2452,21 @@ function App() {
     setTimerStartedAt(null);
     setTimerBankedSeconds(0);
     setIntervalPhase("work");
+    setIntervalCurrentRound(1);
+  }
+
+  function updateCountdownPart(part, value) {
+    const numericValue = Math.max(0, Number(value) || 0);
+    const nextMinutes = part === "minutes" ? numericValue : countdownMinutes;
+    const nextSeconds = part === "seconds" ? Math.min(59, numericValue) : countdownRemainderSeconds;
+    setCountdownSeconds(Math.max(1, (nextMinutes * 60) + nextSeconds));
+    setTimerStartedAt(null);
+    setTimerBankedSeconds(0);
+  }
+
+  function openMenuView(nextView) {
+    setView(nextView);
+    setShowNavMenu(false);
   }
 
   if (checking) return <main className="loading">Loading...</main>;
@@ -2428,9 +2475,12 @@ function App() {
   return (
     <main className="app-shell">
       <nav className="top-nav">
+        <button className="nav-button nav-icon menu-button" type="button" onClick={() => setShowNavMenu(true)} aria-label="Open menu" title="Menu">
+          <Menu size={19} />
+        </button>
         <div className="nav-brand">
           <Dumbbell size={22} />
-          <span>Primitive Programming</span>
+          <span>Primitive</span>
         </div>
         <div className="nav-actions">
           <button
@@ -2481,6 +2531,48 @@ function App() {
         </div>
       </nav>
 
+      {showNavMenu && (
+        <div className="nav-menu-backdrop" role="presentation" onClick={() => setShowNavMenu(false)}>
+          <div className="nav-menu-panel" role="dialog" aria-modal="true" aria-label="Main menu" onClick={(event) => event.stopPropagation()}>
+            <div className="nav-menu-header">
+              <Dumbbell size={22} />
+              <strong>Primitive</strong>
+            </div>
+            <button className="menu-link" type="button" onClick={() => openMenuView("client")}>
+              <CalendarDays size={18} />
+              Home
+            </button>
+            <button className="menu-link" type="button" onClick={() => openMenuView("profile")}>
+              <UserRound size={18} />
+              Profile
+            </button>
+            <button className="menu-link" type="button" onClick={() => openMenuView("settings")}>
+              <Settings size={18} />
+              Settings
+            </button>
+            <button className="menu-link" type="button" onClick={() => openMenuView("maxes")}>
+              <Trophy size={18} />
+              Maxes
+            </button>
+            {isTrainer && (
+              <>
+                <button className="menu-link" type="button" onClick={() => openMenuView("programs")}>
+                  <ClipboardList size={18} />
+                  Programs
+                </button>
+                <button className="menu-link" type="button" onClick={() => openMenuView("athletes")}>
+                  <UsersRound size={18} />
+                  Athletes
+                </button>
+              </>
+            )}
+            <button className="text-button menu-close-button" type="button" onClick={() => setShowNavMenu(false)}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
       {showTimerSettings && (
         <div className="modal-backdrop" role="presentation">
           <div className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="timer-settings-title">
@@ -2503,22 +2595,54 @@ function App() {
               </button>
             </div>
             {timerMode === "countdown" && (
-              <label>
-                Countdown seconds
-                <input value={countdownSeconds} onChange={(event) => setCountdownSeconds(Math.max(1, Number(event.target.value) || 1))} inputMode="numeric" />
-              </label>
-            )}
-            {timerMode === "interval" && (
               <div className="timer-settings-grid">
                 <label>
-                  Work seconds
-                  <input value={intervalWorkSeconds} onChange={(event) => setIntervalWorkSeconds(Math.max(1, Number(event.target.value) || 1))} inputMode="numeric" />
+                  Minutes
+                  <input value={countdownMinutes} onChange={(event) => updateCountdownPart("minutes", event.target.value)} inputMode="numeric" />
                 </label>
                 <label>
-                  Rest seconds
-                  <input value={intervalRestSeconds} onChange={(event) => setIntervalRestSeconds(Math.max(1, Number(event.target.value) || 1))} inputMode="numeric" />
+                  Seconds
+                  <input value={countdownRemainderSeconds} onChange={(event) => updateCountdownPart("seconds", event.target.value)} inputMode="numeric" />
                 </label>
               </div>
+            )}
+            {timerMode === "interval" && (
+              <>
+                <div className="timer-settings-grid">
+                  <label>
+                    Work seconds
+                    <input value={intervalWorkSeconds} onChange={(event) => setIntervalWorkSeconds(Math.max(1, Number(event.target.value) || 1))} inputMode="numeric" />
+                  </label>
+                  <label>
+                    Rest seconds
+                    <input value={intervalRestSeconds} onChange={(event) => setIntervalRestSeconds(Math.max(1, Number(event.target.value) || 1))} inputMode="numeric" />
+                  </label>
+                </div>
+                <label className="checkbox-field">
+                  <input
+                    checked={intervalEndless}
+                    onChange={(event) => {
+                      setIntervalEndless(event.target.checked);
+                      setIntervalCurrentRound(1);
+                      setTimerStartedAt(null);
+                      setTimerBankedSeconds(0);
+                    }}
+                    type="checkbox"
+                  />
+                  Endless intervals
+                </label>
+                {!intervalEndless && (
+                  <label>
+                    Rounds
+                    <input value={intervalRounds} onChange={(event) => {
+                      setIntervalRounds(Math.max(1, Number(event.target.value) || 1));
+                      setIntervalCurrentRound(1);
+                      setTimerStartedAt(null);
+                      setTimerBankedSeconds(0);
+                    }} inputMode="numeric" />
+                  </label>
+                )}
+              </>
             )}
             <div className="timer-settings-actions">
               <button className="secondary" type="button" onClick={resetTimer}>

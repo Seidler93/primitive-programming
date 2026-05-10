@@ -294,6 +294,63 @@ select:focus {
   gap: 10px;
 }
 
+.menu-button {
+  flex: 0 0 auto;
+}
+
+.nav-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  background: rgba(5, 4, 8, 0.64);
+}
+
+.nav-menu-panel {
+  width: min(320px, calc(100% - 44px));
+  min-height: 100%;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 18px;
+  color: #f3eefb;
+  background: #18111f;
+  border-right: 1px solid #3a2948;
+  box-shadow: 18px 0 60px rgba(0, 0, 0, 0.34);
+}
+
+.nav-menu-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid #33243f;
+}
+
+.menu-link {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  color: #f3eefb;
+  background: #14101a;
+  border: 1px solid #3a2948;
+  border-radius: 8px;
+  font-weight: 850;
+  text-align: left;
+}
+
+.menu-link:hover,
+.menu-link:focus-visible {
+  border-color: #8b5cf6;
+  background: #201728;
+}
+
+.menu-close-button {
+  justify-self: start;
+}
+
 .calendar-band,
 .workout-list-panel,
 .workout-panel,
@@ -360,6 +417,20 @@ select:focus {
   opacity: 0.08;
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17.596 12.768a2 2 0 1 0 2.829-2.829l-1.768-1.767a2 2 0 0 0 2.828-2.829l-2.828-2.828a2 2 0 0 0-2.829 2.828l-1.767-1.768a2 2 0 1 0-2.829 2.829z'/%3E%3Cpath d='m2.5 21.5 1.4-1.4'/%3E%3Cpath d='m20.1 3.9 1.4-1.4'/%3E%3Cpath d='M5.343 21.485a2 2 0 1 0 2.829-2.828l1.767 1.768a2 2 0 1 0 2.829-2.829l-6.364-6.364a2 2 0 1 0-2.829 2.829l1.768 1.767a2 2 0 0 0-2.828 2.829z'/%3E%3Cpath d='m9.6 14.4 4.8-4.8'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
   pointer-events: none;
+}
+
+.date-tile.completed:not(.empty)::before {
+  background: #70e3a2;
+  opacity: 0.22;
+}
+
+.date-tile.completed:not(.selected) {
+  border-color: #2f6f4b;
+}
+
+.date-tile.completed.selected::before {
+  background: #dcfce7;
+  opacity: 0.28;
 }
 
 .date-tile > * {
@@ -485,6 +556,12 @@ select:focus {
   align-items: center;
 }
 
+.exercise-row.collapsed.exercise-complete {
+  background: #13251d;
+  border-color: #2f6f4b;
+  box-shadow: inset 4px 0 0 #2fb36d;
+}
+
 .exercise-info {
   position: relative;
   display: flex;
@@ -508,6 +585,11 @@ select:focus {
 
 .exercise-row.collapsed .collapsed-set-summary {
   display: block;
+}
+
+.exercise-row.collapsed.exercise-complete .collapsed-set-summary::before {
+  content: "Complete - ";
+  color: #70e3a2;
 }
 
 .exercise-row.collapsed .exercise-info {
