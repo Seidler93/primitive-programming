@@ -517,6 +517,13 @@ select:focus {
   margin-bottom: 22px;
 }
 
+.workout-title-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .icon-button {
   width: 44px;
   height: 44px;
@@ -837,6 +844,16 @@ select:focus {
   gap: 14px;
 }
 
+.move-workout-form {
+  gap: 16px;
+}
+
+.modal-action-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .setup-modal-panel {
   width: min(100%, 560px);
 }
@@ -1115,15 +1132,100 @@ select:focus {
 .program-card {
   display: grid;
   gap: 12px;
+  position: relative;
   padding: 14px;
   background: #18111f;
   border: 1px solid #3a2948;
   border-radius: 8px;
 }
 
+.program-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .program-card h4 {
   color: #f3eefb;
   font-size: 1.05rem;
+}
+
+.program-actions {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.program-menu-button {
+  width: 34px;
+  height: 34px;
+  color: #f3eefb;
+  border-color: #4a365c;
+  background: #21172b;
+}
+
+.program-action-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 12;
+  display: grid;
+  min-width: 160px;
+  padding: 6px;
+  background: #21172b;
+  border: 1px solid #4a365c;
+  border-radius: 8px;
+  box-shadow: 0 16px 36px rgba(5, 3, 9, 0.42);
+}
+
+.program-action-menu button {
+  width: 100%;
+  padding: 10px;
+  color: #f3eefb;
+  font-size: 0.9rem;
+  font-weight: 850;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+}
+
+.program-action-menu button:hover,
+.program-action-menu button:focus-visible {
+  background: #33243f;
+  outline: none;
+}
+
+.program-status {
+  width: fit-content;
+  margin: 0;
+  padding: 5px 8px;
+  color: #c8bad8;
+  font-size: 0.74rem;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+  background: #251a2f;
+  border: 1px solid #3a2948;
+  border-radius: 999px;
+}
+
+.program-status-active {
+  color: #bbf7d0;
+  background: #123522;
+  border-color: #2e6d45;
+}
+
+.program-status-paused {
+  color: #fde68a;
+  background: #3f2f11;
+  border-color: #806321;
+}
+
+.program-status-quit {
+  color: #fecaca;
+  background: #3a171a;
+  border-color: #743036;
 }
 
 .progress-meter {
@@ -1450,9 +1552,50 @@ select:focus {
   align-content: start;
 }
 
+.progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.progress-exit-button {
+  align-self: flex-start;
+  color: #b9a9c9;
+}
+
 .goal-section {
   display: grid;
   gap: 12px;
+}
+
+.progress-snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.progress-snapshot-card {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+  background: #14101a;
+  border: 1px solid #3a2948;
+  border-radius: 8px;
+}
+
+.progress-snapshot-card strong {
+  color: #f3eefb;
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+.progress-snapshot-card span,
+.progress-card-note {
+  margin: 0;
+  color: #b9a9c9;
+  font-size: 0.84rem;
+  font-weight: 800;
 }
 
 .goal-card-grid {
@@ -1497,6 +1640,10 @@ select:focus {
 
 .metric-entry-form > button {
   grid-column: 1 / -1;
+}
+
+.progress-metric-grid > button {
+  display: none;
 }
 
 .metric-card,
@@ -1832,12 +1979,17 @@ select:focus {
   .goal-form,
   .metric-entry-form,
   .goal-value-grid,
+  .progress-snapshot-grid,
   .current-goal-grid,
   .profile-edit-form,
   .maxes-form,
   .profile-grid,
   .profile-max-grid {
     grid-template-columns: 1fr;
+  }
+
+  .progress-header {
+    align-items: flex-start;
   }
 
   .exercise-row {

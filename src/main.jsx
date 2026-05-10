@@ -17,7 +17,6 @@ import {
   Save,
   Settings,
   ShoppingBag,
-  Target,
   TrendingUp,
   Trophy,
   UserRound,
@@ -58,7 +57,7 @@ const maxFields = [
 
 const appVersion = packageInfo.version;
 const defaultSelectedDate = "2026-05-11";
-const routeViews = new Set(["client", "workout-list", "workout", "profile", "edit-profile", "maxes", "goals", "settings", "settings-account", "settings-programs", "settings-metrics", "settings-updates", "store", "stored-programs", "stored-workouts", "programs", "athletes"]);
+const routeViews = new Set(["client", "workout-list", "workout", "profile", "edit-profile", "maxes", "goals", "progress", "settings", "settings-account", "settings-programs", "settings-metrics", "settings-updates", "store", "stored-programs", "stored-workouts", "programs", "athletes"]);
 const bodyMetricFields = [
   { key: "bodyweight", label: "Bodyweight", unit: "lb", unitType: "weight" },
   { key: "bodyFat", label: "Body fat", unit: "%" },
@@ -178,6 +177,34 @@ function saveWorkoutDraft(userId, date, workoutKey, draft) {
   localStorage.setItem(workoutDraftKey(userId, date, workoutKey), JSON.stringify(draft));
 }
 
+function moveWorkoutDraft(userId, fromDate, fromWorkoutKey, toDate, toWorkoutKey) {
+  try {
+    const fromKey = workoutDraftKey(userId, fromDate, fromWorkoutKey);
+    const draft = localStorage.getItem(fromKey);
+    if (!draft) return;
+    localStorage.setItem(workoutDraftKey(userId, toDate, toWorkoutKey), draft);
+    localStorage.removeItem(fromKey);
+  } catch {
+    // Draft moves are a local convenience; scheduling should still succeed without them.
+  }
+}
+
+function workoutScheduleOverridesKey(userId) {
+  return `primitive-programming:workout-schedule-overrides:${userId}`;
+}
+
+function loadWorkoutScheduleOverrides(userId) {
+  try {
+    return JSON.parse(localStorage.getItem(workoutScheduleOverridesKey(userId)) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveWorkoutScheduleOverrides(userId, overrides) {
+  localStorage.setItem(workoutScheduleOverridesKey(userId), JSON.stringify(overrides));
+}
+
 function workoutLogKey(date, workoutKey) {
   return workoutKey === "blank" ? `${date}:custom` : date;
 }
@@ -271,7 +298,8 @@ function readAppRoute() {
     return { view: "client", selectedDate: defaultSelectedDate, selectedWorkoutKey: "" };
   }
   const params = new URLSearchParams(window.location.search);
-  const view = routeViews.has(params.get("view")) ? params.get("view") : "client";
+  const requestedView = params.get("view");
+  const view = requestedView === "goals" ? "progress" : routeViews.has(requestedView) ? requestedView : "client";
   return {
     view,
     selectedDate: params.get("date") || defaultSelectedDate,
@@ -816,7 +844,7 @@ function WorkoutListView({ date, workoutGroups, logs, programs, onOpenWorkout, o
   );
 }
 
-function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, onSaveStatus }) {
+function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, onSaveStatus, onMoveWorkout }) {
   const logKey = workoutLogKey(date, workoutKey);
   const existing = logs[logKey] || {};
   const initialDraft = loadWorkoutDraft(user.uid, date, workoutKey);
@@ -842,6 +870,8 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, o
   const [newExerciseTracksWeight, setNewExerciseTracksWeight] = useState(true);
   const [openExerciseMenu, setOpenExerciseMenu] = useState("");
   const [collapsedExercises, setCollapsedExercises] = useState({});
+  const [showMoveWorkout, setShowMoveWorkout] = useState(false);
+  const [moveWorkoutDate, setMoveWorkoutDate] = useState(date);
   const requiredMaxes = useMemo(() => needsMaxes(workout), [workout]);
   const weightUnit = loadUserWeightUnit(user.uid);
   const maxValue = (key) => maxes[key]?.value ?? maxes[key] ?? "";
@@ -870,6 +900,8 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, o
     setNewExerciseTracksWeight(true);
     setOpenExerciseMenu("");
     setCollapsedExercises({});
+    setShowMoveWorkout(false);
+    setMoveWorkoutDate(date);
     setHydratedDraftFor(`${user.uid}:${date}:${workoutKey}`);
   }, [date, user.uid, workout.length, workoutKey]);
 
@@ -1146,13 +1178,32 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, o
     void persist({}, { programmedSetCounts: nextCounts });
   }
 
+  async function moveWorkout(event) {
+    event.preventDefault();
+    if (!moveWorkoutDate || moveWorkoutDate === date) {
+      setShowMoveWorkout(false);
+      return;
+    }
+    await onMoveWorkout?.(moveWorkoutDate);
+    setShowMoveWorkout(false);
+  }
+
+  const moveWorkoutButton = (
+    <button className="icon-button" type="button" onClick={() => setShowMoveWorkout(true)} aria-label="Change workout day" title="Change workout day">
+      <PencilLine size={18} />
+    </button>
+  );
+
   return (
     <section className="workout-panel">
       {!started ? (
         <div className="start-panel">
-          <div>
-            <p className="eyebrow">{formatDate(date)} | {workoutPhase}</p>
-            <h2>{workoutTitle}</h2>
+          <div className="workout-title-row">
+            <div>
+              <p className="eyebrow">{formatDate(date)} | {workoutPhase}</p>
+              <h2>{workoutTitle}</h2>
+            </div>
+            {workoutKey !== "blank" && moveWorkoutButton}
           </div>
           {requiredMaxes.length > 0 && (
             <div className="max-grid">
@@ -1194,9 +1245,12 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, o
               <p className="eyebrow">{formatDate(date)} | {workoutPhase}</p>
               <h2>{workoutTitle}</h2>
             </div>
-            <button className="icon-button" type="button" onClick={() => finishWorkout({ completed: true })} aria-label="Mark complete" title="Mark complete">
-              <CheckCircle2 size={20} />
-            </button>
+            <div className="workout-title-actions">
+              {workoutKey !== "blank" && moveWorkoutButton}
+              <button className="icon-button" type="button" onClick={() => finishWorkout({ completed: true })} aria-label="Mark complete" title="Mark complete">
+                <CheckCircle2 size={20} />
+              </button>
+            </div>
           </div>
           <div className="exercise-table">
             <div className="table-head">
@@ -1706,6 +1760,28 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, o
           )}
         </>
       )}
+      {showMoveWorkout && (
+        <div className="modal-backdrop" role="presentation">
+          <form className="modal-panel move-workout-form" role="dialog" aria-modal="true" aria-labelledby="move-workout-title" onSubmit={moveWorkout}>
+            <div>
+              <p className="eyebrow">{formatDate(date)}</p>
+              <h2 id="move-workout-title">Change workout day</h2>
+            </div>
+            <label>
+              New date
+              <input type="date" value={moveWorkoutDate} onChange={(event) => setMoveWorkoutDate(event.target.value)} />
+            </label>
+            <div className="modal-action-row">
+              <button className="secondary" type="button" onClick={() => setShowMoveWorkout(false)}>
+                Cancel
+              </button>
+              <button className="primary" type="submit" disabled={!moveWorkoutDate || moveWorkoutDate === date}>
+                Move workout
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </section>
   );
 }
@@ -1723,7 +1799,15 @@ function ProgramsPage({ programs, workouts, logs, onProgramCreated, onWorkoutCre
   const [prescription, setPrescription] = useState("");
   const [intensity, setIntensity] = useState("");
   const [notes, setNotes] = useState("");
-  const defaultProgram = { id: "default", name: "Default Program", athleteEmail: "dev-athlete@primitive.local" };
+  const [openProgramMenu, setOpenProgramMenu] = useState("");
+  const savedDefaultProgram = programs.find((program) => program.id === "default");
+  const defaultProgram = {
+    id: "default",
+    name: "Default Program",
+    athleteEmail: "dev-athlete@primitive.local",
+    status: "idle",
+    ...savedDefaultProgram,
+  };
   const programOptions = [defaultProgram, ...programs.filter((program) => program.id !== "default")];
   const createdProgramIds = new Set(programs.map((program) => program.id));
   const visiblePrograms = programOptions.filter((program) => program.id === "default" || createdProgramIds.has(program.id));
@@ -1770,6 +1854,24 @@ function ProgramsPage({ programs, workouts, logs, onProgramCreated, onWorkoutCre
     onWorkoutCreated();
   }
 
+  async function updateProgramStatus(program, status) {
+    const savedProgram = {
+      ...program,
+      status,
+      statusUpdatedAt: new Date().toISOString(),
+    };
+    await saveProgram(savedProgram);
+    setOpenProgramMenu("");
+    onProgramCreated();
+  }
+
+  function programStatusLabel(status) {
+    if (status === "active") return "Started";
+    if (status === "paused") return "Paused";
+    if (status === "quit") return "Quit";
+    return "Not started";
+  }
+
   return (
     <section className="programs-panel">
       <div className="section-heading">
@@ -1789,10 +1891,38 @@ function ProgramsPage({ programs, workouts, logs, onProgramCreated, onWorkoutCre
               const summary = progressSummary(programWorkouts, logs);
               return (
                 <article className="program-card" key={program.id}>
-                  <div>
-                    <p className="eyebrow">{program.athleteEmail || "No athlete assigned"}</p>
-                    <h4>{program.name}</h4>
+                  <div className="program-card-header">
+                    <div>
+                      <p className="eyebrow">{program.athleteEmail || "No athlete assigned"}</p>
+                      <h4>{program.name}</h4>
+                    </div>
+                    <div className="program-actions">
+                      <button
+                        className="icon-button program-menu-button"
+                        type="button"
+                        onClick={() => setOpenProgramMenu(openProgramMenu === program.id ? "" : program.id)}
+                        aria-expanded={openProgramMenu === program.id}
+                        aria-label={`Open ${program.name} actions`}
+                        title="Program actions"
+                      >
+                        <Menu size={17} />
+                      </button>
+                      {openProgramMenu === program.id && (
+                        <div className="program-action-menu" role="menu">
+                          <button type="button" role="menuitem" onClick={() => updateProgramStatus(program, "active")}>
+                            Start program
+                          </button>
+                          <button type="button" role="menuitem" onClick={() => updateProgramStatus(program, "paused")}>
+                            Pause program
+                          </button>
+                          <button type="button" role="menuitem" onClick={() => updateProgramStatus(program, "quit")}>
+                            Quit program
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
+                  <p className={`program-status program-status-${program.status || "idle"}`}>{programStatusLabel(program.status)}</p>
                   <div className="progress-meter" aria-label={`${summary.percent}% complete`}>
                     <span style={{ width: `${summary.percent}%` }} />
                   </div>
@@ -2118,8 +2248,8 @@ function ProfilePage({ user, isTrainer, logs, onOpenEdit, onOpenMaxes, onOpenGoa
         </button>
         {!isTrainer && (
           <button className="primary" type="button" onClick={onOpenGoals}>
-            <Target size={18} />
-            Goals
+            <TrendingUp size={18} />
+            Progress
           </button>
         )}
         <button className="secondary" type="button" onClick={onOpenSettings}>
@@ -2904,140 +3034,23 @@ function MaxesPage({ user }) {
   );
 }
 
-function GoalsPage({ user, logs }) {
-  const [goals, setGoals] = useState(() => loadUserGoals(user.uid));
-  const [bodyMetrics, setBodyMetrics] = useState(() => loadBodyMetrics(user.uid));
-  const [bodyMetricSettings] = useState(() => loadBodyMetricSettings(user.uid));
-  const [maxes, setMaxes] = useState(() => loadUserMaxes(user.uid));
-  const [metricValues, setMetricValues] = useState(() => {
-    const latest = loadBodyMetrics(user.uid).at(-1) || {};
-    return Object.fromEntries(bodyMetricFields.map((field) => [field.key, latest[field.key] || ""]));
-  });
-  const [maxGoalValues, setMaxGoalValues] = useState(() => {
-    const savedGoals = loadUserGoals(user.uid).filter((goal) => goal.type === "max" && !goal.archivedAt);
-    return Object.fromEntries(maxFields.map((field) => [field.key, savedGoals.find((goal) => goal.lift === field.key)?.target || ""]));
-  });
-  const [metricGoalValues, setMetricGoalValues] = useState(() => {
-    const savedGoals = loadUserGoals(user.uid).filter((goal) => goal.type === "metric" && !goal.archivedAt);
-    return Object.fromEntries(bodyMetricFields.map((field) => [field.key, savedGoals.find((goal) => goal.metric === field.key)?.target || ""]));
-  });
-  const [title, setTitle] = useState("");
-  const [type, setType] = useState("workouts");
-  const [target, setTarget] = useState("");
-  const [lift, setLift] = useState("backSquat");
-  const [metric, setMetric] = useState("bodyweight");
+function GoalsPage({ user, logs, onExit }) {
+  const goals = loadUserGoals(user.uid);
+  const bodyMetrics = loadBodyMetrics(user.uid);
+  const bodyMetricSettings = loadBodyMetricSettings(user.uid);
+  const maxes = loadUserMaxes(user.uid);
   const weightUnit = loadUserWeightUnit(user.uid);
   const activeGoals = goals.filter((goal) => !goal.archivedAt);
-  const archivedGoals = goals.filter((goal) => goal.archivedAt);
-
-  function persistGoals(nextGoals) {
-    setGoals(nextGoals);
-    saveUserGoals(user.uid, nextGoals);
-  }
-
-  function saveMetricEntry(event) {
-    event.preventDefault();
-    const entry = {
-      id: `metric-${Date.now()}`,
-      date: new Date().toISOString().slice(0, 10),
-      createdAt: new Date().toISOString(),
-      ...Object.fromEntries(bodyMetricFields.map((field) => [field.key, Number(metricValues[field.key]) || ""])),
-    };
-    const nextEntries = [...bodyMetrics, entry];
-    setBodyMetrics(nextEntries);
-    saveBodyMetrics(user.uid, nextEntries);
-  }
-
-  function updateMaxGoalCurrent(key, value) {
-    const nextMaxes = { ...maxes, [key]: { value, unit: weightUnit } };
-    setMaxes(nextMaxes);
-    saveUserMaxes(user.uid, nextMaxes);
-  }
-
-  function upsertGoal(nextGoal) {
-    const matcher = (goal) => (
-      !goal.archivedAt
-      && goal.type === nextGoal.type
-      && (nextGoal.type === "max" ? goal.lift === nextGoal.lift : goal.metric === nextGoal.metric)
-    );
-    const existingGoal = goals.find(matcher);
-    if (existingGoal) {
-      persistGoals(goals.map((goal) => (goal.id === existingGoal.id ? { ...goal, ...nextGoal } : goal)));
-      return;
-    }
-    persistGoals([{ id: `goal-${Date.now()}`, createdAt: new Date().toISOString(), startDate: new Date().toISOString().slice(0, 10), ...nextGoal }, ...goals]);
-  }
-
-  function saveMaxGoal(field) {
-    const targetValue = Number(maxGoalValues[field.key]);
-    if (!targetValue) return;
-    upsertGoal({
-      title: `${field.label} to ${targetValue}${weightUnit}`,
-      type: "max",
-      target: targetValue,
-      lift: field.key,
-      metric: "",
-      unit: weightUnit,
-      startValue: numericMax(maxes, field.key),
-      updatedAt: new Date().toISOString(),
-    });
-  }
-
-  function saveMetricGoal(field) {
-    const targetValue = Number(metricGoalValues[field.key]);
-    if (!targetValue) return;
-    const latest = metricLatest(bodyMetrics, field.key);
-    const unitValue = bodyMetricUnit(field, weightUnit);
-    upsertGoal({
-      title: `${field.label} to ${targetValue}${unitValue}`,
-      type: "metric",
-      target: targetValue,
-      lift: "",
-      metric: field.key,
-      unit: unitValue,
-      startValue: Number(latest?.[field.key] || 0),
-      updatedAt: new Date().toISOString(),
-    });
-  }
-
-  function addGoal(event) {
-    event.preventDefault();
-    const numericTarget = Number(target);
-    if (!numericTarget || numericTarget <= 0) return;
-    const field = maxFields.find((item) => item.key === lift);
-    const metricField = bodyMetricFields.find((item) => item.key === metric);
-    const latestMetric = metricLatest(bodyMetrics, metric);
-    const metricUnit = bodyMetricUnit(metricField, weightUnit);
-    const nextGoal = {
-      id: `goal-${Date.now()}`,
-      title: title.trim() || (type === "metric" ? `${metricField.label} to ${numericTarget}${metricUnit}` : type === "max" ? `${field.label} to ${numericTarget}${weightUnit}` : `Complete ${numericTarget} workouts`),
-      type,
-      target: numericTarget,
-      lift: type === "max" ? lift : "",
-      metric: type === "metric" ? metric : "",
-      startValue: type === "metric" ? Number(latestMetric?.[metric] || 0) : "",
-      unit: type === "max" ? weightUnit : type === "metric" ? metricUnit : "",
-      startDate: new Date().toISOString().slice(0, 10),
-      createdAt: new Date().toISOString(),
-    };
-    persistGoals([nextGoal, ...goals]);
-    setTitle("");
-    setTarget("");
-  }
-
-  function archiveGoal(goalId) {
-    persistGoals(goals.map((goal) => (
-      goal.id === goalId ? { ...goal, archivedAt: new Date().toISOString() } : goal
-    )));
-  }
-
-  function restoreGoal(goalId) {
-    persistGoals(goals.map((goal) => {
-      if (goal.id !== goalId) return goal;
-      const { archivedAt, ...restoredGoal } = goal;
-      return restoredGoal;
-    }));
-  }
+  const completedWorkoutDates = Object.entries(logs)
+    .filter(([, log]) => log.completed)
+    .map(([date]) => date)
+    .sort();
+  const lastWorkoutDate = completedWorkoutDates.at(-1);
+  const completedThisMonth = completedWorkoutDates.filter((date) => {
+    const completedAt = new Date(`${date}T12:00:00`);
+    const daysAgo = (Date.now() - completedAt.getTime()) / 86400000;
+    return daysAgo <= 30;
+  }).length;
 
   function renderGoal(goal) {
     const latestMetric = goal.type === "metric" ? metricLatest(bodyMetrics, goal.metric) : null;
@@ -3071,35 +3084,66 @@ function GoalsPage({ user, logs }) {
             <dd>{formatDate(goal.startDate)}</dd>
           </div>
         </dl>
-        {goal.archivedAt ? (
-          <button className="quiet-button" type="button" onClick={() => restoreGoal(goal.id)}>Restore goal</button>
-        ) : (
-          <button className="quiet-button" type="button" onClick={() => archiveGoal(goal.id)}>Archive goal</button>
-        )}
       </article>
     );
   }
 
   return (
     <section className="profile-panel goals-panel">
-      <div className="profile-header">
-        <span className="profile-avatar">
-          <Target size={34} />
-        </span>
-        <div>
-          <p className="eyebrow">Athlete progress</p>
-          <h2>Goals</h2>
+      <div className="progress-header">
+        <div className="profile-header">
+          <span className="profile-avatar">
+            <TrendingUp size={34} />
+          </span>
+          <div>
+            <p className="eyebrow">Athlete progress</p>
+            <h2>Progress</h2>
+          </div>
+        </div>
+        <button className="quiet-button progress-exit-button" type="button" onClick={onExit}>
+          <ArrowLeft size={16} />
+          Exit
+        </button>
+      </div>
+
+      <div className="goal-section">
+        <div className="program-section-title">
+          <h3>Snapshot</h3>
+          <span>{activeGoals.length} active</span>
+        </div>
+        <div className="progress-snapshot-grid">
+          <article className="progress-snapshot-card">
+            <p className="eyebrow">30 days</p>
+            <strong>{completedThisMonth}</strong>
+            <span>completed workouts</span>
+          </article>
+          <article className="progress-snapshot-card">
+            <p className="eyebrow">Last workout</p>
+            <strong>{lastWorkoutDate ? formatDate(lastWorkoutDate).replace(/^[^,]+, /, "") : "-"}</strong>
+            <span>{completedWorkoutDates.length ? `${completedWorkoutDates.length} total logged` : "No completed workouts yet"}</span>
+          </article>
+          <article className="progress-snapshot-card">
+            <p className="eyebrow">Goals</p>
+            <strong>{activeGoals.filter((goal) => {
+              const latestMetric = goal.type === "metric" ? metricLatest(bodyMetrics, goal.metric) : null;
+              const progress = goal.type === "metric"
+                ? metricGoalProgress(goal, latestMetric?.[goal.metric])
+                : goalProgress(goal, logs, maxes, weightUnit);
+              return progress?.complete;
+            }).length}</strong>
+            <span>completed or on target</span>
+          </article>
         </div>
       </div>
 
       <div className="goal-section">
         <div className="program-section-title">
-          <h3>Max Goals</h3>
+          <h3>Strength</h3>
           <span>{maxFields.length}</span>
         </div>
-        <div className="goal-value-grid">
+        <div className="goal-value-grid progress-value-grid">
           {maxFields.map((field) => {
-            const currentValue = maxes[field.key]?.value ?? maxes[field.key] ?? "";
+            const currentValue = numericMax(maxes, field.key);
             const maxGoal = activeGoals.find((goal) => goal.type === "max" && goal.lift === field.key);
             const progress = maxGoal ? goalProgress(maxGoal, logs, maxes, weightUnit) : null;
             return (
@@ -3107,132 +3151,67 @@ function GoalsPage({ user, logs }) {
                 <div className="metric-card-heading">
                   <div>
                     <p className="eyebrow">Strength</p>
-                    <h3>{field.label}</h3>
-                  </div>
+                  <h3>{field.label}</h3>
+                </div>
                   <strong>{currentValue ? `${currentValue}${weightUnit}` : "-"}</strong>
                 </div>
-                {maxGoal && (
+                {progress ? (
                   <div className="progress-meter" aria-label={`${progress.percent}% complete`}>
                     <span style={{ width: `${progress.percent}%` }} />
                   </div>
-                )}
-                <div className="current-goal-grid">
-                  <label>
-                    Current
-                    <span className="max-input-row">
-                      <input value={currentValue} onChange={(event) => updateMaxGoalCurrent(field.key, event.target.value)} inputMode="decimal" placeholder={`Current (${weightUnit})`} />
-                    </span>
-                  </label>
-                  <label>
-                    Goal
-                    <input value={maxGoalValues[field.key]} onChange={(event) => setMaxGoalValues({ ...maxGoalValues, [field.key]: event.target.value })} inputMode="decimal" placeholder="Goal" />
-                  </label>
-                </div>
-                <button className="quiet-button" type="button" onClick={() => saveMaxGoal(field)}>
-                  <Save size={16} />
-                  Save goal
-                </button>
+                ) : <p className="progress-card-note">No goal set</p>}
+                {progress && <p className="progress-card-note">{progress.label}</p>}
               </div>
             );
           })}
         </div>
       </div>
 
-      <form className="metric-entry-form" onSubmit={saveMetricEntry}>
-        {bodyMetricFields.map((field) => {
-          const setting = bodyMetricSettings[field.key] || defaultBodyMetricSettings[field.key];
-          const unitValue = bodyMetricUnit(field, weightUnit);
-          const latest = metricLatest(bodyMetrics, field.key);
-          const metricGoal = activeGoals.find((goal) => goal.type === "metric" && goal.metric === field.key);
-          const progress = setting.mode === "goal" ? metricGoalProgress(metricGoal, latest?.[field.key]) : null;
-          const points = metricTrendPoints(bodyMetrics, field.key);
-          if (!setting.enabled) return null;
-          return (
-            <div className="metric-card" key={field.key}>
-              <div className="metric-card-heading">
-                <div>
-                  <p className="eyebrow">{setting.mode === "goal" ? "Goal trend" : "Current"}</p>
-                  <h3>{field.label}</h3>
+      <div className="goal-section">
+        <div className="program-section-title">
+          <h3>Tracked Metrics</h3>
+          <span>{bodyMetrics.length} entries</span>
+        </div>
+        <div className="metric-entry-form progress-metric-grid">
+          {bodyMetricFields.map((field) => {
+            const setting = bodyMetricSettings[field.key] || defaultBodyMetricSettings[field.key];
+            const unitValue = bodyMetricUnit(field, weightUnit);
+            const latest = metricLatest(bodyMetrics, field.key);
+            const metricGoal = activeGoals.find((goal) => goal.type === "metric" && goal.metric === field.key);
+            const progress = metricGoalProgress(metricGoal, latest?.[field.key]);
+            const points = metricTrendPoints(bodyMetrics, field.key);
+            if (!setting.enabled) return null;
+            return (
+              <div className="metric-card" key={field.key}>
+                <div className="metric-card-heading">
+                  <div>
+                    <p className="eyebrow">{metricGoal ? "Goal trend" : "Current"}</p>
+                    <h3>{field.label}</h3>
+                  </div>
+                  <strong>{latest?.[field.key] ? `${latest[field.key]}${unitValue}` : "-"}</strong>
                 </div>
-                <strong>{latest?.[field.key] ? `${latest[field.key]}${unitValue}` : "-"}</strong>
-              </div>
-              {setting.mode === "goal" && metricGoal && (
-                <>
+                {metricGoal && (
                   <div className="progress-meter" aria-label={`${progress?.percent || 0}% complete`}>
                     <span style={{ width: `${progress?.percent || 0}%` }} />
                   </div>
+                )}
+                {points ? (
                   <svg className="metric-sparkline" viewBox="0 0 100 48" role="img" aria-label={`${field.label} trend`}>
                     <polyline points={points} />
                   </svg>
-                </>
-              )}
-              <label>
-                Current
-                <input value={metricValues[field.key]} onChange={(event) => setMetricValues({ ...metricValues, [field.key]: event.target.value })} inputMode="decimal" placeholder={unitValue} />
-              </label>
-              <label>
-                Goal
-                <input value={metricGoalValues[field.key]} onChange={(event) => setMetricGoalValues({ ...metricGoalValues, [field.key]: event.target.value })} inputMode="decimal" placeholder={unitValue} />
-              </label>
-              <button className="quiet-button" type="button" onClick={() => saveMetricGoal(field)}>
-                <Save size={16} />
-                Save goal
-              </button>
-            </div>
-          );
-        })}
-        <button className="secondary" type="submit">
-          <Save size={18} />
-          Save body metrics
-        </button>
-      </form>
-
-      <form className="goal-form" onSubmit={addGoal}>
-        <label className="wide">
-          Goal name
-          <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Qualify for meet, rebuild squat, stay consistent" />
-        </label>
-        <label>
-          Goal type
-          <select value={type} onChange={(event) => setType(event.target.value)}>
-            <option value="workouts">Completed workouts</option>
-            <option value="max">Lift max</option>
-            <option value="metric">Body metric</option>
-          </select>
-        </label>
-        {type === "max" && (
-          <label>
-            Lift
-            <select value={lift} onChange={(event) => setLift(event.target.value)}>
-              {maxFields.map((field) => (
-                <option value={field.key} key={field.key}>{field.label}</option>
-              ))}
-            </select>
-          </label>
-        )}
-        {type === "metric" && (
-          <label>
-            Metric
-            <select value={metric} onChange={(event) => setMetric(event.target.value)}>
-              {bodyMetricFields.map((field) => (
-                <option value={field.key} key={field.key}>{field.label}</option>
-              ))}
-            </select>
-          </label>
-        )}
-        <label>
-          Target
-          <input value={target} onChange={(event) => setTarget(event.target.value)} inputMode="decimal" placeholder={type === "metric" ? "185" : type === "max" ? "120" : "20"} required />
-        </label>
-        <button className="primary" type="submit">
-          <Plus size={18} />
-          Add goal
-        </button>
-      </form>
+                ) : (
+                  <p className="progress-card-note">Add another entry to show a trend.</p>
+                )}
+                {metricGoal && <p className="progress-card-note">{latest?.[field.key] || 0}/{metricGoal.target}{unitValue}</p>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       <div className="goal-section">
         <div className="program-section-title">
-          <h3>Active Goals</h3>
+          <h3>Active Goal Progress</h3>
           <span>{activeGoals.length}</span>
         </div>
         {activeGoals.length ? (
@@ -3240,21 +3219,9 @@ function GoalsPage({ user, logs }) {
             {activeGoals.map(renderGoal)}
           </div>
         ) : (
-          <p className="empty-list-copy">No active goals yet.</p>
+          <p className="empty-list-copy">No active goals yet. Your tracked metrics and workout history will still show here.</p>
         )}
       </div>
-
-      {archivedGoals.length > 0 && (
-        <div className="goal-section">
-          <div className="program-section-title">
-            <h3>Past Goals</h3>
-            <span>{archivedGoals.length}</span>
-          </div>
-          <div className="goal-card-grid">
-            {archivedGoals.map(renderGoal)}
-          </div>
-        </div>
-      )}
     </section>
   );
 }
@@ -3269,6 +3236,7 @@ function App() {
   const [customWorkouts, setCustomWorkouts] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [programWorkouts, setProgramWorkouts] = useState([]);
+  const [workoutScheduleOverrides, setWorkoutScheduleOverrides] = useState({});
   const [selectedDate, setSelectedDate] = useState(initialRoute.selectedDate);
   const [selectedWorkoutKey, setSelectedWorkoutKey] = useState(initialRoute.selectedWorkoutKey);
   const [view, setView] = useState(initialRoute.view);
@@ -3314,6 +3282,7 @@ function App() {
       setCustomWorkouts([]);
       setPrograms([]);
       setProgramWorkouts([]);
+      setWorkoutScheduleOverrides({});
       return;
     }
 
@@ -3334,6 +3303,7 @@ function App() {
     setAthleteProgressLogs(nextTrainer ? await loadWorkoutLogs("dev-athlete") : nextLogs);
     setCustomWorkouts(nextCustomWorkouts);
     setPrograms(nextPrograms);
+    setWorkoutScheduleOverrides(loadWorkoutScheduleOverrides(nextUser.uid));
     const programWorkoutLists = await Promise.all(nextPrograms.map((program) => loadCustomWorkouts(program.id)));
     setProgramWorkouts(programWorkoutLists.flat());
   }
@@ -3452,7 +3422,12 @@ function App() {
     setTimerBankedSeconds(0);
   }, [activeIntervalSeconds, countdownSeconds, intervalCurrentRound, intervalEndless, intervalPhase, intervalRounds, timerElapsedSeconds, timerMode, timerRunning]);
 
-  const allWorkouts = useMemo(() => [...importedProgram, ...customWorkouts, ...programWorkouts], [customWorkouts, programWorkouts]);
+  const rescheduledImportedProgram = useMemo(() => (
+    importedProgram.map((item) => (
+      workoutScheduleOverrides[item.id] ? { ...item, date: workoutScheduleOverrides[item.id] } : item
+    ))
+  ), [workoutScheduleOverrides]);
+  const allWorkouts = useMemo(() => [...rescheduledImportedProgram, ...customWorkouts, ...programWorkouts], [customWorkouts, programWorkouts, rescheduledImportedProgram]);
   const workoutsByDate = useMemo(() => groupByDate(allWorkouts), [allWorkouts]);
   const workoutDates = useMemo(() => Object.keys(workoutsByDate).sort(), [workoutsByDate]);
   const calendarMonths = useMemo(() => calendarSections(workoutDates), [workoutDates]);
@@ -3462,6 +3437,9 @@ function App() {
     ? []
     : selectedWorkoutGroups.find((group) => group.key === selectedWorkoutKey)?.items || selectedWorkoutGroups[0]?.items || [];
   const activeWorkoutKey = selectedWorkoutKey || selectedWorkoutGroups[0]?.key || "blank";
+  const activeWorkoutGroup = selectedWorkoutKey === "blank"
+    ? null
+    : selectedWorkoutGroups.find((group) => group.key === activeWorkoutKey) || selectedWorkoutGroups[0] || null;
   const today = new Date().toISOString().slice(0, 10);
   const todayTarget = workoutsByDate[today] ? today : dates.find((date) => date >= today) || dates[0];
 
@@ -3522,7 +3500,51 @@ function App() {
     setCustomWorkouts([]);
     setPrograms([]);
     setProgramWorkouts([]);
+    setWorkoutScheduleOverrides({});
     setChecking(false);
+  }
+
+  async function moveSelectedWorkout(nextDate) {
+    if (!user || !activeWorkoutGroup || !nextDate || nextDate === selectedDate) return;
+    const movedItems = activeWorkoutGroup.items.map((item) => ({
+      ...item,
+      date: nextDate,
+      day: new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date(`${nextDate}T12:00:00`)),
+    }));
+    const movedIds = new Set(movedItems.map((item) => item.id));
+    const nextWorkoutKey = workoutGroupKey(movedItems[0]);
+    const nextOverrides = { ...workoutScheduleOverrides };
+
+    movedItems.forEach((item) => {
+      if (String(item.id || "").startsWith("mock-")) {
+        nextOverrides[item.id] = nextDate;
+      }
+    });
+
+    setWorkoutScheduleOverrides(nextOverrides);
+    saveWorkoutScheduleOverrides(user.uid, nextOverrides);
+
+    if (customWorkouts.some((item) => movedIds.has(item.id))) {
+      setCustomWorkouts((current) => current.map((item) => (
+        movedIds.has(item.id) ? movedItems.find((movedItem) => movedItem.id === item.id) || item : item
+      )));
+    }
+
+    if (programWorkouts.some((item) => movedIds.has(item.id))) {
+      setProgramWorkouts((current) => current.map((item) => (
+        movedIds.has(item.id) ? movedItems.find((movedItem) => movedItem.id === item.id) || item : item
+      )));
+    }
+
+    await Promise.all(movedItems
+      .filter((item) => !String(item.id || "").startsWith("mock-"))
+      .map((item) => saveCustomWorkout(item.programId || "default", item)));
+
+    moveWorkoutDraft(user.uid, selectedDate, activeWorkoutKey, nextDate, nextWorkoutKey);
+    setSelectedDate(nextDate);
+    setSelectedWorkoutKey(nextWorkoutKey);
+    setView("workout");
+    handleWorkoutSaveStatus({ synced: false, local: true });
   }
 
   function applyAppUpdate() {
@@ -3708,9 +3730,9 @@ function App() {
               Maxes
             </button>
             {!isTrainer && (
-              <button className="menu-link" type="button" onClick={() => openMenuView("goals")}>
-                <Target size={18} />
-                Goals
+              <button className="menu-link" type="button" onClick={() => openMenuView("progress")}>
+                <TrendingUp size={18} />
+                Progress
               </button>
             )}
             {isTrainer && (
@@ -3820,13 +3842,13 @@ function App() {
       )}
 
       {view === "profile" ? (
-        <ProfilePage user={user} isTrainer={isTrainer} logs={logs} onOpenEdit={() => setView("edit-profile")} onOpenMaxes={() => setView("maxes")} onOpenGoals={() => setView("goals")} onOpenSettings={() => setView("settings")} />
+        <ProfilePage user={user} isTrainer={isTrainer} logs={logs} onOpenEdit={() => setView("edit-profile")} onOpenMaxes={() => setView("maxes")} onOpenGoals={() => setView("progress")} onOpenSettings={() => setView("settings")} />
       ) : view === "edit-profile" ? (
         <ProfileEditPage user={user} onProfileSaved={handleProfileSaved} />
       ) : view === "maxes" ? (
         <MaxesPage user={user} />
-      ) : view === "goals" ? (
-        <GoalsPage user={user} logs={logs} />
+      ) : view === "progress" ? (
+        <GoalsPage user={user} logs={logs} onExit={() => setView("profile")} />
       ) : view === "settings" ? (
         <SettingsPage onOpenSection={(section) => setView(`settings-${section}`)} />
       ) : view.startsWith("settings-") ? (
@@ -3862,7 +3884,7 @@ function App() {
       ) : view === "workout-list" ? (
         <WorkoutListView date={selectedDate} workoutGroups={selectedWorkoutGroups} logs={logs} programs={programs} onOpenWorkout={openWorkout} onAddWorkout={openBlankWorkout} onChangeDate={openWorkoutList} />
       ) : view === "workout" ? (
-        <WorkoutView workout={selectedWorkout} workoutKey={activeWorkoutKey} date={selectedDate} user={user} logs={logs} setLogs={setLogs} onDone={() => setView("client")} onSaveStatus={handleWorkoutSaveStatus} />
+        <WorkoutView workout={selectedWorkout} workoutKey={activeWorkoutKey} date={selectedDate} user={user} logs={logs} setLogs={setLogs} onDone={() => setView("client")} onSaveStatus={handleWorkoutSaveStatus} onMoveWorkout={moveSelectedWorkout} />
       ) : (
         <>
           <div className="today-row">
