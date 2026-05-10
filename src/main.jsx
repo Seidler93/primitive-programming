@@ -5,6 +5,7 @@ import {
   Bell,
   CheckCircle2,
   ClipboardList,
+  Clock,
   Dumbbell,
   ArrowLeft,
   LogOut,
@@ -20,6 +21,7 @@ import {
 import "./styles.css";
 import packageInfo from "../package.json";
 import { importedProgram } from "./programData";
+import { exerciseSuggestions } from "./exerciseLibrary";
 import {
   hasFirebaseConfig,
   isTrainerUser,
@@ -50,6 +52,51 @@ const maxFields = [
 ];
 
 const appVersion = packageInfo.version;
+const warmupPresets = [
+  {
+    id: "full-body",
+    title: "Full body",
+    exercises: ["Bike or row easy", "World's greatest stretch", "Empty bar complex"],
+  },
+  {
+    id: "lower-body",
+    title: "Lower body",
+    exercises: ["Hip airplanes", "Goblet squat hold", "Empty bar squat"],
+  },
+  {
+    id: "upper-body",
+    title: "Upper body",
+    exercises: ["Band pull-aparts", "Scap push-ups", "Empty bar press"],
+  },
+];
+
+function formatTimer(totalSeconds) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function normalizeExerciseSuggestion(value) {
+  return value.includes(" - ") ? value.split(" - ").at(-1) : value;
+}
+
+function ExerciseAutocomplete({ value, onChange, placeholder, id }) {
+  return (
+    <>
+      <input
+        value={value}
+        onChange={(event) => onChange(normalizeExerciseSuggestion(event.target.value))}
+        list={id}
+        placeholder={placeholder}
+      />
+      <datalist id={id}>
+        {exerciseSuggestions.map((name) => (
+          <option key={name} value={name} />
+        ))}
+      </datalist>
+    </>
+  );
+}
 
 function workoutDraftKey(userId, date, workoutKey = "default") {
   return `primitive-programming:workout-draft:${userId}:${date}:${workoutKey}`;
@@ -133,6 +180,12 @@ function formatDate(date) {
     month: "short",
     day: "numeric",
   }).format(new Date(`${date}T12:00:00`));
+}
+
+function shiftDate(date, offset) {
+  const nextDate = new Date(`${date}T12:00:00`);
+  nextDate.setDate(nextDate.getDate() + offset);
+  return nextDate.toISOString().slice(0, 10);
 }
 
 function groupByDate(items) {
@@ -436,18 +489,46 @@ function CalendarStrip({ sections, selectedDate, onSelectDate, logs, workoutsByD
   );
 }
 
-function WorkoutListView({ date, workoutGroups, logs, programs, onOpenWorkout, onAddWorkout }) {
+function WorkoutListView({ date, workoutGroups, logs, programs, onOpenWorkout, onAddWorkout, onChangeDate }) {
+  const [swipeStart, setSwipeStart] = useState(null);
+  const [showAddWorkoutOptions, setShowAddWorkoutOptions] = useState(false);
+  const [selectedAddMode, setSelectedAddMode] = useState("new");
   const hasPlannedWorkout = workoutGroups.length > 0;
   const programName = (programId) => {
     if (!programId || programId === "default") return "Default Program";
     return programs.find((program) => program.id === programId)?.name || "Program";
   };
+  const goToPreviousDay = () => onChangeDate(shiftDate(date, -1));
+  const goToNextDay = () => onChangeDate(shiftDate(date, 1));
+
+  function startSwipe(event) {
+    if (event.pointerType === "mouse") return;
+    setSwipeStart({ x: event.clientX, y: event.clientY });
+  }
+
+  function finishSwipe(event) {
+    if (!swipeStart || event.pointerType === "mouse") return;
+    const deltaX = event.clientX - swipeStart.x;
+    const deltaY = event.clientY - swipeStart.y;
+    setSwipeStart(null);
+    if (Math.abs(deltaX) < 54 || Math.abs(deltaX) < Math.abs(deltaY) * 1.25) return;
+    if (deltaX < 0) goToNextDay();
+    else goToPreviousDay();
+  }
 
   return (
-    <section className="workout-list-panel">
-      <div className="section-heading">
-        <CalendarDays size={20} />
-        <h2>{formatDate(date)}</h2>
+    <section className="workout-list-panel" onPointerDown={startSwipe} onPointerUp={finishSwipe} onPointerCancel={() => setSwipeStart(null)}>
+      <div className="section-heading workout-list-heading">
+        <button className="icon-button" type="button" onClick={goToPreviousDay} aria-label="Previous day" title="Previous day">
+          <ArrowLeft size={18} />
+        </button>
+        <div>
+          <p className="eyebrow">Swipe for nearby days</p>
+          <h2>{formatDate(date)}</h2>
+        </div>
+        <button className="icon-button next-day-button" type="button" onClick={goToNextDay} aria-label="Next day" title="Next day">
+          <ArrowLeft size={18} />
+        </button>
       </div>
       {hasPlannedWorkout ? (
         <div className="workout-card-list">
@@ -465,13 +546,67 @@ function WorkoutListView({ date, workoutGroups, logs, programs, onOpenWorkout, o
       ) : (
         <p className="empty-list-copy">No workouts are scheduled for this day.</p>
       )}
-      <button className="add-workout-button" type="button" onClick={onAddWorkout}>
+      <button className="add-workout-button" type="button" onClick={() => setShowAddWorkoutOptions(true)}>
         <Plus size={20} />
         <div>
           <h3>Add workout</h3>
-          <span>Create your own workout for this day</span>
+          <span>New, stored, or AI-generated workout</span>
         </div>
       </button>
+      {showAddWorkoutOptions && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="add-workout-title">
+            <div>
+              <p className="eyebrow">{formatDate(date)}</p>
+              <h2 id="add-workout-title">Add workout</h2>
+            </div>
+            <div className="choice-list" role="tablist" aria-label="Workout add options">
+              <button className={selectedAddMode === "new" ? "choice-button active" : "choice-button"} type="button" onClick={() => setSelectedAddMode("new")}>
+                <strong>New workout</strong>
+                <span>Start blank and add exercises yourself.</span>
+              </button>
+              <button className={selectedAddMode === "stored" ? "choice-button active" : "choice-button"} type="button" onClick={() => setSelectedAddMode("stored")}>
+                <strong>Stored workout</strong>
+                <span>Reuse saved templates once the library is ready.</span>
+              </button>
+              <button className={selectedAddMode === "ai" ? "choice-button active" : "choice-button"} type="button" onClick={() => setSelectedAddMode("ai")}>
+                <strong>Generate workout</strong>
+                <span>AI with guard rails for readiness, volume, and maxes.</span>
+              </button>
+            </div>
+            {selectedAddMode === "new" ? (
+              <div className="option-panel">
+                <p>Create a blank workout for this day. You can add warm-ups, lifts, accessories, and cardio next.</p>
+                <button className="primary" type="button" onClick={() => {
+                  setShowAddWorkoutOptions(false);
+                  onAddWorkout();
+                }}>
+                  <Plus size={18} />
+                  Start blank workout
+                </button>
+              </div>
+            ) : selectedAddMode === "stored" ? (
+              <div className="option-panel">
+                <p>Stored workout templates will live here. For now, this is the place-holder path for saved workouts.</p>
+                <button className="secondary" type="button" disabled>
+                  Stored workouts coming soon
+                </button>
+              </div>
+            ) : (
+              <div className="option-panel">
+                <p>Generation will use guard rails like available maxes, recent completed volume, movement balance, and coach limits before inserting anything.</p>
+                <textarea rows={3} placeholder="Example: light lower body day, 45 minutes, no maxing" />
+                <button className="secondary" type="button" disabled>
+                  Generate workout coming soon
+                </button>
+              </div>
+            )}
+            <button className="text-button" type="button" onClick={() => setShowAddWorkoutOptions(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -487,14 +622,20 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
   const [maxes, setMaxes] = useState(initialDraft.maxes || existing.maxes || savedMaxes);
   const [loads, setLoads] = useState(initialDraft.loads || existing.loads || {});
   const [notes, setNotes] = useState(initialDraft.notes ?? existing.notes ?? "");
+  const [warmupSetCounts, setWarmupSetCounts] = useState(initialDraft.warmupSetCounts || existing.warmupSetCounts || {});
   const [programmedSetCounts, setProgrammedSetCounts] = useState(initialDraft.programmedSetCounts || existing.programmedSetCounts || {});
+  const [exerciseOverrides, setExerciseOverrides] = useState(initialDraft.exerciseOverrides || existing.exerciseOverrides || {});
   const [customExercises, setCustomExercises] = useState(initialDraft.customExercises || existing.customExercises || []);
   const [showAddExercise, setShowAddExercise] = useState(false);
+  const [showAddCardio, setShowAddCardio] = useState(false);
+  const [newCardioName, setNewCardioName] = useState("");
+  const [newCardioTracksWeight, setNewCardioTracksWeight] = useState(false);
+  const [showAddWarmup, setShowAddWarmup] = useState(false);
+  const [newWarmupName, setNewWarmupName] = useState("");
+  const [newWarmupTracksWeight, setNewWarmupTracksWeight] = useState(false);
   const [newExerciseName, setNewExerciseName] = useState("");
   const [newExerciseTracksWeight, setNewExerciseTracksWeight] = useState(true);
-  const [editingExerciseId, setEditingExerciseId] = useState("");
-  const [editExerciseName, setEditExerciseName] = useState("");
-  const [editExerciseTracksWeight, setEditExerciseTracksWeight] = useState(true);
+  const [openExerciseMenu, setOpenExerciseMenu] = useState("");
   const requiredMaxes = useMemo(() => needsMaxes(workout), [workout]);
   const maxValue = (key) => maxes[key]?.value ?? maxes[key] ?? "";
   const maxUnit = (key) => maxes[key]?.unit || "kg";
@@ -508,29 +649,37 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
     setMaxes(draft.maxes || existing.maxes || loadUserMaxes(user.uid));
     setLoads(draft.loads || existing.loads || {});
     setNotes(draft.notes ?? existing.notes ?? "");
+    setWarmupSetCounts(draft.warmupSetCounts || existing.warmupSetCounts || {});
     setProgrammedSetCounts(draft.programmedSetCounts || existing.programmedSetCounts || {});
+    setExerciseOverrides(draft.exerciseOverrides || existing.exerciseOverrides || {});
     setCustomExercises(draft.customExercises || existing.customExercises || []);
     setShowAddExercise(false);
+    setShowAddCardio(false);
+    setNewCardioName("");
+    setNewCardioTracksWeight(false);
+    setShowAddWarmup(false);
+    setNewWarmupName("");
+    setNewWarmupTracksWeight(false);
     setNewExerciseName("");
     setNewExerciseTracksWeight(true);
-    setEditingExerciseId("");
-    setEditExerciseName("");
-    setEditExerciseTracksWeight(true);
+    setOpenExerciseMenu("");
     setHydratedDraftFor(`${user.uid}:${date}:${workoutKey}`);
   }, [date, user.uid, workout.length, workoutKey]);
 
   useEffect(() => {
     if (hydratedDraftFor !== `${user.uid}:${date}:${workoutKey}`) return;
-    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, programmedSetCounts, customExercises });
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises });
     saveUserMaxes(user.uid, maxes);
-  }, [customExercises, date, hydratedDraftFor, loads, maxes, notes, programmedSetCounts, started, user.uid, workoutKey]);
+  }, [customExercises, date, exerciseOverrides, hydratedDraftFor, loads, maxes, notes, programmedSetCounts, started, user.uid, warmupSetCounts, workoutKey]);
 
   async function persist(payload = {}, stateOverrides = {}) {
     const nextState = {
       maxes,
       loads,
       notes,
+      warmupSetCounts,
       programmedSetCounts,
+      exerciseOverrides,
       customExercises,
       ...stateOverrides,
     };
@@ -562,6 +711,60 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
     setShowAddExercise(false);
   }
 
+  function addCardioExercise(event) {
+    event.preventDefault();
+    const name = newCardioName.trim();
+    if (!name) return;
+    const nextExercises = [
+      ...customExercises,
+      customExercisePayload({ name, trackWeights: newCardioTracksWeight, section: "cardio", reps: "Time" }),
+    ];
+    setCustomExercises(nextExercises);
+    setNewCardioName("");
+    setNewCardioTracksWeight(false);
+    setShowAddCardio(false);
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises: nextExercises });
+    void persist({}, { customExercises: nextExercises });
+  }
+
+  function customExercisePayload({ name, trackWeights = true, section = "accessory", reps = "" }) {
+    const createdAt = Date.now();
+    return {
+      id: `session-${createdAt}-${Math.random().toString(16).slice(2)}`,
+      name,
+      section,
+      trackWeights,
+      sets: [{ id: `${createdAt}-1`, reps, weight: "", done: false }],
+    };
+  }
+
+  function addWarmupExercise(event) {
+    event.preventDefault();
+    const name = newWarmupName.trim();
+    if (!name) return;
+    const nextExercises = [
+      ...customExercises,
+      customExercisePayload({ name, trackWeights: newWarmupTracksWeight, section: "warmup", reps: "Prep" }),
+    ];
+    setCustomExercises(nextExercises);
+    setNewWarmupName("");
+    setNewWarmupTracksWeight(false);
+    setShowAddWarmup(false);
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises: nextExercises });
+    void persist({}, { customExercises: nextExercises });
+  }
+
+  function addWarmupPreset(preset) {
+    const nextExercises = [
+      ...customExercises,
+      ...preset.exercises.map((name) => customExercisePayload({ name, trackWeights: false, section: "warmup", reps: "Prep" })),
+    ];
+    setCustomExercises(nextExercises);
+    setShowAddWarmup(false);
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises: nextExercises });
+    void persist({}, { customExercises: nextExercises });
+  }
+
   function updateCustomExercise(exerciseId, updater) {
     setCustomExercises(customExercises.map((exercise) => (
       exercise.id === exerciseId ? updater(exercise) : exercise
@@ -573,6 +776,49 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
       ...exercise,
       sets: exercise.sets.map((set) => (set.id === setId ? { ...set, ...patch } : set)),
     }));
+  }
+
+  function exerciseMenuId(type, id) {
+    return `${type}:${id}`;
+  }
+
+  function programmedExercise(item) {
+    return {
+      ...item,
+      ...(exerciseOverrides[item.id] || {}),
+    };
+  }
+
+  function persistExerciseOverrides(nextOverrides) {
+    setExerciseOverrides(nextOverrides);
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides: nextOverrides, customExercises });
+    void persist({}, { exerciseOverrides: nextOverrides });
+  }
+
+  function updateProgrammedExercise(item, patch) {
+    const current = exerciseOverrides[item.id] || {};
+    const nextOverrides = {
+      ...exerciseOverrides,
+      [item.id]: { ...current, ...patch },
+    };
+    persistExerciseOverrides(nextOverrides);
+  }
+
+  function updateCustomExerciseField(exerciseId, patch) {
+    const nextExercises = customExercises.map((exercise) => (
+      exercise.id === exerciseId ? { ...exercise, ...patch } : exercise
+    ));
+    setCustomExercises(nextExercises);
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises: nextExercises });
+    void persist({}, { customExercises: nextExercises });
+  }
+
+  function removeCustomExercise(exerciseId) {
+    const nextExercises = customExercises.filter((exercise) => exercise.id !== exerciseId);
+    setCustomExercises(nextExercises);
+    setOpenExerciseMenu("");
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises: nextExercises });
+    void persist({}, { customExercises: nextExercises });
   }
 
   function addCustomSet(exerciseId) {
@@ -602,6 +848,41 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
     });
   }
 
+  function warmupRows(item) {
+    const count = warmupSetCounts[item.id] || 0;
+    return Array.from({ length: count }, (_, index) => ({
+      key: `${item.id}:warmup:${index + 1}`,
+      repsKey: `${item.id}:warmup:${index + 1}:reps`,
+      label: `Warm-up ${index + 1}`,
+    }));
+  }
+
+  function addWarmupSet(item) {
+    const nextCounts = {
+      ...warmupSetCounts,
+      [item.id]: (warmupSetCounts[item.id] || 0) + 1,
+    };
+    setWarmupSetCounts(nextCounts);
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts: nextCounts, programmedSetCounts, customExercises });
+    void persist({}, { warmupSetCounts: nextCounts });
+  }
+
+  function removeWarmupSet(item) {
+    const currentCount = warmupSetCounts[item.id] || 0;
+    if (currentCount <= 0) return;
+    const nextCounts = { ...warmupSetCounts, [item.id]: currentCount - 1 };
+    if (nextCounts[item.id] <= 0) delete nextCounts[item.id];
+    const removedSetKey = `${item.id}:warmup:${currentCount}`;
+    const nextLoads = { ...loads };
+    delete nextLoads[removedSetKey];
+    delete nextLoads[`${removedSetKey}:done`];
+    delete nextLoads[`${removedSetKey}:reps`];
+    setWarmupSetCounts(nextCounts);
+    setLoads(nextLoads);
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads: nextLoads, notes, warmupSetCounts: nextCounts, programmedSetCounts, customExercises });
+    void persist({}, { loads: nextLoads, warmupSetCounts: nextCounts });
+  }
+
   function addProgrammedSet(item) {
     const nextCounts = {
       ...programmedSetCounts,
@@ -621,29 +902,6 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
     setProgrammedSetCounts(nextCounts);
     saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, programmedSetCounts: nextCounts, customExercises });
     void persist({}, { programmedSetCounts: nextCounts });
-  }
-
-  function openEditExercise(exercise) {
-    setEditingExerciseId(exercise.id);
-    setEditExerciseName(exercise.name);
-    setEditExerciseTracksWeight(exercise.trackWeights);
-  }
-
-  function saveEditedExercise(event) {
-    event.preventDefault();
-    const name = editExerciseName.trim();
-    if (!name) return;
-    updateCustomExercise(editingExerciseId, (exercise) => ({
-      ...exercise,
-      name,
-      trackWeights: editExerciseTracksWeight,
-    }));
-    setEditingExerciseId("");
-  }
-
-  function removeEditedExercise() {
-    setCustomExercises(customExercises.filter((exercise) => exercise.id !== editingExerciseId));
-    setEditingExerciseId("");
   }
 
   return (
@@ -688,7 +946,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
             disabled={missingMaxes.length > 0}
             onClick={() => {
               setStarted(true);
-              saveWorkoutDraft(user.uid, date, workoutKey, { started: true, maxes, loads, notes, programmedSetCounts, customExercises });
+              saveWorkoutDraft(user.uid, date, workoutKey, { started: true, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises });
             }}
           >
             <Dumbbell size={18} />
@@ -711,54 +969,46 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
               <span>Exercise</span>
               <span>Sets</span>
             </div>
+            <div className="workout-warmup-row">
+              <button className="secondary" type="button" onClick={() => setShowAddWarmup(true)}>
+                <Plus size={18} />
+                Add warm-up
+              </button>
+            </div>
             {isBlankWorkout && customExercises.length === 0 && (
               <p className="empty-list-copy">No exercises yet. Add the first exercise below.</p>
             )}
-            {workout.map((item) => (
-              <div className="exercise-row" key={item.id}>
-                <div>
-                  <strong>{item.exercise}</strong>
-                  <small>{item.intensity} | {item.notes}</small>
-                </div>
-                <div className="set-list">
-                  <p>{item.prescription}</p>
-                  {programmedRows(item).map((set) => (
-                    <label className="set-row tracked-set-row" key={set.key}>
-                      <span>{set.reps}</span>
-                      <input
-                        value={loads[set.key] ?? (set.key.endsWith(":1") ? loads[item.id] || "" : "")}
-                        onChange={(event) => setLoads({ ...loads, [set.key]: event.target.value })}
-                        onBlur={() => persist()}
-                        placeholder={prescribedPreview(item, maxes) || "Actual"}
-                      />
-                      <input
-                        checked={Boolean(loads[`${set.key}:done`])}
-                        onChange={(event) => setLoads({ ...loads, [`${set.key}:done`]: event.target.checked })}
-                        onBlur={() => persist()}
-                        type="checkbox"
-                      />
-                    </label>
-                  ))}
-                  <div className="set-action-row">
-                    <div className="set-action-group">
-                      <button className="quiet-button" type="button" onClick={() => addProgrammedSet(item)}>
-                        <Plus size={16} />
-                        Add set
-                      </button>
-                      <button className="quiet-button danger-text-button" type="button" onClick={() => removeProgrammedSet(item)} disabled={programmedRows(item).length <= setRows(item).length}>
-                        <Minus size={16} />
-                        Remove set
-                      </button>
-                    </div>
+            {customExercises.filter((exercise) => exercise.section === "warmup").map((exercise) => (
+              <div className="exercise-row custom-exercise-row warmup-exercise-row" key={exercise.id}>
+                <div className="exercise-info">
+                  <div>
+                    <strong>{exercise.name}</strong>
+                    <small>{exercise.trackWeights ? "Warm-up | Track weights" : "Warm-up | Completion only"}</small>
                   </div>
-                </div>
-              </div>
-            ))}
-            {customExercises.map((exercise) => (
-              <div className="exercise-row custom-exercise-row" key={exercise.id}>
-                <div>
-                  <strong>{exercise.name}</strong>
-                  <small>{exercise.trackWeights ? "Session exercise | Track weights" : "Session exercise | Completion only"}</small>
+                  <div className="exercise-edit-wrap">
+                    <button className="icon-button exercise-edit-button" type="button" onClick={() => setOpenExerciseMenu(openExerciseMenu === exerciseMenuId("custom", exercise.id) ? "" : exerciseMenuId("custom", exercise.id))} aria-label={`Edit ${exercise.name}`} title="Edit exercise">
+                      <PencilLine size={16} />
+                    </button>
+                    {openExerciseMenu === exerciseMenuId("custom", exercise.id) && (
+                      <div className="exercise-edit-menu">
+                        <label>
+                          Exercise name
+                          <ExerciseAutocomplete value={exercise.name} onChange={(value) => updateCustomExerciseField(exercise.id, { name: value })} id={`exercise-edit-${exercise.id}`} />
+                        </label>
+                        <label className="checkbox-field">
+                          <input
+                            checked={exercise.trackWeights}
+                            onChange={(event) => updateCustomExerciseField(exercise.id, { trackWeights: event.target.checked })}
+                            type="checkbox"
+                          />
+                          Track weights used
+                        </label>
+                        <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomExercise(exercise.id)}>
+                          Remove warm-up
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="set-list">
                   {exercise.sets.map((set) => (
@@ -796,9 +1046,194 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
                         Remove set
                       </button>
                     </div>
-                    <button className="icon-button quiet-icon-button" type="button" onClick={() => openEditExercise(exercise)} aria-label={`Edit ${exercise.name}`} title="Edit exercise">
-                      <PencilLine size={18} />
+                  </div>
+                </div>
+              </div>
+            ))}
+            {workout.map((item) => {
+              const displayItem = programmedExercise(item);
+              const menuId = exerciseMenuId("programmed", item.id);
+              return (
+              <div className="exercise-row" key={item.id}>
+                <div className="exercise-info">
+                  <div>
+                    <strong>{displayItem.exercise}</strong>
+                    <small>{displayItem.intensity || "No intensity"} | {displayItem.notes || "No notes"}</small>
+                  </div>
+                  <div className="exercise-edit-wrap">
+                    <button className="icon-button exercise-edit-button" type="button" onClick={() => setOpenExerciseMenu(openExerciseMenu === menuId ? "" : menuId)} aria-label={`Edit ${displayItem.exercise}`} title="Edit exercise">
+                      <PencilLine size={16} />
                     </button>
+                    {openExerciseMenu === menuId && (
+                      <div className="exercise-edit-menu">
+                        <label>
+                          Substitute
+                          <ExerciseAutocomplete value={displayItem.exercise} onChange={(value) => updateProgrammedExercise(item, { exercise: value })} id={`exercise-sub-${item.id}`} />
+                        </label>
+                        <label>
+                          Prescription
+                          <input value={displayItem.prescription} onChange={(event) => updateProgrammedExercise(item, { prescription: event.target.value })} />
+                        </label>
+                        <label>
+                          Intensity
+                          <input value={displayItem.intensity || ""} onChange={(event) => updateProgrammedExercise(item, { intensity: event.target.value })} />
+                        </label>
+                        <label className="checkbox-field">
+                          <input
+                            checked={displayItem.trackWeights !== false}
+                            onChange={(event) => updateProgrammedExercise(item, { trackWeights: event.target.checked })}
+                            type="checkbox"
+                          />
+                          Track weights used
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="set-list">
+                  <p>{displayItem.prescription}</p>
+                  <div className="warmup-control-row">
+                    <span>Warm-up sets</span>
+                    <div className="set-action-group">
+                      <button className="quiet-button" type="button" onClick={() => addWarmupSet(item)}>
+                        <Plus size={16} />
+                        Add
+                      </button>
+                      <button className="quiet-button danger-text-button" type="button" onClick={() => removeWarmupSet(item)} disabled={(warmupSetCounts[item.id] || 0) <= 0}>
+                        <Minus size={16} />
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                  {warmupRows(item).map((set) => (
+                    <label className="set-row warmup-set-row tracked-set-row" key={set.key}>
+                      <input
+                        value={loads[set.repsKey] || ""}
+                        onChange={(event) => setLoads({ ...loads, [set.repsKey]: event.target.value })}
+                        onBlur={() => persist()}
+                        placeholder={set.label}
+                      />
+                      <input
+                        value={loads[set.key] || ""}
+                        onChange={(event) => setLoads({ ...loads, [set.key]: event.target.value })}
+                        onBlur={() => persist()}
+                        placeholder="Weight"
+                      />
+                      <input
+                        checked={Boolean(loads[`${set.key}:done`])}
+                        onChange={(event) => setLoads({ ...loads, [`${set.key}:done`]: event.target.checked })}
+                        onBlur={() => persist()}
+                        type="checkbox"
+                      />
+                    </label>
+                  ))}
+                  {programmedRows(item).map((set) => (
+                    <label className={displayItem.trackWeights === false ? "set-row check-set-row" : "set-row tracked-set-row"} key={set.key}>
+                      <span>{set.reps}</span>
+                      {displayItem.trackWeights !== false && (
+                        <input
+                          value={loads[set.key] ?? (set.key.endsWith(":1") ? loads[item.id] || "" : "")}
+                          onChange={(event) => setLoads({ ...loads, [set.key]: event.target.value })}
+                          onBlur={() => persist()}
+                          placeholder={prescribedPreview(displayItem, maxes) || "Actual"}
+                        />
+                      )}
+                      <input
+                        checked={Boolean(loads[`${set.key}:done`])}
+                        onChange={(event) => setLoads({ ...loads, [`${set.key}:done`]: event.target.checked })}
+                        onBlur={() => persist()}
+                        type="checkbox"
+                      />
+                    </label>
+                  ))}
+                  <div className="set-action-row">
+                    <div className="set-action-group">
+                      <button className="quiet-button" type="button" onClick={() => addProgrammedSet(item)}>
+                        <Plus size={16} />
+                        Add set
+                      </button>
+                      <button className="quiet-button danger-text-button" type="button" onClick={() => removeProgrammedSet(item)} disabled={programmedRows(item).length <= setRows(item).length}>
+                        <Minus size={16} />
+                        Remove set
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              );
+            })}
+            {customExercises.filter((exercise) => exercise.section !== "warmup" && exercise.section !== "cardio").map((exercise) => (
+              <div className="exercise-row custom-exercise-row" key={exercise.id}>
+                <div className="exercise-info">
+                  <div>
+                    <strong>{exercise.name}</strong>
+                    <small>{exercise.trackWeights ? "Session exercise | Track weights" : "Session exercise | Completion only"}</small>
+                  </div>
+                  <div className="exercise-edit-wrap">
+                    <button className="icon-button exercise-edit-button" type="button" onClick={() => setOpenExerciseMenu(openExerciseMenu === exerciseMenuId("custom", exercise.id) ? "" : exerciseMenuId("custom", exercise.id))} aria-label={`Edit ${exercise.name}`} title="Edit exercise">
+                      <PencilLine size={16} />
+                    </button>
+                    {openExerciseMenu === exerciseMenuId("custom", exercise.id) && (
+                      <div className="exercise-edit-menu">
+                        <label>
+                          Exercise name
+                          <ExerciseAutocomplete value={exercise.name} onChange={(value) => updateCustomExerciseField(exercise.id, { name: value })} id={`exercise-edit-${exercise.id}`} />
+                        </label>
+                        <label>
+                          Substitute
+                          <ExerciseAutocomplete value={exercise.name} onChange={(value) => updateCustomExerciseField(exercise.id, { name: value })} id={`exercise-sub-${exercise.id}`} placeholder="Type RDL, squat, clean..." />
+                        </label>
+                        <label className="checkbox-field">
+                          <input
+                            checked={exercise.trackWeights}
+                            onChange={(event) => updateCustomExerciseField(exercise.id, { trackWeights: event.target.checked })}
+                            type="checkbox"
+                          />
+                          Track weights used
+                        </label>
+                        <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomExercise(exercise.id)}>
+                          Remove exercise
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="set-list">
+                  {exercise.sets.map((set) => (
+                    <label className={`set-row ${exercise.trackWeights ? "tracked-set-row" : "check-set-row"}`} key={set.id}>
+                      <input
+                        value={set.reps}
+                        onChange={(event) => updateCustomSet(exercise.id, set.id, { reps: event.target.value })}
+                        onBlur={() => persist()}
+                        placeholder="Reps"
+                      />
+                      {exercise.trackWeights && (
+                        <input
+                          value={set.weight}
+                          onChange={(event) => updateCustomSet(exercise.id, set.id, { weight: event.target.value })}
+                          onBlur={() => persist()}
+                          placeholder="Weight"
+                        />
+                      )}
+                      <input
+                        checked={set.done}
+                        onChange={(event) => updateCustomSet(exercise.id, set.id, { done: event.target.checked })}
+                        onBlur={() => persist()}
+                        type="checkbox"
+                      />
+                    </label>
+                  ))}
+                  <div className="set-action-row">
+                    <div className="set-action-group">
+                      <button className="quiet-button" type="button" onClick={() => addCustomSet(exercise.id)}>
+                        <Plus size={16} />
+                        Add set
+                      </button>
+                      <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomSet(exercise.id)} disabled={exercise.sets.length <= 1}>
+                        <Minus size={16} />
+                        Remove set
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -807,6 +1242,84 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
               <button className="secondary" type="button" onClick={() => setShowAddExercise(true)}>
                 <Plus size={18} />
                 Add exercise
+              </button>
+            </div>
+            {customExercises.filter((exercise) => exercise.section === "cardio").map((exercise) => (
+              <div className="exercise-row custom-exercise-row cardio-exercise-row" key={exercise.id}>
+                <div className="exercise-info">
+                  <div>
+                    <strong>{exercise.name}</strong>
+                    <small>{exercise.trackWeights ? "Cardio | Track numbers" : "Cardio | Completion only"}</small>
+                  </div>
+                  <div className="exercise-edit-wrap">
+                    <button className="icon-button exercise-edit-button" type="button" onClick={() => setOpenExerciseMenu(openExerciseMenu === exerciseMenuId("custom", exercise.id) ? "" : exerciseMenuId("custom", exercise.id))} aria-label={`Edit ${exercise.name}`} title="Edit cardio">
+                      <PencilLine size={16} />
+                    </button>
+                    {openExerciseMenu === exerciseMenuId("custom", exercise.id) && (
+                      <div className="exercise-edit-menu">
+                        <label>
+                          Cardio name
+                          <ExerciseAutocomplete value={exercise.name} onChange={(value) => updateCustomExerciseField(exercise.id, { name: value })} id={`exercise-cardio-${exercise.id}`} />
+                        </label>
+                        <label className="checkbox-field">
+                          <input
+                            checked={exercise.trackWeights}
+                            onChange={(event) => updateCustomExerciseField(exercise.id, { trackWeights: event.target.checked })}
+                            type="checkbox"
+                          />
+                          Track numbers
+                        </label>
+                        <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomExercise(exercise.id)}>
+                          Remove cardio
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="set-list">
+                  {exercise.sets.map((set) => (
+                    <label className={`set-row ${exercise.trackWeights ? "tracked-set-row" : "check-set-row"}`} key={set.id}>
+                      <input
+                        value={set.reps}
+                        onChange={(event) => updateCustomSet(exercise.id, set.id, { reps: event.target.value })}
+                        onBlur={() => persist()}
+                        placeholder="Time / distance / rounds"
+                      />
+                      {exercise.trackWeights && (
+                        <input
+                          value={set.weight}
+                          onChange={(event) => updateCustomSet(exercise.id, set.id, { weight: event.target.value })}
+                          onBlur={() => persist()}
+                          placeholder="Score"
+                        />
+                      )}
+                      <input
+                        checked={set.done}
+                        onChange={(event) => updateCustomSet(exercise.id, set.id, { done: event.target.checked })}
+                        onBlur={() => persist()}
+                        type="checkbox"
+                      />
+                    </label>
+                  ))}
+                  <div className="set-action-row">
+                    <div className="set-action-group">
+                      <button className="quiet-button" type="button" onClick={() => addCustomSet(exercise.id)}>
+                        <Plus size={16} />
+                        Add set
+                      </button>
+                      <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomSet(exercise.id)} disabled={exercise.sets.length <= 1}>
+                        <Minus size={16} />
+                        Remove set
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            <div className="add-exercise-row cardio-add-row">
+              <button className="secondary" type="button" onClick={() => setShowAddCardio(true)}>
+                <Plus size={18} />
+                Add cardio
               </button>
             </div>
           </div>
@@ -828,12 +1341,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
                 <form className="modal-form" onSubmit={addCustomExercise}>
                   <label>
                     Exercise name
-                    <input
-                      value={newExerciseName}
-                      onChange={(event) => setNewExerciseName(event.target.value)}
-                      placeholder="Accessory, abs, extra pulls"
-                      required
-                    />
+                    <ExerciseAutocomplete value={newExerciseName} onChange={setNewExerciseName} id="new-exercise-name" placeholder="Accessory, abs, RDL, extra pulls" />
                   </label>
                   <label className="checkbox-field">
                     <input
@@ -854,38 +1362,70 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
               </div>
             </div>
           )}
-          {editingExerciseId && (
+          {showAddCardio && (
             <div className="modal-backdrop" role="presentation">
-              <div className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="edit-exercise-title">
+              <div className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="add-cardio-title">
                 <div>
-                  <p className="eyebrow">Session exercise</p>
-                  <h2 id="edit-exercise-title">Edit exercise</h2>
+                  <p className="eyebrow">Workout cardio</p>
+                  <h2 id="add-cardio-title">Add cardio</h2>
                 </div>
-                <form className="modal-form" onSubmit={saveEditedExercise}>
+                <form className="modal-form" onSubmit={addCardioExercise}>
                   <label>
-                    Exercise name
-                    <input
-                      value={editExerciseName}
-                      onChange={(event) => setEditExerciseName(event.target.value)}
-                      required
-                    />
+                    Cardio name
+                    <ExerciseAutocomplete value={newCardioName} onChange={setNewCardioName} id="new-cardio-name" placeholder="Bike finisher, easy jog, metcon placeholder" />
                   </label>
                   <label className="checkbox-field">
                     <input
-                      checked={editExerciseTracksWeight}
-                      onChange={(event) => setEditExerciseTracksWeight(event.target.checked)}
+                      checked={newCardioTracksWeight}
+                      onChange={(event) => setNewCardioTracksWeight(event.target.checked)}
+                      type="checkbox"
+                    />
+                    Track score / distance
+                  </label>
+                  <button className="primary" type="submit">
+                    <Plus size={18} />
+                    Add cardio
+                  </button>
+                  <button className="text-button" type="button" onClick={() => setShowAddCardio(false)}>
+                    Cancel
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+          {showAddWarmup && (
+            <div className="modal-backdrop" role="presentation">
+              <div className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="add-warmup-title">
+                <div>
+                  <p className="eyebrow">Workout warm-up</p>
+                  <h2 id="add-warmup-title">Add warm-up</h2>
+                </div>
+                <div className="preset-grid">
+                  {warmupPresets.map((preset) => (
+                    <button className="preset-button" type="button" key={preset.id} onClick={() => addWarmupPreset(preset)}>
+                      <strong>{preset.title}</strong>
+                      <span>{preset.exercises.join(" | ")}</span>
+                    </button>
+                  ))}
+                </div>
+                <form className="modal-form" onSubmit={addWarmupExercise}>
+                  <label>
+                    Custom warm-up exercise
+                    <ExerciseAutocomplete value={newWarmupName} onChange={setNewWarmupName} id="new-warmup-name" placeholder="Banded shoulder prep, hip flow, empty bar work" />
+                  </label>
+                  <label className="checkbox-field">
+                    <input
+                      checked={newWarmupTracksWeight}
+                      onChange={(event) => setNewWarmupTracksWeight(event.target.checked)}
                       type="checkbox"
                     />
                     Track weights used
                   </label>
                   <button className="primary" type="submit">
-                    <Save size={18} />
-                    Save changes
+                    <Plus size={18} />
+                    Add custom warm-up
                   </button>
-                  <button className="danger-button" type="button" onClick={removeEditedExercise}>
-                    Remove exercise
-                  </button>
-                  <button className="text-button" type="button" onClick={() => setEditingExerciseId("")}>
+                  <button className="text-button" type="button" onClick={() => setShowAddWarmup(false)}>
                     Cancel
                   </button>
                 </form>
@@ -1359,6 +1899,24 @@ function SettingsPage({ user, programs, workouts, logs, serviceWorkerRegistratio
     .sort((a, b) => (b.summary.lastDate || b.startDate || "").localeCompare(a.summary.lastDate || a.startDate || ""));
   const currentPrograms = athletePrograms.filter((program) => program.status === "Current");
   const pastPrograms = athletePrograms.filter((program) => program.status === "Past");
+  const releaseNotes = [
+    {
+      title: "PWA install and updates",
+      body: "Added the app manifest, icon, service worker registration, offline shell caching, and an update prompt when a new version is ready.",
+    },
+    {
+      title: "Push notification foundation",
+      body: "Added Firebase Cloud Messaging setup for foreground messages, background notifications, locked-phone delivery, notification click handling, and device token saving.",
+    },
+    {
+      title: "Settings improvements",
+      body: "Added notification controls, program history, app version visibility, and this release breakdown in one place.",
+    },
+    {
+      title: "Coach and workout flow",
+      body: "Kept the recent coach program tools, athlete progress views, profile updates, and workout logging refinements in the live build.",
+    },
+  ];
 
   function renderProgramCard(program) {
     const { summary } = program;
@@ -1427,6 +1985,10 @@ function SettingsPage({ user, programs, workouts, logs, serviceWorkerRegistratio
           <ClipboardList size={17} />
           Programs
         </button>
+        <button className={activeTab === "updates" ? "settings-tab active" : "settings-tab"} type="button" onClick={() => setActiveTab("updates")} role="tab" aria-selected={activeTab === "updates"}>
+          <Bell size={17} />
+          What's new
+        </button>
       </div>
 
       {activeTab === "programs" ? (
@@ -1457,6 +2019,23 @@ function SettingsPage({ user, programs, workouts, logs, serviceWorkerRegistratio
             ) : (
               <p className="empty-list-copy">No past programs yet.</p>
             )}
+          </div>
+        </div>
+      ) : activeTab === "updates" ? (
+        <div className="settings-updates" role="tabpanel">
+          <div className="whats-new-card">
+            <div>
+              <p className="eyebrow">Version {appVersion}</p>
+              <h3>What's new</h3>
+            </div>
+            <div className="release-note-list">
+              {releaseNotes.map((note) => (
+                <article className="release-note" key={note.title}>
+                  <strong>{note.title}</strong>
+                  <p>{note.body}</p>
+                </article>
+              ))}
+            </div>
           </div>
         </div>
       ) : (
@@ -1572,6 +2151,11 @@ function App() {
   const [serviceWorkerRegistration, setServiceWorkerRegistration] = useState(null);
   const [updateRegistration, setUpdateRegistration] = useState(null);
   const [notificationMessage, setNotificationMessage] = useState("");
+  const [timerStartedAt, setTimerStartedAt] = useState(null);
+  const [timerBankedSeconds, setTimerBankedSeconds] = useState(0);
+  const [timerNow, setTimerNow] = useState(Date.now());
+  const timerRunning = Boolean(timerStartedAt);
+  const timerSeconds = timerBankedSeconds + (timerRunning ? Math.floor((timerNow - timerStartedAt) / 1000) : 0);
 
   async function hydrateUser(nextUser) {
     if (!nextUser) {
@@ -1650,6 +2234,12 @@ function App() {
     };
   }, [user]);
 
+  useEffect(() => {
+    if (!timerRunning) return undefined;
+    const intervalId = window.setInterval(() => setTimerNow(Date.now()), 500);
+    return () => window.clearInterval(intervalId);
+  }, [timerRunning]);
+
   const allWorkouts = useMemo(() => [...importedProgram, ...customWorkouts, ...programWorkouts], [customWorkouts, programWorkouts]);
   const workoutsByDate = useMemo(() => groupByDate(allWorkouts), [allWorkouts]);
   const workoutDates = useMemo(() => Object.keys(workoutsByDate).sort(), [workoutsByDate]);
@@ -1700,6 +2290,16 @@ function App() {
     activateWaitingServiceWorker(updateRegistration);
   }
 
+  function toggleTimer() {
+    if (timerRunning) {
+      setTimerBankedSeconds(timerSeconds);
+      setTimerStartedAt(null);
+      return;
+    }
+    setTimerStartedAt(Date.now());
+    setTimerNow(Date.now());
+  }
+
   if (checking) return <main className="loading">Loading...</main>;
   if (!user) return <AuthCard onAuthed={hydrateUser} />;
 
@@ -1711,6 +2311,16 @@ function App() {
           <span>Primitive Programming</span>
         </div>
         <div className="nav-actions">
+          <button
+            className={timerRunning ? "nav-button timer-button active" : "nav-button timer-button"}
+            onClick={toggleTimer}
+            type="button"
+            aria-label={timerRunning ? `Stop timer at ${formatTimer(timerSeconds)}` : `Start timer at ${formatTimer(timerSeconds)}`}
+            title={timerRunning ? "Stop timer" : "Start timer"}
+          >
+            <Clock size={17} />
+            <span>{formatTimer(timerSeconds)}</span>
+          </button>
           {view !== "client" && (
             <button className="nav-button" onClick={() => setView("client")} type="button">
               <ArrowLeft size={17} />
@@ -1773,7 +2383,7 @@ function App() {
       ) : view === "athletes" ? (
         <AthletesPage programs={programs} workouts={[...importedProgram, ...customWorkouts, ...programWorkouts]} logs={athleteProgressLogs} />
       ) : view === "workout-list" ? (
-        <WorkoutListView date={selectedDate} workoutGroups={selectedWorkoutGroups} logs={logs} programs={programs} onOpenWorkout={openWorkout} onAddWorkout={openBlankWorkout} />
+        <WorkoutListView date={selectedDate} workoutGroups={selectedWorkoutGroups} logs={logs} programs={programs} onOpenWorkout={openWorkout} onAddWorkout={openBlankWorkout} onChangeDate={openWorkoutList} />
       ) : view === "workout" ? (
         <WorkoutView workout={selectedWorkout} workoutKey={activeWorkoutKey} date={selectedDate} user={user} logs={logs} setLogs={setLogs} onDone={() => setView("client")} />
       ) : (
