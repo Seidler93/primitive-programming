@@ -550,6 +550,44 @@ function progressSummary(workouts, logs) {
   };
 }
 
+function logDateFromKey(key) {
+  const match = String(key).match(/^\d{4}-\d{2}-\d{2}/);
+  return match ? match[0] : "";
+}
+
+function completedWorkoutDates(logs) {
+  return Object.entries(logs)
+    .filter(([, log]) => log?.completed)
+    .map(([key, log]) => logDateFromKey(log.date || key))
+    .filter(Boolean)
+    .sort();
+}
+
+function completedWorkoutsLast30Days(logs, todayValue = new Date()) {
+  const today = new Date(todayValue);
+  today.setHours(12, 0, 0, 0);
+  const startDate = new Date(today);
+  startDate.setDate(startDate.getDate() - 29);
+
+  return completedWorkoutDates(logs).filter((date) => {
+    const completedDate = new Date(`${date}T12:00:00`);
+    return completedDate >= startDate && completedDate <= today;
+  }).length;
+}
+
+function weeklyWorkoutStreak(logs) {
+  const completedWeeks = new Set(completedWorkoutDates(logs).map((date) => startOfWeekMonday(`${date}T12:00:00`).toISOString().slice(0, 10)));
+  if (!completedWeeks.size) return 0;
+
+  let streak = 0;
+  let weekStart = new Date(`${[...completedWeeks].sort().at(-1)}T12:00:00`);
+  while (completedWeeks.has(weekStart.toISOString().slice(0, 10))) {
+    streak += 1;
+    weekStart.setDate(weekStart.getDate() - 7);
+  }
+  return streak;
+}
+
 function programTimelineSummary(workouts, logs) {
   const dates = [...new Set(workouts.map((item) => item.date))].sort();
   const summary = progressSummary(workouts, logs);
@@ -3037,20 +3075,11 @@ function MaxesPage({ user }) {
 function GoalsPage({ user, logs, onExit }) {
   const goals = loadUserGoals(user.uid);
   const bodyMetrics = loadBodyMetrics(user.uid);
-  const bodyMetricSettings = loadBodyMetricSettings(user.uid);
   const maxes = loadUserMaxes(user.uid);
   const weightUnit = loadUserWeightUnit(user.uid);
   const activeGoals = goals.filter((goal) => !goal.archivedAt);
-  const completedWorkoutDates = Object.entries(logs)
-    .filter(([, log]) => log.completed)
-    .map(([date]) => date)
-    .sort();
-  const lastWorkoutDate = completedWorkoutDates.at(-1);
-  const completedThisMonth = completedWorkoutDates.filter((date) => {
-    const completedAt = new Date(`${date}T12:00:00`);
-    const daysAgo = (Date.now() - completedAt.getTime()) / 86400000;
-    return daysAgo <= 30;
-  }).length;
+  const recentCompletedCount = completedWorkoutsLast30Days(logs);
+  const weekStreak = weeklyWorkoutStreak(logs);
 
   function renderGoal(goal) {
     const latestMetric = goal.type === "metric" ? metricLatest(bodyMetrics, goal.metric) : null;
@@ -3106,107 +3135,18 @@ function GoalsPage({ user, logs, onExit }) {
         </button>
       </div>
 
-      <div className="goal-section">
-        <div className="program-section-title">
-          <h3>Snapshot</h3>
-          <span>{activeGoals.length} active</span>
-        </div>
-        <div className="progress-snapshot-grid">
-          <article className="progress-snapshot-card">
-            <p className="eyebrow">30 days</p>
-            <strong>{completedThisMonth}</strong>
-            <span>completed workouts</span>
-          </article>
-          <article className="progress-snapshot-card">
-            <p className="eyebrow">Last workout</p>
-            <strong>{lastWorkoutDate ? formatDate(lastWorkoutDate).replace(/^[^,]+, /, "") : "-"}</strong>
-            <span>{completedWorkoutDates.length ? `${completedWorkoutDates.length} total logged` : "No completed workouts yet"}</span>
-          </article>
-          <article className="progress-snapshot-card">
-            <p className="eyebrow">Goals</p>
-            <strong>{activeGoals.filter((goal) => {
-              const latestMetric = goal.type === "metric" ? metricLatest(bodyMetrics, goal.metric) : null;
-              const progress = goal.type === "metric"
-                ? metricGoalProgress(goal, latestMetric?.[goal.metric])
-                : goalProgress(goal, logs, maxes, weightUnit);
-              return progress?.complete;
-            }).length}</strong>
-            <span>completed or on target</span>
-          </article>
-        </div>
-      </div>
-
-      <div className="goal-section">
-        <div className="program-section-title">
-          <h3>Strength</h3>
-          <span>{maxFields.length}</span>
-        </div>
-        <div className="goal-value-grid progress-value-grid">
-          {maxFields.map((field) => {
-            const currentValue = numericMax(maxes, field.key);
-            const maxGoal = activeGoals.find((goal) => goal.type === "max" && goal.lift === field.key);
-            const progress = maxGoal ? goalProgress(maxGoal, logs, maxes, weightUnit) : null;
-            return (
-              <div className="goal-value-card" key={field.key}>
-                <div className="metric-card-heading">
-                  <div>
-                    <p className="eyebrow">Strength</p>
-                  <h3>{field.label}</h3>
-                </div>
-                  <strong>{currentValue ? `${currentValue}${weightUnit}` : "-"}</strong>
-                </div>
-                {progress ? (
-                  <div className="progress-meter" aria-label={`${progress.percent}% complete`}>
-                    <span style={{ width: `${progress.percent}%` }} />
-                  </div>
-                ) : <p className="progress-card-note">No goal set</p>}
-                {progress && <p className="progress-card-note">{progress.label}</p>}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="goal-section">
-        <div className="program-section-title">
-          <h3>Tracked Metrics</h3>
-          <span>{bodyMetrics.length} entries</span>
-        </div>
-        <div className="metric-entry-form progress-metric-grid">
-          {bodyMetricFields.map((field) => {
-            const setting = bodyMetricSettings[field.key] || defaultBodyMetricSettings[field.key];
-            const unitValue = bodyMetricUnit(field, weightUnit);
-            const latest = metricLatest(bodyMetrics, field.key);
-            const metricGoal = activeGoals.find((goal) => goal.type === "metric" && goal.metric === field.key);
-            const progress = metricGoalProgress(metricGoal, latest?.[field.key]);
-            const points = metricTrendPoints(bodyMetrics, field.key);
-            if (!setting.enabled) return null;
-            return (
-              <div className="metric-card" key={field.key}>
-                <div className="metric-card-heading">
-                  <div>
-                    <p className="eyebrow">{metricGoal ? "Goal trend" : "Current"}</p>
-                    <h3>{field.label}</h3>
-                  </div>
-                  <strong>{latest?.[field.key] ? `${latest[field.key]}${unitValue}` : "-"}</strong>
-                </div>
-                {metricGoal && (
-                  <div className="progress-meter" aria-label={`${progress?.percent || 0}% complete`}>
-                    <span style={{ width: `${progress?.percent || 0}%` }} />
-                  </div>
-                )}
-                {points ? (
-                  <svg className="metric-sparkline" viewBox="0 0 100 48" role="img" aria-label={`${field.label} trend`}>
-                    <polyline points={points} />
-                  </svg>
-                ) : (
-                  <p className="progress-card-note">Add another entry to show a trend.</p>
-                )}
-                {metricGoal && <p className="progress-card-note">{latest?.[field.key] || 0}/{metricGoal.target}{unitValue}</p>}
-              </div>
-            );
-          })}
-        </div>
+      <div className="progress-snapshot-grid">
+        <article className="progress-snapshot-card">
+          <Dumbbell size={20} />
+          <strong>{recentCompletedCount}</strong>
+          <span>Workouts completed last 30 days</span>
+        </article>
+        <article className="progress-snapshot-card">
+          <CalendarDays size={20} />
+          <strong>{weekStreak}</strong>
+          <span>Weekly workout streak</span>
+          <p className="progress-card-note">Consecutive weeks with at least one workout</p>
+        </article>
       </div>
 
       <div className="goal-section">
@@ -3219,7 +3159,7 @@ function GoalsPage({ user, logs, onExit }) {
             {activeGoals.map(renderGoal)}
           </div>
         ) : (
-          <p className="empty-list-copy">No active goals yet. Your tracked metrics and workout history will still show here.</p>
+          <p className="empty-list-copy">No active goals yet.</p>
         )}
       </div>
     </section>
@@ -3695,7 +3635,14 @@ function App() {
       </nav>
 
       {showNavMenu && (
-        <div className="nav-menu-backdrop" role="presentation" onClick={() => setShowNavMenu(false)}>
+        <div
+          className="nav-menu-backdrop"
+          role="presentation"
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerUp={(event) => event.stopPropagation()}
+          onPointerCancel={(event) => event.stopPropagation()}
+          onClick={() => setShowNavMenu(false)}
+        >
           <div className="nav-menu-panel" role="dialog" aria-modal="true" aria-label="Main menu" onClick={(event) => event.stopPropagation()}>
             <div className="nav-menu-header">
               <Dumbbell size={22} />
