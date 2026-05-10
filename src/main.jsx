@@ -2404,7 +2404,7 @@ function ProfileSetupModal({ user, onComplete }) {
             <input value={trainingGoal} onChange={(event) => setTrainingGoal(event.target.value)} placeholder="Strength, weightlifting, conditioning..." />
           </label>
           <button className="primary" type="submit" disabled={saving}>
-            {saving ? "Saving..." : "Save profile setup"}
+            {saving ? "Saving..." : "Save preferences"}
           </button>
           <button className="text-button setup-skip-button" type="button" onClick={skipSetup} disabled={saving}>
             Skip for now
@@ -2725,7 +2725,7 @@ function SettingsSectionPage({ section, user, programs, workouts, logs, serviceW
         </div>
       ) : (
         <div className="settings-actions">
-          <form className="settings-block profile-settings-form" onSubmit={savePhysicalProfile}>
+          <form className="profile-settings-form" onSubmit={savePhysicalProfile}>
             <div className="settings-block-heading">
               <p className="eyebrow">Profile</p>
               <h3>Body details</h3>
@@ -2784,7 +2784,7 @@ function SettingsSectionPage({ section, user, programs, workouts, logs, serviceW
             </label>
             <button className="primary" type="submit" disabled={profileSaving}>
               <Save size={18} />
-              {profileSaving ? "Saving..." : "Save profile settings"}
+              {profileSaving ? "Saving..." : "Save preferences"}
             </button>
             {profileSaved && <p className="save-status">Profile settings saved.</p>}
             {profileError && <p className="form-error">{profileError}</p>}
