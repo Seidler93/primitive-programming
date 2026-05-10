@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   CalendarDays,
+  Bell,
   CheckCircle2,
   ClipboardList,
   Dumbbell,
@@ -34,7 +35,10 @@ import {
   saveCustomWorkout,
   saveWorkoutLog,
   saveUserProfile,
+  requestNotificationAccess,
+  listenForForegroundMessages,
 } from "./firebase";
+import { activateWaitingServiceWorker, registerAppServiceWorker } from "./pwa";
 
 const maxFields = [
   { key: "backSquat", label: "Squat" },
@@ -1334,8 +1338,13 @@ function ProfileEditPage({ user, onProfileSaved }) {
   );
 }
 
-function SettingsPage({ user, programs, workouts, logs, onLogout }) {
+function SettingsPage({ user, programs, workouts, logs, serviceWorkerRegistration, updateRegistration, onApplyUpdate, onLogout }) {
   const [activeTab, setActiveTab] = useState("account");
+  const [notificationState, setNotificationState] = useState(() => {
+    if (!("Notification" in window)) return { status: "unsupported", message: "This browser does not support notifications." };
+    return { status: Notification.permission, message: Notification.permission === "granted" ? "Notifications are allowed on this device." : "Notifications are off on this device." };
+  });
+  const [savingNotifications, setSavingNotifications] = useState(false);
   const userEmail = (user.email || "").toLowerCase();
   const defaultProgram = { id: "default", name: "Default Program", athleteEmail: "dev-athlete@primitive.local" };
   const programOptions = [defaultProgram, ...programs.filter((program) => program.id !== "default")];
@@ -1383,6 +1392,18 @@ function SettingsPage({ user, programs, workouts, logs, onLogout }) {
         {program.goal && <p className="program-note">{program.goal}</p>}
       </article>
     );
+  }
+
+  async function enableNotifications() {
+    setSavingNotifications(true);
+    try {
+      const result = await requestNotificationAccess(user.uid, serviceWorkerRegistration);
+      setNotificationState(result);
+    } catch (error) {
+      setNotificationState({ status: "error", message: error.message || "Could not enable notifications." });
+    } finally {
+      setSavingNotifications(false);
+    }
   }
 
   return (
@@ -1440,6 +1461,29 @@ function SettingsPage({ user, programs, workouts, logs, onLogout }) {
         </div>
       ) : (
         <div className="settings-actions" role="tabpanel">
+          <div className="settings-block">
+            <div>
+              <p className="eyebrow">Device</p>
+              <h3>Notifications</h3>
+              <p>{notificationState.message}</p>
+            </div>
+            <button className="secondary" type="button" onClick={enableNotifications} disabled={savingNotifications || notificationState.status === "granted"}>
+              <Bell size={18} />
+              {savingNotifications ? "Enabling..." : notificationState.status === "granted" ? "Enabled" : "Enable notifications"}
+            </button>
+          </div>
+          {updateRegistration && (
+            <div className="settings-block">
+              <div>
+                <p className="eyebrow">App update</p>
+                <h3>New version ready</h3>
+                <p>Restart the app to load the newest installed version.</p>
+              </div>
+              <button className="primary" type="button" onClick={onApplyUpdate}>
+                Update now
+              </button>
+            </div>
+          )}
           <button className="secondary" type="button" onClick={onLogout}>
             <LogOut size={18} />
             Log out
@@ -1525,6 +1569,9 @@ function App() {
   const [selectedDate, setSelectedDate] = useState("2026-05-11");
   const [selectedWorkoutKey, setSelectedWorkoutKey] = useState("");
   const [view, setView] = useState("client");
+  const [serviceWorkerRegistration, setServiceWorkerRegistration] = useState(null);
+  const [updateRegistration, setUpdateRegistration] = useState(null);
+  const [notificationMessage, setNotificationMessage] = useState("");
 
   async function hydrateUser(nextUser) {
     if (!nextUser) {
@@ -1577,6 +1624,32 @@ function App() {
     });
   }, []);
 
+  useEffect(() => {
+    registerAppServiceWorker(setUpdateRegistration)
+      .then(setServiceWorkerRegistration)
+      .catch((error) => console.warn("Service worker registration failed.", error));
+  }, []);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    let unsubscribe = () => {};
+    let active = true;
+
+    listenForForegroundMessages((payload) => {
+      const title = payload.notification?.title || payload.data?.title || "Primitive Programming";
+      const body = payload.notification?.body || payload.data?.body || "New training update received.";
+      setNotificationMessage(`${title}: ${body}`);
+      window.setTimeout(() => setNotificationMessage(""), 5000);
+    }).then((nextUnsubscribe) => {
+      if (active) unsubscribe = nextUnsubscribe;
+    });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [user]);
+
   const allWorkouts = useMemo(() => [...importedProgram, ...customWorkouts, ...programWorkouts], [customWorkouts, programWorkouts]);
   const workoutsByDate = useMemo(() => groupByDate(allWorkouts), [allWorkouts]);
   const workoutDates = useMemo(() => Object.keys(workoutsByDate).sort(), [workoutsByDate]);
@@ -1621,6 +1694,10 @@ function App() {
     setPrograms([]);
     setProgramWorkouts([]);
     setChecking(false);
+  }
+
+  function applyAppUpdate() {
+    activateWaitingServiceWorker(updateRegistration);
   }
 
   if (checking) return <main className="loading">Loading...</main>;
@@ -1675,7 +1752,16 @@ function App() {
       ) : view === "maxes" ? (
         <MaxesPage user={user} />
       ) : view === "settings" ? (
-        <SettingsPage user={user} programs={programs} workouts={[...importedProgram, ...customWorkouts, ...programWorkouts]} logs={logs} onLogout={handleLogout} />
+        <SettingsPage
+          user={user}
+          programs={programs}
+          workouts={[...importedProgram, ...customWorkouts, ...programWorkouts]}
+          logs={logs}
+          serviceWorkerRegistration={serviceWorkerRegistration}
+          updateRegistration={updateRegistration}
+          onApplyUpdate={applyAppUpdate}
+          onLogout={handleLogout}
+        />
       ) : view === "programs" ? (
         <ProgramsPage
           programs={programs}
@@ -1701,6 +1787,7 @@ function App() {
           <CalendarStrip sections={calendarMonths} selectedDate={selectedDate} onSelectDate={openWorkoutList} logs={logs} workoutsByDate={workoutsByDate} />
         </>
       )}
+      {notificationMessage && <div className="notification-toast" role="status">{notificationMessage}</div>}
     </main>
   );
 }

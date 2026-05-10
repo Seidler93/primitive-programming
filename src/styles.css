@@ -993,8 +993,41 @@ select:focus {
 }
 
 .settings-actions {
+  display: grid;
+  gap: 12px;
+  justify-content: stretch;
+}
+
+.settings-block {
   display: flex;
-  justify-content: flex-start;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+  background: #14101a;
+  border: 1px solid #3a2948;
+  border-radius: 8px;
+}
+
+.settings-block h3,
+.settings-block p {
+  margin: 0;
+}
+
+.settings-block h3 {
+  color: #f3eefb;
+  font-size: 1rem;
+}
+
+.settings-block p:not(.eyebrow) {
+  margin-top: 4px;
+  color: #b9a9c9;
+  font-size: 0.9rem;
+}
+
+.settings-block .primary,
+.settings-block .secondary {
+  flex: 0 0 auto;
 }
 
 .settings-programs {
@@ -1007,6 +1040,21 @@ select:focus {
   margin: auto 0 0;
   color: #b9a9c9;
   font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.notification-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 30;
+  width: min(380px, calc(100% - 36px));
+  padding: 14px 16px;
+  color: #f3eefb;
+  background: #21162b;
+  border: 1px solid #5a3c72;
+  border-radius: 8px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
   font-weight: 850;
 }
 
@@ -1081,5 +1129,15 @@ select:focus {
 
   .dev-login-row {
     grid-template-columns: 1fr;
+  }
+
+  .settings-block {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-block .primary,
+  .settings-block .secondary {
+    width: 100%;
   }
 }

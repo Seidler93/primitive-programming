@@ -16,6 +16,12 @@ import {
   query,
   setDoc,
 } from "firebase/firestore";
+import {
+  getMessaging,
+  getToken,
+  isSupported as isMessagingSupported,
+  onMessage,
+} from "firebase/messaging";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -25,6 +31,7 @@ const firebaseConfig = {
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
+const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
 
 export const hasFirebaseConfig = Boolean(
   firebaseConfig.apiKey && firebaseConfig.authDomain && firebaseConfig.projectId,
@@ -33,6 +40,7 @@ export const hasFirebaseConfig = Boolean(
 const app = hasFirebaseConfig ? initializeApp(firebaseConfig) : null;
 export const auth = app ? getAuth(app) : null;
 export const db = app ? getFirestore(app) : null;
+export const hasPushConfig = Boolean(hasFirebaseConfig && vapidKey);
 
 const localKey = (key) => `primitive-programming:${key}`;
 const isDevUserId = (userId = "") => userId.startsWith("dev-");
@@ -53,6 +61,16 @@ function devUser(role) {
     email: `dev-${role}@primitive.local`,
     displayName: role === "coach" ? "Dev Coach" : "Dev Athlete",
   };
+}
+
+async function messagingClient() {
+  if (!app || !hasFirebaseConfig) return null;
+  const supported = await isMessagingSupported();
+  return supported ? getMessaging(app) : null;
+}
+
+function tokenId(token) {
+  return encodeURIComponent(token);
 }
 
 export function observeAuth(callback) {
@@ -143,6 +161,60 @@ export async function saveUserProfile(userId, profile) {
   }
   localStorage.setItem(localKey(`profile:${userId}`), JSON.stringify(payload));
   return payload;
+}
+
+export async function saveNotificationToken(userId, token) {
+  const payload = {
+    token,
+    userAgent: navigator.userAgent,
+    updatedAt: new Date().toISOString(),
+  };
+  localStorage.setItem(localKey(`push-token:${userId}`), JSON.stringify(payload));
+
+  if (db && !isDevUserId(userId)) {
+    try {
+      await setDoc(doc(db, "users", userId, "notificationTokens", tokenId(token)), payload, { merge: true });
+    } catch (error) {
+      console.warn("Falling back to local notification token storage.", error);
+    }
+  }
+  return payload;
+}
+
+export async function requestNotificationAccess(userId, serviceWorkerRegistration) {
+  if (!("Notification" in window)) {
+    return { status: "unsupported", message: "This browser does not support notifications." };
+  }
+  if (!("serviceWorker" in navigator)) {
+    return { status: "unsupported", message: "This browser does not support service workers." };
+  }
+  if (!hasPushConfig) {
+    return { status: "missing-config", message: "Add VITE_FIREBASE_VAPID_KEY to enable push tokens." };
+  }
+
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") {
+    return { status: permission, message: "Notifications were not enabled." };
+  }
+
+  const messaging = await messagingClient();
+  if (!messaging) {
+    return { status: "unsupported", message: "Firebase Messaging is not supported in this browser." };
+  }
+
+  const registration = serviceWorkerRegistration || await navigator.serviceWorker.ready;
+  const token = await getToken(messaging, {
+    vapidKey,
+    serviceWorkerRegistration: registration,
+  });
+  await saveNotificationToken(userId, token);
+  return { status: "granted", token, message: "Notifications are ready on this device." };
+}
+
+export async function listenForForegroundMessages(callback) {
+  const messaging = await messagingClient();
+  if (!messaging) return () => {};
+  return onMessage(messaging, callback);
 }
 
 export async function loadPrograms() {
