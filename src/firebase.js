@@ -124,10 +124,21 @@ export async function loadWorkoutLogs(userId) {
 }
 
 export async function saveWorkoutLog(userId, date, payload) {
-  if (db && !isDevUserId(userId)) return setDoc(doc(db, "users", userId, "logs", date), payload, { merge: true });
   const logs = await loadWorkoutLogs(userId);
   logs[date] = { ...(logs[date] || {}), ...payload };
   localStorage.setItem(localKey(`logs:${userId}`), JSON.stringify(logs));
+
+  if (db && !isDevUserId(userId)) {
+    try {
+      await setDoc(doc(db, "users", userId, "logs", date), payload, { merge: true });
+      return { synced: true };
+    } catch (error) {
+      console.warn("Saved workout log locally; cloud sync failed.", error);
+      return { synced: false, local: true };
+    }
+  }
+
+  return { synced: false, local: true };
 }
 
 export async function loadUserProfile(userId) {

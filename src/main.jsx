@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   CalendarDays,
@@ -15,6 +15,8 @@ import {
   Plus,
   Save,
   Settings,
+  Target,
+  TrendingUp,
   Trophy,
   UserRound,
   UsersRound,
@@ -22,7 +24,7 @@ import {
 import "./styles.css";
 import packageInfo from "../package.json";
 import { importedProgram } from "./programData";
-import { exerciseSuggestions } from "./exerciseLibrary";
+import { exerciseSuggestions, similarExercises } from "./exerciseLibrary";
 import {
   hasFirebaseConfig,
   isTrainerUser,
@@ -53,6 +55,17 @@ const maxFields = [
 ];
 
 const appVersion = packageInfo.version;
+const defaultSelectedDate = "2026-05-11";
+const routeViews = new Set(["client", "workout-list", "workout", "profile", "edit-profile", "maxes", "goals", "settings", "programs", "athletes"]);
+const bodyMetricFields = [
+  { key: "bodyweight", label: "Bodyweight", unit: "lb" },
+  { key: "bodyFat", label: "Body fat", unit: "%" },
+  { key: "muscleMass", label: "Muscle mass", unit: "lb" },
+];
+const defaultBodyMetricSettings = Object.fromEntries(bodyMetricFields.map((field) => [
+  field.key,
+  { enabled: true, mode: "static" },
+]));
 const warmupPresets = [
   {
     id: "full-body",
@@ -100,6 +113,21 @@ function ExerciseAutocomplete({ value, onChange, placeholder, id }) {
   );
 }
 
+function SimilarExerciseButtons({ exerciseName, onSelect }) {
+  const suggestions = similarExercises(exerciseName, 5);
+  if (!suggestions.length) return null;
+
+  return (
+    <div className="similar-exercise-list">
+      {suggestions.map((name) => (
+        <button className="similar-exercise-button" type="button" key={name} onClick={() => onSelect(name)}>
+          {name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function workoutDraftKey(userId, date, workoutKey = "default") {
   return `primitive-programming:workout-draft:${userId}:${date}:${workoutKey}`;
 }
@@ -138,6 +166,76 @@ function loadUserMaxes(userId) {
 
 function saveUserMaxes(userId, maxes) {
   localStorage.setItem(userMaxesKey(userId), JSON.stringify(maxes));
+}
+
+function userGoalsKey(userId) {
+  return `primitive-programming:goals:${userId}`;
+}
+
+function loadUserGoals(userId) {
+  try {
+    return JSON.parse(localStorage.getItem(userGoalsKey(userId)) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveUserGoals(userId, goals) {
+  localStorage.setItem(userGoalsKey(userId), JSON.stringify(goals));
+}
+
+function bodyMetricsKey(userId) {
+  return `primitive-programming:body-metrics:${userId}`;
+}
+
+function loadBodyMetrics(userId) {
+  try {
+    return JSON.parse(localStorage.getItem(bodyMetricsKey(userId)) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveBodyMetrics(userId, entries) {
+  localStorage.setItem(bodyMetricsKey(userId), JSON.stringify(entries));
+}
+
+function bodyMetricSettingsKey(userId) {
+  return `primitive-programming:body-metric-settings:${userId}`;
+}
+
+function loadBodyMetricSettings(userId) {
+  try {
+    return { ...defaultBodyMetricSettings, ...JSON.parse(localStorage.getItem(bodyMetricSettingsKey(userId)) || "{}") };
+  } catch {
+    return defaultBodyMetricSettings;
+  }
+}
+
+function saveBodyMetricSettings(userId, settings) {
+  localStorage.setItem(bodyMetricSettingsKey(userId), JSON.stringify(settings));
+}
+
+function readAppRoute() {
+  if (typeof window === "undefined") {
+    return { view: "client", selectedDate: defaultSelectedDate, selectedWorkoutKey: "" };
+  }
+  const params = new URLSearchParams(window.location.search);
+  const view = routeViews.has(params.get("view")) ? params.get("view") : "client";
+  return {
+    view,
+    selectedDate: params.get("date") || defaultSelectedDate,
+    selectedWorkoutKey: params.get("workout") || "",
+  };
+}
+
+function appRouteUrl({ view, selectedDate, selectedWorkoutKey }) {
+  const params = new URLSearchParams();
+  if (view && view !== "client") params.set("view", view);
+  if ((view === "workout-list" || view === "workout") && selectedDate) params.set("date", selectedDate);
+  if (view === "workout" && selectedWorkoutKey) params.set("workout", selectedWorkoutKey);
+  const query = params.toString();
+  return `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
 }
 
 function mergeUserProfile(user, profile = {}) {
@@ -383,6 +481,72 @@ function programTimelineSummary(workouts, logs) {
   };
 }
 
+function numericMax(maxes, key) {
+  const max = maxes[key];
+  return Number(max?.value ?? max ?? 0) || 0;
+}
+
+function goalProgress(goal, logs, maxes) {
+  const target = Math.max(1, Number(goal.target) || 1);
+  let current = 0;
+  let label = "";
+
+  if (goal.type === "metric") {
+    const entries = loadBodyMetrics(goal.userId || "");
+    const latest = entries.at(-1);
+    current = Number(latest?.[goal.metric] || 0);
+    label = `${current || 0}/${target}${goal.unit || ""}`;
+  } else if (goal.type === "max") {
+    current = numericMax(maxes, goal.lift);
+    const unit = maxes[goal.lift]?.unit || goal.unit || "kg";
+    label = `${current || 0}/${target}${unit}`;
+  } else {
+    current = Object.values(logs).filter((log) => {
+      if (!log.completed) return false;
+      if (!goal.startDate) return true;
+      return !log.updatedAt || log.updatedAt.slice(0, 10) >= goal.startDate;
+    }).length;
+    label = `${current}/${target} workouts`;
+  }
+
+  return {
+    current,
+    label,
+    percent: Math.min(100, Math.round((current / target) * 100)),
+    complete: current >= target,
+  };
+}
+
+function metricLatest(entries, key) {
+  return [...entries].reverse().find((entry) => entry[key]) || null;
+}
+
+function metricGoalProgress(metricGoal, currentValue) {
+  if (!metricGoal) return null;
+  const target = Number(metricGoal.target) || 0;
+  const current = Number(currentValue) || 0;
+  if (!target) return null;
+  const start = Number(metricGoal.startValue || 0);
+  const totalDelta = target - start;
+  const currentDelta = current - start;
+  const percent = totalDelta === 0 ? (current >= target ? 100 : 0) : Math.round(Math.min(100, Math.max(0, (currentDelta / totalDelta) * 100)));
+  const complete = totalDelta >= 0 ? current >= target : current <= target;
+  return { percent, complete };
+}
+
+function metricTrendPoints(entries, key) {
+  const values = entries.map((entry) => Number(entry[key])).filter((value) => Number.isFinite(value) && value > 0).slice(-8);
+  if (values.length < 2) return "";
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  return values.map((value, index) => {
+    const x = values.length === 1 ? 50 : (index / (values.length - 1)) * 100;
+    const y = 42 - ((value - min) / span) * 34;
+    return `${x},${y}`;
+  }).join(" ");
+}
+
 function needsMaxes(workout) {
   return [...new Set(workout.flatMap((item) => {
     const needs = percentages(item).length > 0 || /opener/i.test(`${item.prescription} ${item.intensity}`);
@@ -613,7 +777,7 @@ function WorkoutListView({ date, workoutGroups, logs, programs, onOpenWorkout, o
   );
 }
 
-function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone }) {
+function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, onSaveStatus }) {
   const logKey = workoutLogKey(date, workoutKey);
   const existing = logs[logKey] || {};
   const initialDraft = loadWorkoutDraft(user.uid, date, workoutKey);
@@ -689,7 +853,8 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
     };
     const next = { ...existing, ...nextState, ...payload, updatedAt: new Date().toISOString() };
     setLogs({ ...logs, [logKey]: next });
-    await saveWorkoutLog(user.uid, logKey, next);
+    const result = await saveWorkoutLog(user.uid, logKey, next);
+    onSaveStatus?.(result);
   }
 
   async function finishWorkout(payload = {}) {
@@ -701,7 +866,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
     event.preventDefault();
     const name = newExerciseName.trim();
     if (!name) return;
-    setCustomExercises([
+    const nextExercises = [
       ...customExercises,
       {
         id: `session-${Date.now()}`,
@@ -709,10 +874,13 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
         trackWeights: newExerciseTracksWeight,
         sets: [{ id: `${Date.now()}-1`, reps: "", weight: "", done: false }],
       },
-    ]);
+    ];
+    setCustomExercises(nextExercises);
     setNewExerciseName("");
     setNewExerciseTracksWeight(true);
     setShowAddExercise(false);
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises: nextExercises });
+    void persist({}, { customExercises: nextExercises });
   }
 
   function addCardioExercise(event) {
@@ -770,9 +938,11 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
   }
 
   function updateCustomExercise(exerciseId, updater) {
-    setCustomExercises(customExercises.map((exercise) => (
+    const nextExercises = customExercises.map((exercise) => (
       exercise.id === exerciseId ? updater(exercise) : exercise
-    )));
+    ));
+    setCustomExercises(nextExercises);
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises: nextExercises });
   }
 
   function updateCustomSet(exerciseId, setId, patch) {
@@ -1036,6 +1206,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
                           New exercise
                           <ExerciseAutocomplete value={exercise.name} onChange={(value) => updateCustomExerciseField(exercise.id, { name: value })} id={`exercise-edit-${exercise.id}`} placeholder="Type RDL, squat, clean..." />
                         </label>
+                        <SimilarExerciseButtons exerciseName={exercise.name} onSelect={(value) => updateCustomExerciseField(exercise.id, { name: value })} />
                         <label className="checkbox-field">
                           <input
                             checked={exercise.trackWeights}
@@ -1120,6 +1291,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
                           New exercise
                           <ExerciseAutocomplete value={displayItem.exercise} onChange={(value) => updateProgrammedExercise(item, { exercise: value })} id={`exercise-sub-${item.id}`} placeholder="Type RDL, squat, clean..." />
                         </label>
+                        <SimilarExerciseButtons exerciseName={displayItem.exercise} onSelect={(value) => updateProgrammedExercise(item, { exercise: value })} />
                         <label>
                           Prescription
                           <input value={displayItem.prescription} onChange={(event) => updateProgrammedExercise(item, { prescription: event.target.value })} />
@@ -1242,6 +1414,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
                           New exercise
                           <ExerciseAutocomplete value={exercise.name} onChange={(value) => updateCustomExerciseField(exercise.id, { name: value })} id={`exercise-sub-${exercise.id}`} placeholder="Type RDL, squat, clean..." />
                         </label>
+                        <SimilarExerciseButtons exerciseName={exercise.name} onSelect={(value) => updateCustomExerciseField(exercise.id, { name: value })} />
                         <label className="checkbox-field">
                           <input
                             checked={exercise.trackWeights}
@@ -1328,6 +1501,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
                           New cardio
                           <ExerciseAutocomplete value={exercise.name} onChange={(value) => updateCustomExerciseField(exercise.id, { name: value })} id={`exercise-cardio-${exercise.id}`} />
                         </label>
+                        <SimilarExerciseButtons exerciseName={exercise.name} onSelect={(value) => updateCustomExerciseField(exercise.id, { name: value })} />
                         <label className="checkbox-field">
                           <input
                             checked={exercise.trackWeights}
@@ -1774,7 +1948,7 @@ function ProfileAvatar({ user, iconSize = 34 }) {
   );
 }
 
-function ProfilePage({ user, isTrainer, logs, onOpenEdit, onOpenMaxes, onOpenSettings }) {
+function ProfilePage({ user, isTrainer, logs, onOpenEdit, onOpenMaxes, onOpenGoals, onOpenSettings }) {
   const maxes = loadUserMaxes(user.uid);
   const completedCount = Object.values(logs).filter((log) => log.completed).length;
   const lastUpdated = Object.values(logs)
@@ -1802,6 +1976,12 @@ function ProfilePage({ user, isTrainer, logs, onOpenEdit, onOpenMaxes, onOpenSet
           <Trophy size={18} />
           Maxes
         </button>
+        {!isTrainer && (
+          <button className="primary" type="button" onClick={onOpenGoals}>
+            <Target size={18} />
+            Goals
+          </button>
+        )}
         <button className="secondary" type="button" onClick={onOpenSettings}>
           <Settings size={18} />
           Settings
@@ -1947,6 +2127,7 @@ function ProfileEditPage({ user, onProfileSaved }) {
 
 function SettingsPage({ user, programs, workouts, logs, serviceWorkerRegistration, updateRegistration, onApplyUpdate, onLogout }) {
   const [activeTab, setActiveTab] = useState("account");
+  const [bodyMetricSettings, setBodyMetricSettings] = useState(() => loadBodyMetricSettings(user.uid));
   const [notificationState, setNotificationState] = useState(() => {
     if (!("Notification" in window)) return { status: "unsupported", message: "This browser does not support notifications." };
     return { status: Notification.permission, message: Notification.permission === "granted" ? "Notifications are allowed on this device." : "Notifications are off on this device." };
@@ -2031,6 +2212,15 @@ function SettingsPage({ user, programs, workouts, logs, serviceWorkerRegistratio
     }
   }
 
+  function updateBodyMetricSetting(key, patch) {
+    const nextSettings = {
+      ...bodyMetricSettings,
+      [key]: { ...bodyMetricSettings[key], ...patch },
+    };
+    setBodyMetricSettings(nextSettings);
+    saveBodyMetricSettings(user.uid, nextSettings);
+  }
+
   return (
     <section className="profile-panel settings-panel">
       <div className="profile-header">
@@ -2051,6 +2241,10 @@ function SettingsPage({ user, programs, workouts, logs, serviceWorkerRegistratio
         <button className={activeTab === "programs" ? "settings-tab active" : "settings-tab"} type="button" onClick={() => setActiveTab("programs")} role="tab" aria-selected={activeTab === "programs"}>
           <ClipboardList size={17} />
           Programs
+        </button>
+        <button className={activeTab === "metrics" ? "settings-tab active" : "settings-tab"} type="button" onClick={() => setActiveTab("metrics")} role="tab" aria-selected={activeTab === "metrics"}>
+          <TrendingUp size={17} />
+          Metrics
         </button>
         <button className={activeTab === "updates" ? "settings-tab active" : "settings-tab"} type="button" onClick={() => setActiveTab("updates")} role="tab" aria-selected={activeTab === "updates"}>
           <Bell size={17} />
@@ -2087,6 +2281,33 @@ function SettingsPage({ user, programs, workouts, logs, serviceWorkerRegistratio
               <p className="empty-list-copy">No past programs yet.</p>
             )}
           </div>
+        </div>
+      ) : activeTab === "metrics" ? (
+        <div className="settings-metrics" role="tabpanel">
+          {bodyMetricFields.map((field) => {
+            const setting = bodyMetricSettings[field.key] || defaultBodyMetricSettings[field.key];
+            return (
+              <div className="settings-block metric-settings-row" key={field.key}>
+                <label className="checkbox-field">
+                  <input
+                    checked={setting.enabled}
+                    onChange={(event) => updateBodyMetricSetting(field.key, { enabled: event.target.checked })}
+                    type="checkbox"
+                  />
+                  {field.label}
+                </label>
+                <select
+                  value={setting.mode}
+                  onChange={(event) => updateBodyMetricSetting(field.key, { mode: event.target.value })}
+                  aria-label={`${field.label} display mode`}
+                  disabled={!setting.enabled}
+                >
+                  <option value="static">Static value</option>
+                  <option value="goal">Compare to goal</option>
+                </select>
+              </div>
+            );
+          })}
         </div>
       ) : activeTab === "updates" ? (
         <div className="settings-updates" role="tabpanel">
@@ -2203,7 +2424,256 @@ function MaxesPage({ user }) {
   );
 }
 
+function GoalsPage({ user, logs }) {
+  const [goals, setGoals] = useState(() => loadUserGoals(user.uid));
+  const [bodyMetrics, setBodyMetrics] = useState(() => loadBodyMetrics(user.uid));
+  const [bodyMetricSettings] = useState(() => loadBodyMetricSettings(user.uid));
+  const [metricValues, setMetricValues] = useState(() => {
+    const latest = loadBodyMetrics(user.uid).at(-1) || {};
+    return Object.fromEntries(bodyMetricFields.map((field) => [field.key, latest[field.key] || ""]));
+  });
+  const [title, setTitle] = useState("");
+  const [type, setType] = useState("workouts");
+  const [target, setTarget] = useState("");
+  const [lift, setLift] = useState("backSquat");
+  const [metric, setMetric] = useState("bodyweight");
+  const [unit, setUnit] = useState("kg");
+  const maxes = loadUserMaxes(user.uid);
+  const activeGoals = goals.filter((goal) => !goal.archivedAt);
+  const archivedGoals = goals.filter((goal) => goal.archivedAt);
+
+  function persistGoals(nextGoals) {
+    setGoals(nextGoals);
+    saveUserGoals(user.uid, nextGoals);
+  }
+
+  function saveMetricEntry(event) {
+    event.preventDefault();
+    const entry = {
+      id: `metric-${Date.now()}`,
+      date: new Date().toISOString().slice(0, 10),
+      createdAt: new Date().toISOString(),
+      ...Object.fromEntries(bodyMetricFields.map((field) => [field.key, Number(metricValues[field.key]) || ""])),
+    };
+    const nextEntries = [...bodyMetrics, entry];
+    setBodyMetrics(nextEntries);
+    saveBodyMetrics(user.uid, nextEntries);
+  }
+
+  function addGoal(event) {
+    event.preventDefault();
+    const numericTarget = Number(target);
+    if (!numericTarget || numericTarget <= 0) return;
+    const field = maxFields.find((item) => item.key === lift);
+    const metricField = bodyMetricFields.find((item) => item.key === metric);
+    const latestMetric = metricLatest(bodyMetrics, metric);
+    const nextGoal = {
+      id: `goal-${Date.now()}`,
+      title: title.trim() || (type === "metric" ? `${metricField.label} to ${numericTarget}${metricField.unit}` : type === "max" ? `${field.label} to ${numericTarget}${unit}` : `Complete ${numericTarget} workouts`),
+      type,
+      target: numericTarget,
+      lift: type === "max" ? lift : "",
+      metric: type === "metric" ? metric : "",
+      startValue: type === "metric" ? Number(latestMetric?.[metric] || 0) : "",
+      unit: type === "max" ? unit : "",
+      startDate: new Date().toISOString().slice(0, 10),
+      createdAt: new Date().toISOString(),
+    };
+    persistGoals([nextGoal, ...goals]);
+    setTitle("");
+    setTarget("");
+  }
+
+  function archiveGoal(goalId) {
+    persistGoals(goals.map((goal) => (
+      goal.id === goalId ? { ...goal, archivedAt: new Date().toISOString() } : goal
+    )));
+  }
+
+  function restoreGoal(goalId) {
+    persistGoals(goals.map((goal) => {
+      if (goal.id !== goalId) return goal;
+      const { archivedAt, ...restoredGoal } = goal;
+      return restoredGoal;
+    }));
+  }
+
+  function renderGoal(goal) {
+    const latestMetric = goal.type === "metric" ? metricLatest(bodyMetrics, goal.metric) : null;
+    const progress = goal.type === "metric"
+      ? {
+          ...(metricGoalProgress(goal, latestMetric?.[goal.metric]) || { percent: 0, complete: false }),
+          label: `${latestMetric?.[goal.metric] || 0}/${goal.target}${bodyMetricFields.find((field) => field.key === goal.metric)?.unit || ""}`,
+        }
+      : goalProgress(goal, logs, maxes);
+    const liftLabel = maxFields.find((field) => field.key === goal.lift)?.label;
+    const metricLabel = bodyMetricFields.find((field) => field.key === goal.metric)?.label;
+    return (
+      <article className={progress.complete ? "goal-card complete" : "goal-card"} key={goal.id}>
+        <div className="goal-card-heading">
+          <div>
+            <p className="eyebrow">{goal.type === "metric" ? metricLabel : goal.type === "max" ? liftLabel : "Workout consistency"}</p>
+            <h4>{goal.title}</h4>
+          </div>
+          {progress.complete ? <CheckCircle2 size={20} /> : <TrendingUp size={20} />}
+        </div>
+        <div className="progress-meter" aria-label={`${progress.percent}% complete`}>
+          <span style={{ width: `${progress.percent}%` }} />
+        </div>
+        <dl className="program-stats">
+          <div>
+            <dt>Progress</dt>
+            <dd>{progress.label}</dd>
+          </div>
+          <div>
+            <dt>Started</dt>
+            <dd>{formatDate(goal.startDate)}</dd>
+          </div>
+        </dl>
+        {goal.archivedAt ? (
+          <button className="quiet-button" type="button" onClick={() => restoreGoal(goal.id)}>Restore goal</button>
+        ) : (
+          <button className="quiet-button" type="button" onClick={() => archiveGoal(goal.id)}>Archive goal</button>
+        )}
+      </article>
+    );
+  }
+
+  return (
+    <section className="profile-panel goals-panel">
+      <div className="profile-header">
+        <span className="profile-avatar">
+          <Target size={34} />
+        </span>
+        <div>
+          <p className="eyebrow">Athlete progress</p>
+          <h2>Goals</h2>
+        </div>
+      </div>
+
+      <form className="metric-entry-form" onSubmit={saveMetricEntry}>
+        {bodyMetricFields.map((field) => {
+          const setting = bodyMetricSettings[field.key] || defaultBodyMetricSettings[field.key];
+          const latest = metricLatest(bodyMetrics, field.key);
+          const metricGoal = activeGoals.find((goal) => goal.type === "metric" && goal.metric === field.key);
+          const progress = setting.mode === "goal" ? metricGoalProgress(metricGoal, latest?.[field.key]) : null;
+          const points = metricTrendPoints(bodyMetrics, field.key);
+          if (!setting.enabled) return null;
+          return (
+            <div className="metric-card" key={field.key}>
+              <div className="metric-card-heading">
+                <div>
+                  <p className="eyebrow">{setting.mode === "goal" ? "Goal trend" : "Current"}</p>
+                  <h3>{field.label}</h3>
+                </div>
+                <strong>{latest?.[field.key] ? `${latest[field.key]}${field.unit}` : "-"}</strong>
+              </div>
+              {setting.mode === "goal" && metricGoal && (
+                <>
+                  <div className="progress-meter" aria-label={`${progress?.percent || 0}% complete`}>
+                    <span style={{ width: `${progress?.percent || 0}%` }} />
+                  </div>
+                  <svg className="metric-sparkline" viewBox="0 0 100 48" role="img" aria-label={`${field.label} trend`}>
+                    <polyline points={points} />
+                  </svg>
+                </>
+              )}
+              <label>
+                Update
+                <input value={metricValues[field.key]} onChange={(event) => setMetricValues({ ...metricValues, [field.key]: event.target.value })} inputMode="decimal" placeholder={field.unit} />
+              </label>
+            </div>
+          );
+        })}
+        <button className="secondary" type="submit">
+          <Save size={18} />
+          Save body metrics
+        </button>
+      </form>
+
+      <form className="goal-form" onSubmit={addGoal}>
+        <label className="wide">
+          Goal name
+          <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Qualify for meet, rebuild squat, stay consistent" />
+        </label>
+        <label>
+          Goal type
+          <select value={type} onChange={(event) => setType(event.target.value)}>
+            <option value="workouts">Completed workouts</option>
+            <option value="max">Lift max</option>
+            <option value="metric">Body metric</option>
+          </select>
+        </label>
+        {type === "max" && (
+          <label>
+            Lift
+            <select value={lift} onChange={(event) => setLift(event.target.value)}>
+              {maxFields.map((field) => (
+                <option value={field.key} key={field.key}>{field.label}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        {type === "metric" && (
+          <label>
+            Metric
+            <select value={metric} onChange={(event) => setMetric(event.target.value)}>
+              {bodyMetricFields.map((field) => (
+                <option value={field.key} key={field.key}>{field.label}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label>
+          Target
+          <input value={target} onChange={(event) => setTarget(event.target.value)} inputMode="decimal" placeholder={type === "metric" ? "185" : type === "max" ? "120" : "20"} required />
+        </label>
+        {type === "max" && (
+          <label>
+            Unit
+            <select value={unit} onChange={(event) => setUnit(event.target.value)}>
+              <option value="kg">kg</option>
+              <option value="lb">lb</option>
+            </select>
+          </label>
+        )}
+        <button className="primary" type="submit">
+          <Plus size={18} />
+          Add goal
+        </button>
+      </form>
+
+      <div className="goal-section">
+        <div className="program-section-title">
+          <h3>Active Goals</h3>
+          <span>{activeGoals.length}</span>
+        </div>
+        {activeGoals.length ? (
+          <div className="goal-card-grid">
+            {activeGoals.map(renderGoal)}
+          </div>
+        ) : (
+          <p className="empty-list-copy">No active goals yet.</p>
+        )}
+      </div>
+
+      {archivedGoals.length > 0 && (
+        <div className="goal-section">
+          <div className="program-section-title">
+            <h3>Past Goals</h3>
+            <span>{archivedGoals.length}</span>
+          </div>
+          <div className="goal-card-grid">
+            {archivedGoals.map(renderGoal)}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function App() {
+  const initialRoute = useMemo(() => readAppRoute(), []);
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(true);
   const [isTrainer, setIsTrainer] = useState(false);
@@ -2212,12 +2682,14 @@ function App() {
   const [customWorkouts, setCustomWorkouts] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [programWorkouts, setProgramWorkouts] = useState([]);
-  const [selectedDate, setSelectedDate] = useState("2026-05-11");
-  const [selectedWorkoutKey, setSelectedWorkoutKey] = useState("");
-  const [view, setView] = useState("client");
+  const [selectedDate, setSelectedDate] = useState(initialRoute.selectedDate);
+  const [selectedWorkoutKey, setSelectedWorkoutKey] = useState(initialRoute.selectedWorkoutKey);
+  const [view, setView] = useState(initialRoute.view);
   const [serviceWorkerRegistration, setServiceWorkerRegistration] = useState(null);
   const [updateRegistration, setUpdateRegistration] = useState(null);
   const [notificationMessage, setNotificationMessage] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
+  const [isOnline, setIsOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
   const [showNavMenu, setShowNavMenu] = useState(false);
   const [timerMode, setTimerMode] = useState("countup");
   const [countdownSeconds, setCountdownSeconds] = useState(180);
@@ -2234,6 +2706,7 @@ function App() {
   const [timerStartedAt, setTimerStartedAt] = useState(null);
   const [timerBankedSeconds, setTimerBankedSeconds] = useState(0);
   const [timerNow, setTimerNow] = useState(Date.now());
+  const routeWritePending = useRef(false);
   const timerRunning = Boolean(timerStartedAt);
   const timerElapsedSeconds = timerBankedSeconds + (timerRunning ? Math.floor((timerNow - timerStartedAt) / 1000) : 0);
   const activeIntervalSeconds = intervalPhase === "work" ? intervalWorkSeconds : intervalRestSeconds;
@@ -2294,9 +2767,49 @@ function App() {
   }, []);
 
   useEffect(() => {
+    function applyBrowserRoute() {
+      const nextRoute = readAppRoute();
+      routeWritePending.current = true;
+      setSelectedDate(nextRoute.selectedDate);
+      setSelectedWorkoutKey(nextRoute.selectedWorkoutKey);
+      setView(nextRoute.view);
+      setShowNavMenu(false);
+    }
+
+    window.addEventListener("popstate", applyBrowserRoute);
+    return () => window.removeEventListener("popstate", applyBrowserRoute);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (routeWritePending.current) {
+      routeWritePending.current = false;
+      return;
+    }
+    const nextUrl = appRouteUrl({ view, selectedDate, selectedWorkoutKey });
+    const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (nextUrl !== currentUrl) {
+      window.history.pushState({}, "", nextUrl);
+    }
+  }, [selectedDate, selectedWorkoutKey, view]);
+
+  useEffect(() => {
     registerAppServiceWorker(setUpdateRegistration)
       .then(setServiceWorkerRegistration)
       .catch((error) => console.warn("Service worker registration failed.", error));
+  }, []);
+
+  useEffect(() => {
+    function updateOnlineStatus() {
+      setIsOnline(navigator.onLine);
+    }
+
+    window.addEventListener("online", updateOnlineStatus);
+    window.addEventListener("offline", updateOnlineStatus);
+    return () => {
+      window.removeEventListener("online", updateOnlineStatus);
+      window.removeEventListener("offline", updateOnlineStatus);
+    };
   }, []);
 
   useEffect(() => {
@@ -2469,6 +2982,15 @@ function App() {
     setShowNavMenu(false);
   }
 
+  function handleWorkoutSaveStatus(result) {
+    if (result?.synced) {
+      setSaveMessage("Workout synced.");
+    } else {
+      setSaveMessage("Workout saved on this device.");
+    }
+    window.setTimeout(() => setSaveMessage(""), 3200);
+  }
+
   if (checking) return <main className="loading">Loading...</main>;
   if (!user) return <AuthCard onAuthed={hydrateUser} />;
 
@@ -2550,6 +3072,12 @@ function App() {
               <Trophy size={18} />
               Maxes
             </button>
+            {!isTrainer && (
+              <button className="menu-link" type="button" onClick={() => openMenuView("goals")}>
+                <Target size={18} />
+                Goals
+              </button>
+            )}
             {isTrainer && (
               <>
                 <button className="menu-link" type="button" onClick={() => openMenuView("programs")}>
@@ -2653,11 +3181,13 @@ function App() {
       )}
 
       {view === "profile" ? (
-        <ProfilePage user={user} isTrainer={isTrainer} logs={logs} onOpenEdit={() => setView("edit-profile")} onOpenMaxes={() => setView("maxes")} onOpenSettings={() => setView("settings")} />
+        <ProfilePage user={user} isTrainer={isTrainer} logs={logs} onOpenEdit={() => setView("edit-profile")} onOpenMaxes={() => setView("maxes")} onOpenGoals={() => setView("goals")} onOpenSettings={() => setView("settings")} />
       ) : view === "edit-profile" ? (
         <ProfileEditPage user={user} onProfileSaved={handleProfileSaved} />
       ) : view === "maxes" ? (
         <MaxesPage user={user} />
+      ) : view === "goals" ? (
+        <GoalsPage user={user} logs={logs} />
       ) : view === "settings" ? (
         <SettingsPage
           user={user}
@@ -2682,7 +3212,7 @@ function App() {
       ) : view === "workout-list" ? (
         <WorkoutListView date={selectedDate} workoutGroups={selectedWorkoutGroups} logs={logs} programs={programs} onOpenWorkout={openWorkout} onAddWorkout={openBlankWorkout} onChangeDate={openWorkoutList} />
       ) : view === "workout" ? (
-        <WorkoutView workout={selectedWorkout} workoutKey={activeWorkoutKey} date={selectedDate} user={user} logs={logs} setLogs={setLogs} onDone={() => setView("client")} />
+        <WorkoutView workout={selectedWorkout} workoutKey={activeWorkoutKey} date={selectedDate} user={user} logs={logs} setLogs={setLogs} onDone={() => setView("client")} onSaveStatus={handleWorkoutSaveStatus} />
       ) : (
         <>
           <div className="today-row">
@@ -2694,6 +3224,8 @@ function App() {
           <CalendarStrip sections={calendarMonths} selectedDate={selectedDate} onSelectDate={openWorkoutList} logs={logs} workoutsByDate={workoutsByDate} />
         </>
       )}
+      {!isOnline && <div className="connection-banner" role="status">Offline. Workout changes save on this device.</div>}
+      {saveMessage && <div className="sync-toast" role="status">{saveMessage}</div>}
       {notificationMessage && <div className="notification-toast" role="status">{notificationMessage}</div>}
     </main>
   );

@@ -643,6 +643,29 @@ select:focus {
   font-weight: 800;
 }
 
+.similar-exercise-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.similar-exercise-button {
+  min-height: 34px;
+  padding: 0 10px;
+  color: #d9c8eb;
+  background: #24192f;
+  border: 1px solid #3b2a4a;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.similar-exercise-button:hover,
+.similar-exercise-button:focus-visible {
+  color: #fff;
+  border-color: #8b5cf6;
+}
+
 .exercise-row small {
   display: block;
   margin-top: 4px;
@@ -1227,7 +1250,8 @@ select:focus {
   font-size: 1.08rem;
 }
 
-.maxes-form {
+.maxes-form,
+.goal-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
@@ -1247,7 +1271,12 @@ select:focus {
 }
 
 .maxes-form button,
+.goal-form button,
 .save-status {
+  grid-column: 1 / -1;
+}
+
+.goal-form .wide {
   grid-column: 1 / -1;
 }
 
@@ -1268,6 +1297,101 @@ select:focus {
   margin: 0;
   color: #f87171;
   font-weight: 850;
+}
+
+.goals-panel {
+  align-content: start;
+}
+
+.goal-section {
+  display: grid;
+  gap: 12px;
+}
+
+.goal-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.goal-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  background: #14101a;
+  border: 1px solid #3a2948;
+  border-radius: 8px;
+}
+
+.goal-card.complete {
+  border-color: #287a45;
+  background: #101a14;
+}
+
+.goal-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.goal-card-heading h4 {
+  margin: 0;
+  color: #f3eefb;
+  font-size: 1rem;
+}
+
+.metric-entry-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.metric-entry-form button {
+  grid-column: 1 / -1;
+}
+
+.metric-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  background: #14101a;
+  border: 1px solid #3a2948;
+  border-radius: 8px;
+}
+
+.metric-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.metric-card-heading h3 {
+  margin: 0;
+  color: #f3eefb;
+  font-size: 1rem;
+}
+
+.metric-card-heading strong {
+  color: #8b5cf6;
+  font-size: 1.12rem;
+}
+
+.metric-sparkline {
+  width: 100%;
+  height: 48px;
+  background: #0f0b15;
+  border: 1px solid #33243f;
+  border-radius: 8px;
+}
+
+.metric-sparkline polyline {
+  fill: none;
+  stroke: #8b5cf6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 4;
 }
 
 .settings-panel {
@@ -1314,6 +1438,11 @@ select:focus {
   justify-content: stretch;
 }
 
+.settings-metrics {
+  display: grid;
+  gap: 12px;
+}
+
 .settings-block {
   display: flex;
   align-items: center;
@@ -1323,6 +1452,10 @@ select:focus {
   background: #14101a;
   border: 1px solid #3a2948;
   border-radius: 8px;
+}
+
+.metric-settings-row select {
+  max-width: 190px;
 }
 
 .settings-block h3,
@@ -1399,19 +1532,38 @@ select:focus {
   font-weight: 850;
 }
 
-.notification-toast {
+.notification-toast,
+.sync-toast,
+.connection-banner {
   position: fixed;
   right: 18px;
-  bottom: 18px;
   z-index: 30;
   width: min(380px, calc(100% - 36px));
   padding: 14px 16px;
   color: #f3eefb;
-  background: #21162b;
-  border: 1px solid #5a3c72;
   border-radius: 8px;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
   font-weight: 850;
+}
+
+.notification-toast {
+  bottom: 18px;
+  background: #21162b;
+  border: 1px solid #5a3c72;
+}
+
+.sync-toast {
+  bottom: 18px;
+  background: #102116;
+  border: 1px solid #287a45;
+}
+
+.connection-banner {
+  left: 18px;
+  right: auto;
+  bottom: 18px;
+  background: #2b2112;
+  border: 1px solid #8a6424;
 }
 
 @media (max-width: 760px) {
@@ -1431,6 +1583,9 @@ select:focus {
   .exercise-row,
   .creator-form,
   .program-card-grid,
+  .goal-card-grid,
+  .goal-form,
+  .metric-entry-form,
   .profile-edit-form,
   .maxes-form,
   .profile-grid,
