@@ -19,6 +19,7 @@ import {
   ShoppingBag,
   TrendingUp,
   Trophy,
+  Utensils,
   UserRound,
   UsersRound,
 } from "lucide-react";
@@ -31,6 +32,7 @@ import {
   isTrainerUser,
   loadCustomWorkouts,
   loadPrograms,
+  loadUserMaxes as loadCloudUserMaxes,
   loadUserProfile,
   loadWorkoutLogs,
   login,
@@ -39,6 +41,7 @@ import {
   observeAuth,
   saveProgram,
   saveCustomWorkout,
+  saveUserMaxes as saveCloudUserMaxes,
   saveWorkoutLog,
   saveUserProfile,
   requestNotificationAccess,
@@ -57,7 +60,7 @@ const maxFields = [
 
 const appVersion = packageInfo.version;
 const defaultSelectedDate = "2026-05-11";
-const routeViews = new Set(["client", "workout-list", "workout", "profile", "edit-profile", "maxes", "goals", "progress", "settings", "settings-account", "settings-programs", "settings-metrics", "settings-updates", "store", "stored-programs", "stored-workouts", "programs", "athletes"]);
+const routeViews = new Set(["client", "workout-list", "workout", "profile", "edit-profile", "maxes", "goals", "progress", "food-log", "settings", "settings-account", "settings-programs", "settings-metrics", "settings-updates", "store", "stored-programs", "stored-workouts", "programs", "athletes"]);
 const bodyMetricFields = [
   { key: "bodyweight", label: "Bodyweight", unit: "lb", unitType: "weight" },
   { key: "bodyFat", label: "Body fat", unit: "%" },
@@ -224,6 +227,11 @@ function loadUserMaxes(userId) {
 
 function saveUserMaxes(userId, maxes) {
   localStorage.setItem(userMaxesKey(userId), JSON.stringify(maxes));
+}
+
+async function syncUserMaxes(userId, maxes) {
+  saveUserMaxes(userId, maxes);
+  return saveCloudUserMaxes(userId, maxes);
 }
 
 function userWeightUnitKey(userId) {
@@ -2155,6 +2163,18 @@ function StorePage() {
   );
 }
 
+function FoodLogPage() {
+  return (
+    <section className="programs-panel">
+      <div className="section-heading">
+        <Utensils size={20} />
+        <h2>Food Log</h2>
+      </div>
+      <p className="empty-list-copy">Food logging will live here.</p>
+    </section>
+  );
+}
+
 function StoredProgramsPage({ programs, workouts, logs }) {
   const defaultProgram = { id: "default", name: "Default Program", athleteEmail: "dev-athlete@primitive.local" };
   const programOptions = [defaultProgram, ...programs.filter((program) => program.id !== "default")];
@@ -3024,6 +3044,7 @@ function SettingsSectionPage({ section, user, programs, workouts, logs, serviceW
 function MaxesPage({ user }) {
   const [maxes, setMaxes] = useState(() => loadUserMaxes(user.uid));
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
   const weightUnit = loadUserWeightUnit(user.uid);
   const maxValue = (key) => maxes[key]?.value ?? maxes[key] ?? "";
@@ -3034,9 +3055,11 @@ function MaxesPage({ user }) {
     setMaxes({ ...maxes, [key]: { value, unit: weightUnit } });
   }
 
-  function persistMaxes(event) {
+  async function persistMaxes(event) {
     event.preventDefault();
-    saveUserMaxes(user.uid, maxes);
+    setSaving(true);
+    await syncUserMaxes(user.uid, maxes);
+    setSaving(false);
     setSaved(true);
     setEditing(false);
   }
@@ -3091,9 +3114,9 @@ function MaxesPage({ user }) {
             </span>
           </label>
         ))}
-        <button className="primary" type="submit">
+        <button className="primary" type="submit" disabled={saving}>
           <Save size={18} />
-          Save maxes
+          {saving ? "Saving..." : "Save maxes"}
         </button>
         {saved && <p className="save-status">Maxes saved.</p>}
       </form>}
@@ -3286,7 +3309,11 @@ function App() {
       return;
     }
 
-    const profile = await loadUserProfile(nextUser.uid);
+    const [profile, cloudMaxes] = await Promise.all([
+      loadUserProfile(nextUser.uid),
+      loadCloudUserMaxes(nextUser.uid),
+    ]);
+    saveUserMaxes(nextUser.uid, cloudMaxes);
     const profiledUser = mergeUserProfile(nextUser, profile);
     setUser(profiledUser);
     setShowProfileSetup(profile.profileSetupCompleted !== true);
@@ -3732,6 +3759,10 @@ function App() {
               <Dumbbell size={18} />
               Workouts
             </button>
+            <button className="menu-link" type="button" onClick={() => openMenuView("food-log")}>
+              <Utensils size={18} />
+              Food Log
+            </button>
             <button className="menu-link" type="button" onClick={() => openMenuView("maxes")}>
               <Trophy size={18} />
               Maxes
@@ -3874,6 +3905,8 @@ function App() {
         />
       ) : view === "store" ? (
         <StorePage />
+      ) : view === "food-log" ? (
+        <FoodLogPage />
       ) : view === "stored-programs" ? (
         <StoredProgramsPage programs={programs} workouts={[...importedProgram, ...customWorkouts, ...programWorkouts]} logs={logs} />
       ) : view === "stored-workouts" ? (

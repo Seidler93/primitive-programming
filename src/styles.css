@@ -869,6 +869,29 @@ select:focus {
   gap: 16px;
 }
 
+.schedule-action-panel {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  background: #14101a;
+  border: 1px solid #3a2948;
+  border-radius: 8px;
+}
+
+.schedule-action-panel strong {
+  color: #f3eefb;
+}
+
+.schedule-action-panel p {
+  margin: 0;
+  color: #b9a9c9;
+  font-size: 0.9rem;
+}
+
+.schedule-action-panel .quiet-button {
+  min-height: 42px;
+}
+
 .modal-action-row {
   display: flex;
   justify-content: flex-end;

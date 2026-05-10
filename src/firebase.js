@@ -178,6 +178,45 @@ export async function saveUserProfile(userId, profile) {
   return nextLocalProfile;
 }
 
+export async function loadUserMaxes(userId) {
+  if (db && !isDevUserId(userId)) {
+    try {
+      const snapshot = await withTimeout(
+        getDoc(doc(db, "users", userId, "profile", "maxes")),
+        "User maxes request timed out.",
+      );
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        return data.maxes || {};
+      }
+    } catch (error) {
+      console.warn("Falling back to local user maxes.", error);
+    }
+  }
+  try {
+    return JSON.parse(localStorage.getItem(localKey(`maxes:${userId}`)) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+export async function saveUserMaxes(userId, maxes) {
+  const payload = { maxes, updatedAt: new Date().toISOString() };
+  localStorage.setItem(localKey(`maxes:${userId}`), JSON.stringify(maxes));
+
+  if (db && !isDevUserId(userId)) {
+    try {
+      await setDoc(doc(db, "users", userId, "profile", "maxes"), payload, { merge: true });
+      return { synced: true };
+    } catch (error) {
+      console.warn("Saved user maxes locally; cloud sync failed.", error);
+      return { synced: false, local: true };
+    }
+  }
+
+  return { synced: false, local: true };
+}
+
 export async function saveNotificationToken(userId, token) {
   const payload = {
     token,
