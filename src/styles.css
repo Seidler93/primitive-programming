@@ -275,6 +275,10 @@ select:focus {
   background: #0b0910;
 }
 
+.day-swipe-shell {
+  touch-action: pan-y;
+}
+
 .top-nav {
   position: sticky;
   top: 0;

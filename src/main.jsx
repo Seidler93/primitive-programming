@@ -656,7 +656,6 @@ function CalendarStrip({ sections, selectedDate, onSelectDate, logs, workoutsByD
 }
 
 function WorkoutListView({ date, workoutGroups, logs, programs, onOpenWorkout, onAddWorkout, onChangeDate }) {
-  const [swipeStart, setSwipeStart] = useState(null);
   const [showAddWorkoutOptions, setShowAddWorkoutOptions] = useState(false);
   const [selectedAddMode, setSelectedAddMode] = useState("new");
   const hasPlannedWorkout = workoutGroups.length > 0;
@@ -667,23 +666,8 @@ function WorkoutListView({ date, workoutGroups, logs, programs, onOpenWorkout, o
   const goToPreviousDay = () => onChangeDate(shiftDate(date, -1));
   const goToNextDay = () => onChangeDate(shiftDate(date, 1));
 
-  function startSwipe(event) {
-    if (event.pointerType === "mouse") return;
-    setSwipeStart({ x: event.clientX, y: event.clientY });
-  }
-
-  function finishSwipe(event) {
-    if (!swipeStart || event.pointerType === "mouse") return;
-    const deltaX = event.clientX - swipeStart.x;
-    const deltaY = event.clientY - swipeStart.y;
-    setSwipeStart(null);
-    if (Math.abs(deltaX) < 54 || Math.abs(deltaX) < Math.abs(deltaY) * 1.25) return;
-    if (deltaX < 0) goToNextDay();
-    else goToPreviousDay();
-  }
-
   return (
-    <section className="workout-list-panel" onPointerDown={startSwipe} onPointerUp={finishSwipe} onPointerCancel={() => setSwipeStart(null)}>
+    <section className="workout-list-panel">
       <div className="section-heading workout-list-heading">
         <button className="icon-button" type="button" onClick={goToPreviousDay} aria-label="Previous day" title="Previous day">
           <ArrowLeft size={18} />
@@ -2685,6 +2669,7 @@ function App() {
   const [selectedDate, setSelectedDate] = useState(initialRoute.selectedDate);
   const [selectedWorkoutKey, setSelectedWorkoutKey] = useState(initialRoute.selectedWorkoutKey);
   const [view, setView] = useState(initialRoute.view);
+  const [daySwipeStart, setDaySwipeStart] = useState(null);
   const [serviceWorkerRegistration, setServiceWorkerRegistration] = useState(null);
   const [updateRegistration, setUpdateRegistration] = useState(null);
   const [notificationMessage, setNotificationMessage] = useState("");
@@ -2880,6 +2865,21 @@ function App() {
     setView("workout-list");
   }
 
+  function startDaySwipe(event) {
+    if (view !== "workout-list" || event.pointerType === "mouse") return;
+    if (event.target.closest(".top-nav, .modal-backdrop, .modal-panel")) return;
+    setDaySwipeStart({ x: event.clientX, y: event.clientY });
+  }
+
+  function finishDaySwipe(event) {
+    if (view !== "workout-list" || !daySwipeStart || event.pointerType === "mouse") return;
+    const deltaX = event.clientX - daySwipeStart.x;
+    const deltaY = event.clientY - daySwipeStart.y;
+    setDaySwipeStart(null);
+    if (Math.abs(deltaX) < 54 || Math.abs(deltaX) < Math.abs(deltaY) * 1.25) return;
+    openWorkoutList(shiftDate(selectedDate, deltaX < 0 ? 1 : -1));
+  }
+
   function openWorkout(key) {
     setSelectedWorkoutKey(key);
     setView("workout");
@@ -2995,7 +2995,12 @@ function App() {
   if (!user) return <AuthCard onAuthed={hydrateUser} />;
 
   return (
-    <main className="app-shell">
+    <main
+      className={view === "workout-list" ? "app-shell day-swipe-shell" : "app-shell"}
+      onPointerDown={startDaySwipe}
+      onPointerUp={finishDaySwipe}
+      onPointerCancel={() => setDaySwipeStart(null)}
+    >
       <nav className="top-nav">
         <button className="nav-button nav-icon menu-button" type="button" onClick={() => setShowNavMenu(true)} aria-label="Open menu" title="Menu">
           <Menu size={19} />
