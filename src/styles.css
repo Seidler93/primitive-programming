@@ -959,9 +959,47 @@ select:focus {
   align-content: start;
 }
 
+.settings-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 4px;
+  width: fit-content;
+  background: #14101a;
+  border: 1px solid #3a2948;
+  border-radius: 8px;
+}
+
+.settings-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  color: #b9a9c9;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 900;
+}
+
+.settings-tab.active,
+.settings-tab:hover,
+.settings-tab:focus-visible {
+  color: #fff;
+  background: #201728;
+  border-color: #7c5aa0;
+}
+
 .settings-actions {
   display: flex;
   justify-content: flex-start;
+}
+
+.settings-programs {
+  display: grid;
+  gap: 16px;
 }
 
 .app-version {
@@ -1006,6 +1044,14 @@ select:focus {
 
   .today-row .primary {
     width: 100%;
+  }
+
+  .settings-tabs {
+    width: 100%;
+  }
+
+  .settings-tab {
+    flex: 1;
   }
 
   .date-grid {

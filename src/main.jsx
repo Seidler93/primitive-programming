@@ -314,6 +314,16 @@ function progressSummary(workouts, logs) {
   };
 }
 
+function programTimelineSummary(workouts, logs) {
+  const dates = [...new Set(workouts.map((item) => item.date))].sort();
+  const summary = progressSummary(workouts, logs);
+  return {
+    ...summary,
+    firstDate: dates[0] || "",
+    lastDate: dates.at(-1) || "",
+  };
+}
+
 function needsMaxes(workout) {
   return [...new Set(workout.flatMap((item) => {
     const needs = percentages(item).length > 0 || /opener/i.test(`${item.prescription} ${item.intensity}`);
@@ -1324,7 +1334,57 @@ function ProfileEditPage({ user, onProfileSaved }) {
   );
 }
 
-function SettingsPage({ onLogout }) {
+function SettingsPage({ user, programs, workouts, logs, onLogout }) {
+  const [activeTab, setActiveTab] = useState("account");
+  const userEmail = (user.email || "").toLowerCase();
+  const defaultProgram = { id: "default", name: "Default Program", athleteEmail: "dev-athlete@primitive.local" };
+  const programOptions = [defaultProgram, ...programs.filter((program) => program.id !== "default")];
+  const athletePrograms = programOptions
+    .filter((program) => (program.athleteEmail || "").toLowerCase() === userEmail)
+    .map((program) => {
+      const programWorkouts = workouts.filter((item) => (item.programId || "default") === program.id);
+      const summary = programTimelineSummary(programWorkouts, logs);
+      const isCurrent = summary.nextDate || (summary.lastDate && summary.lastDate >= new Date().toISOString().slice(0, 10));
+      return { ...program, workouts: programWorkouts, summary, status: isCurrent ? "Current" : "Past" };
+    })
+    .sort((a, b) => (b.summary.lastDate || b.startDate || "").localeCompare(a.summary.lastDate || a.startDate || ""));
+  const currentPrograms = athletePrograms.filter((program) => program.status === "Current");
+  const pastPrograms = athletePrograms.filter((program) => program.status === "Past");
+
+  function renderProgramCard(program) {
+    const { summary } = program;
+    return (
+      <article className="program-card" key={program.id}>
+        <div>
+          <p className="eyebrow">{program.status}</p>
+          <h4>{program.name}</h4>
+        </div>
+        <div className="progress-meter" aria-label={`${summary.percent}% complete`}>
+          <span style={{ width: `${summary.percent}%` }} />
+        </div>
+        <dl className="program-stats">
+          <div>
+            <dt>Complete</dt>
+            <dd>{summary.completed}/{summary.total}</dd>
+          </div>
+          <div>
+            <dt>Next</dt>
+            <dd>{summary.nextDate ? formatDate(summary.nextDate) : "All done"}</dd>
+          </div>
+          <div>
+            <dt>Started</dt>
+            <dd>{summary.firstDate ? formatDate(summary.firstDate) : "Not scheduled"}</dd>
+          </div>
+          <div>
+            <dt>Last</dt>
+            <dd>{summary.lastDate ? formatDate(summary.lastDate) : "Not scheduled"}</dd>
+          </div>
+        </dl>
+        {program.goal && <p className="program-note">{program.goal}</p>}
+      </article>
+    );
+  }
+
   return (
     <section className="profile-panel settings-panel">
       <div className="profile-header">
@@ -1337,12 +1397,55 @@ function SettingsPage({ onLogout }) {
         </div>
       </div>
 
-      <div className="settings-actions">
-        <button className="secondary" type="button" onClick={onLogout}>
-          <LogOut size={18} />
-          Log out
+      <div className="settings-tabs" role="tablist" aria-label="Settings sections">
+        <button className={activeTab === "account" ? "settings-tab active" : "settings-tab"} type="button" onClick={() => setActiveTab("account")} role="tab" aria-selected={activeTab === "account"}>
+          <Settings size={17} />
+          Account
+        </button>
+        <button className={activeTab === "programs" ? "settings-tab active" : "settings-tab"} type="button" onClick={() => setActiveTab("programs")} role="tab" aria-selected={activeTab === "programs"}>
+          <ClipboardList size={17} />
+          Programs
         </button>
       </div>
+
+      {activeTab === "programs" ? (
+        <div className="settings-programs" role="tabpanel">
+          <div className="program-section">
+            <div className="program-section-title">
+              <h3>Current Programs</h3>
+              <span>{currentPrograms.length}</span>
+            </div>
+            {currentPrograms.length ? (
+              <div className="program-card-grid">
+                {currentPrograms.map(renderProgramCard)}
+              </div>
+            ) : (
+              <p className="empty-list-copy">No current programs assigned.</p>
+            )}
+          </div>
+
+          <div className="program-section">
+            <div className="program-section-title">
+              <h3>Past Programs</h3>
+              <span>{pastPrograms.length}</span>
+            </div>
+            {pastPrograms.length ? (
+              <div className="program-card-grid">
+                {pastPrograms.map(renderProgramCard)}
+              </div>
+            ) : (
+              <p className="empty-list-copy">No past programs yet.</p>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="settings-actions" role="tabpanel">
+          <button className="secondary" type="button" onClick={onLogout}>
+            <LogOut size={18} />
+            Log out
+          </button>
+        </div>
+      )}
 
       <p className="app-version">Version {appVersion}</p>
     </section>
@@ -1540,13 +1643,13 @@ function App() {
           {isTrainer && (
             <>
               <button
-                className={view === "athletes" ? "nav-button active" : "nav-button"}
+                className={view === "athletes" ? "nav-button nav-icon active" : "nav-button nav-icon"}
                 onClick={() => setView(view === "athletes" ? "client" : "athletes")}
                 type="button"
-                title="View all athletes"
+                aria-label="View all athletes"
+                title="Athletes"
               >
                 <UsersRound size={17} />
-                Athletes
               </button>
               <button
                 className={view === "programs" ? "nav-button nav-icon active" : "nav-button nav-icon"}
@@ -1572,7 +1675,7 @@ function App() {
       ) : view === "maxes" ? (
         <MaxesPage user={user} />
       ) : view === "settings" ? (
-        <SettingsPage onLogout={handleLogout} />
+        <SettingsPage user={user} programs={programs} workouts={[...importedProgram, ...customWorkouts, ...programWorkouts]} logs={logs} onLogout={handleLogout} />
       ) : view === "programs" ? (
         <ProgramsPage
           programs={programs}
