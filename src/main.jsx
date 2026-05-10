@@ -2350,8 +2350,10 @@ function SettingsPage({ user, programs, workouts, logs, serviceWorkerRegistratio
 function MaxesPage({ user }) {
   const [maxes, setMaxes] = useState(() => loadUserMaxes(user.uid));
   const [saved, setSaved] = useState(false);
+  const [editing, setEditing] = useState(false);
   const maxValue = (key) => maxes[key]?.value ?? maxes[key] ?? "";
   const maxUnit = (key) => maxes[key]?.unit || "kg";
+  const savedMaxFields = maxFields.filter((field) => maxValue(field.key));
 
   function updateMax(key, value, unit = maxUnit(key)) {
     setSaved(false);
@@ -2362,21 +2364,46 @@ function MaxesPage({ user }) {
     event.preventDefault();
     saveUserMaxes(user.uid, maxes);
     setSaved(true);
+    setEditing(false);
   }
 
   return (
     <section className="profile-panel maxes-panel">
-      <div className="profile-header">
-        <span className="profile-avatar">
-          <Trophy size={34} />
-        </span>
+      <div className="profile-header maxes-header">
+        <div className="profile-header-main">
+          <span className="profile-avatar">
+            <Trophy size={34} />
+          </span>
+          <div>
+            <p className="eyebrow">Profile maxes</p>
+            <h2>Training max weights</h2>
+          </div>
+        </div>
+        <button className={editing ? "icon-button active" : "icon-button"} type="button" onClick={() => setEditing(!editing)} aria-label={editing ? "View saved maxes" : "Edit maxes"} title={editing ? "View maxes" : "Edit maxes"}>
+          <PencilLine size={17} />
+        </button>
+      </div>
+
+      <div className="profile-block">
+        <h3>Saved Maxes</h3>
+        {savedMaxFields.length ? (
+          <div className="profile-max-grid">
+            {savedMaxFields.map((field) => (
+              <div className="profile-max" key={field.key}>
+                <span>{field.label}</span>
+                <strong>{maxValue(field.key)}{maxUnit(field.key)}</strong>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="empty-list-copy">No maxes saved yet.</p>
+        )}
         <div>
-          <p className="eyebrow">Profile maxes</p>
-          <h2>Training max weights</h2>
+          {saved && <p className="save-status">Maxes saved.</p>}
         </div>
       </div>
 
-      <form className="maxes-form" onSubmit={persistMaxes}>
+      {editing && <form className="maxes-form" onSubmit={persistMaxes}>
         {maxFields.map((field) => (
           <label className="maxes-field" key={field.key}>
             {field.label}
@@ -2403,7 +2430,7 @@ function MaxesPage({ user }) {
           Save maxes
         </button>
         {saved && <p className="save-status">Maxes saved.</p>}
-      </form>
+      </form>}
     </section>
   );
 }
@@ -2412,9 +2439,18 @@ function GoalsPage({ user, logs }) {
   const [goals, setGoals] = useState(() => loadUserGoals(user.uid));
   const [bodyMetrics, setBodyMetrics] = useState(() => loadBodyMetrics(user.uid));
   const [bodyMetricSettings] = useState(() => loadBodyMetricSettings(user.uid));
+  const [maxes, setMaxes] = useState(() => loadUserMaxes(user.uid));
   const [metricValues, setMetricValues] = useState(() => {
     const latest = loadBodyMetrics(user.uid).at(-1) || {};
     return Object.fromEntries(bodyMetricFields.map((field) => [field.key, latest[field.key] || ""]));
+  });
+  const [maxGoalValues, setMaxGoalValues] = useState(() => {
+    const savedGoals = loadUserGoals(user.uid).filter((goal) => goal.type === "max" && !goal.archivedAt);
+    return Object.fromEntries(maxFields.map((field) => [field.key, savedGoals.find((goal) => goal.lift === field.key)?.target || ""]));
+  });
+  const [metricGoalValues, setMetricGoalValues] = useState(() => {
+    const savedGoals = loadUserGoals(user.uid).filter((goal) => goal.type === "metric" && !goal.archivedAt);
+    return Object.fromEntries(bodyMetricFields.map((field) => [field.key, savedGoals.find((goal) => goal.metric === field.key)?.target || ""]));
   });
   const [title, setTitle] = useState("");
   const [type, setType] = useState("workouts");
@@ -2422,7 +2458,6 @@ function GoalsPage({ user, logs }) {
   const [lift, setLift] = useState("backSquat");
   const [metric, setMetric] = useState("bodyweight");
   const [unit, setUnit] = useState("kg");
-  const maxes = loadUserMaxes(user.uid);
   const activeGoals = goals.filter((goal) => !goal.archivedAt);
   const archivedGoals = goals.filter((goal) => goal.archivedAt);
 
@@ -2442,6 +2477,58 @@ function GoalsPage({ user, logs }) {
     const nextEntries = [...bodyMetrics, entry];
     setBodyMetrics(nextEntries);
     saveBodyMetrics(user.uid, nextEntries);
+  }
+
+  function updateMaxGoalCurrent(key, value, unitValue = maxes[key]?.unit || "kg") {
+    const nextMaxes = { ...maxes, [key]: { value, unit: unitValue } };
+    setMaxes(nextMaxes);
+    saveUserMaxes(user.uid, nextMaxes);
+  }
+
+  function upsertGoal(nextGoal) {
+    const matcher = (goal) => (
+      !goal.archivedAt
+      && goal.type === nextGoal.type
+      && (nextGoal.type === "max" ? goal.lift === nextGoal.lift : goal.metric === nextGoal.metric)
+    );
+    const existingGoal = goals.find(matcher);
+    if (existingGoal) {
+      persistGoals(goals.map((goal) => (goal.id === existingGoal.id ? { ...goal, ...nextGoal } : goal)));
+      return;
+    }
+    persistGoals([{ id: `goal-${Date.now()}`, createdAt: new Date().toISOString(), startDate: new Date().toISOString().slice(0, 10), ...nextGoal }, ...goals]);
+  }
+
+  function saveMaxGoal(field) {
+    const targetValue = Number(maxGoalValues[field.key]);
+    if (!targetValue) return;
+    const unitValue = maxes[field.key]?.unit || "kg";
+    upsertGoal({
+      title: `${field.label} to ${targetValue}${unitValue}`,
+      type: "max",
+      target: targetValue,
+      lift: field.key,
+      metric: "",
+      unit: unitValue,
+      startValue: numericMax(maxes, field.key),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  function saveMetricGoal(field) {
+    const targetValue = Number(metricGoalValues[field.key]);
+    if (!targetValue) return;
+    const latest = metricLatest(bodyMetrics, field.key);
+    upsertGoal({
+      title: `${field.label} to ${targetValue}${field.unit}`,
+      type: "metric",
+      target: targetValue,
+      lift: "",
+      metric: field.key,
+      unit: field.unit,
+      startValue: Number(latest?.[field.key] || 0),
+      updatedAt: new Date().toISOString(),
+    });
   }
 
   function addGoal(event) {
@@ -2535,6 +2622,57 @@ function GoalsPage({ user, logs }) {
         </div>
       </div>
 
+      <div className="goal-section">
+        <div className="program-section-title">
+          <h3>Max Goals</h3>
+          <span>{maxFields.length}</span>
+        </div>
+        <div className="goal-value-grid">
+          {maxFields.map((field) => {
+            const currentValue = maxes[field.key]?.value ?? maxes[field.key] ?? "";
+            const currentUnit = maxes[field.key]?.unit || "kg";
+            const maxGoal = activeGoals.find((goal) => goal.type === "max" && goal.lift === field.key);
+            const progress = maxGoal ? goalProgress(maxGoal, logs, maxes) : null;
+            return (
+              <div className="goal-value-card" key={field.key}>
+                <div className="metric-card-heading">
+                  <div>
+                    <p className="eyebrow">Strength</p>
+                    <h3>{field.label}</h3>
+                  </div>
+                  <strong>{currentValue ? `${currentValue}${currentUnit}` : "-"}</strong>
+                </div>
+                {maxGoal && (
+                  <div className="progress-meter" aria-label={`${progress.percent}% complete`}>
+                    <span style={{ width: `${progress.percent}%` }} />
+                  </div>
+                )}
+                <div className="current-goal-grid">
+                  <label>
+                    Current
+                    <span className="max-input-row">
+                      <input value={currentValue} onChange={(event) => updateMaxGoalCurrent(field.key, event.target.value, currentUnit)} inputMode="decimal" placeholder="Current" />
+                      <select value={currentUnit} onChange={(event) => updateMaxGoalCurrent(field.key, currentValue, event.target.value)} aria-label={`${field.label} unit`}>
+                        <option value="kg">kg</option>
+                        <option value="lb">lb</option>
+                      </select>
+                    </span>
+                  </label>
+                  <label>
+                    Goal
+                    <input value={maxGoalValues[field.key]} onChange={(event) => setMaxGoalValues({ ...maxGoalValues, [field.key]: event.target.value })} inputMode="decimal" placeholder="Goal" />
+                  </label>
+                </div>
+                <button className="quiet-button" type="button" onClick={() => saveMaxGoal(field)}>
+                  <Save size={16} />
+                  Save goal
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       <form className="metric-entry-form" onSubmit={saveMetricEntry}>
         {bodyMetricFields.map((field) => {
           const setting = bodyMetricSettings[field.key] || defaultBodyMetricSettings[field.key];
@@ -2563,9 +2701,17 @@ function GoalsPage({ user, logs }) {
                 </>
               )}
               <label>
-                Update
+                Current
                 <input value={metricValues[field.key]} onChange={(event) => setMetricValues({ ...metricValues, [field.key]: event.target.value })} inputMode="decimal" placeholder={field.unit} />
               </label>
+              <label>
+                Goal
+                <input value={metricGoalValues[field.key]} onChange={(event) => setMetricGoalValues({ ...metricGoalValues, [field.key]: event.target.value })} inputMode="decimal" placeholder={field.unit} />
+              </label>
+              <button className="quiet-button" type="button" onClick={() => saveMetricGoal(field)}>
+                <Save size={16} />
+                Save goal
+              </button>
             </div>
           );
         })}
