@@ -837,6 +837,23 @@ select:focus {
   gap: 14px;
 }
 
+.setup-modal-panel {
+  width: min(100%, 560px);
+}
+
+.setup-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.setup-form button,
+.setup-form .form-error {
+  grid-column: 1 / -1;
+}
+
+.setup-skip-button {
+  justify-self: center;
+}
+
 .preset-grid {
   display: grid;
   gap: 10px;
@@ -1122,6 +1139,94 @@ select:focus {
 
 .program-note {
   margin: 0;
+}
+
+.store-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.store-card {
+  display: grid;
+  gap: 14px;
+  align-content: space-between;
+  min-height: 230px;
+  padding: 16px;
+  color: #f3eefb;
+  background: #14101a;
+  border: 1px solid #3a2948;
+  border-radius: 8px;
+}
+
+.store-card h3,
+.store-card p {
+  margin: 0;
+}
+
+.store-card h3 {
+  font-size: 1.16rem;
+}
+
+.store-card p {
+  color: #b9a9c9;
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.store-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.store-card-footer strong {
+  color: #fff;
+  font-size: 1.35rem;
+}
+
+.stored-workout-list {
+  display: grid;
+  gap: 10px;
+}
+
+.stored-workout-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  padding: 14px;
+  color: #f3eefb;
+  text-align: left;
+  background: #18111f;
+  border: 1px solid #3a2948;
+  border-radius: 8px;
+}
+
+.stored-workout-card:hover,
+.stored-workout-card:focus-visible {
+  border-color: #8b5cf6;
+  outline: none;
+}
+
+.stored-workout-card h3,
+.stored-workout-card p {
+  margin: 0;
+}
+
+.stored-workout-card h3 {
+  font-size: 1rem;
+}
+
+.stored-workout-card span {
+  display: block;
+  margin-top: 5px;
+  color: #b9a9c9;
+  font-size: 0.86rem;
+  font-weight: 800;
 }
 
 .progress-list {
@@ -1422,6 +1527,66 @@ select:focus {
   align-content: start;
 }
 
+.settings-option-list {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-option {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 68px;
+  padding: 12px 14px;
+  color: #f3eefb;
+  text-align: left;
+  background: #14101a;
+  border: 1px solid #3a2948;
+  border-radius: 8px;
+}
+
+.settings-option:hover,
+.settings-option:focus-visible {
+  background: #201728;
+  border-color: #7c5aa0;
+}
+
+.settings-option-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  color: #f3eefb;
+  background: #251b2f;
+  border: 1px solid #49335d;
+  border-radius: 8px;
+}
+
+.settings-option strong,
+.settings-option small {
+  display: block;
+}
+
+.settings-option strong {
+  font-size: 1rem;
+}
+
+.settings-option small {
+  margin-top: 3px;
+  color: #b9a9c9;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.settings-section-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  justify-self: start;
+}
+
 .settings-tabs {
   display: flex;
   gap: 8px;
@@ -1606,6 +1771,8 @@ select:focus {
   .exercise-row,
   .creator-form,
   .program-card-grid,
+  .store-grid,
+  .setup-form,
   .goal-card-grid,
   .goal-form,
   .metric-entry-form,

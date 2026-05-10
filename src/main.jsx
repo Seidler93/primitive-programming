@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import {
   CalendarDays,
   Bell,
+  ChevronRight,
   CheckCircle2,
   ClipboardList,
   Clock,
@@ -15,6 +16,7 @@ import {
   Plus,
   Save,
   Settings,
+  ShoppingBag,
   Target,
   TrendingUp,
   Trophy,
@@ -56,11 +58,11 @@ const maxFields = [
 
 const appVersion = packageInfo.version;
 const defaultSelectedDate = "2026-05-11";
-const routeViews = new Set(["client", "workout-list", "workout", "profile", "edit-profile", "maxes", "goals", "settings", "programs", "athletes"]);
+const routeViews = new Set(["client", "workout-list", "workout", "profile", "edit-profile", "maxes", "goals", "settings", "settings-account", "settings-programs", "settings-metrics", "settings-updates", "store", "stored-programs", "stored-workouts", "programs", "athletes"]);
 const bodyMetricFields = [
-  { key: "bodyweight", label: "Bodyweight", unit: "lb" },
+  { key: "bodyweight", label: "Bodyweight", unit: "lb", unitType: "weight" },
   { key: "bodyFat", label: "Body fat", unit: "%" },
-  { key: "muscleMass", label: "Muscle mass", unit: "lb" },
+  { key: "muscleMass", label: "Muscle mass", unit: "lb", unitType: "weight" },
 ];
 const defaultBodyMetricSettings = Object.fromEntries(bodyMetricFields.map((field) => [
   field.key,
@@ -81,6 +83,35 @@ const warmupPresets = [
     id: "upper-body",
     title: "Upper body",
     exercises: ["Band pull-aparts", "Scap push-ups", "Empty bar press"],
+  },
+];
+const settingsSections = [
+  { id: "account", title: "Account", eyebrow: "Device and login", icon: Settings },
+  { id: "programs", title: "Programs", eyebrow: "History and progress", icon: ClipboardList },
+  { id: "metrics", title: "Metrics", eyebrow: "Profile data display", icon: TrendingUp },
+  { id: "updates", title: "What's new", eyebrow: "Version and releases", icon: Bell },
+];
+const storePrograms = [
+  {
+    id: "strength-base",
+    name: "Strength Base",
+    eyebrow: "8 week program",
+    price: "$49",
+    description: "Build squat, press, and pull volume with structured strength days.",
+  },
+  {
+    id: "olympic-primer",
+    name: "Olympic Primer",
+    eyebrow: "6 week program",
+    price: "$39",
+    description: "Technique-first snatch and clean and jerk work with focused accessories.",
+  },
+  {
+    id: "complete-training",
+    name: "Complete Training",
+    eyebrow: "12 week program",
+    price: "$79",
+    description: "Full training calendar with strength, weightlifting, conditioning, and warm-ups.",
   },
 ];
 
@@ -168,6 +199,25 @@ function saveUserMaxes(userId, maxes) {
   localStorage.setItem(userMaxesKey(userId), JSON.stringify(maxes));
 }
 
+function userWeightUnitKey(userId) {
+  return `primitive-programming:weight-unit:${userId}`;
+}
+
+function loadUserWeightUnit(userId) {
+  try {
+    const stored = localStorage.getItem(userWeightUnitKey(userId));
+    if (stored === "kg" || stored === "lb") return stored;
+    const firstSavedUnit = Object.values(loadUserMaxes(userId)).find((max) => max?.unit === "kg" || max?.unit === "lb")?.unit;
+    return firstSavedUnit || "kg";
+  } catch {
+    return "kg";
+  }
+}
+
+function saveUserWeightUnit(userId, unit) {
+  localStorage.setItem(userWeightUnitKey(userId), unit === "lb" ? "lb" : "kg");
+}
+
 function userGoalsKey(userId) {
   return `primitive-programming:goals:${userId}`;
 }
@@ -242,6 +292,7 @@ function mergeUserProfile(user, profile = {}) {
   if (!user?.uid) return user;
   return {
     ...user,
+    ...profile,
     uid: user.uid,
     email: profile.email || user.email || "",
     displayName: profile.displayName || user.displayName || "",
@@ -439,12 +490,12 @@ function setRows(item) {
   return [{ key: `${item.id}:1`, reps: /single/i.test(text) ? "1" : item.prescription }];
 }
 
-function prescribedPreview(item, maxes) {
+function prescribedPreview(item, maxes, weightUnit) {
   const maxKey = inferMaxKey(item.exercise, `${item.prescription} ${item.intensity}`);
   const max = Number(maxes[maxKey]?.value ?? maxes[maxKey]);
   const percents = percentages(item);
   if (!maxKey || !max || percents.length === 0) return "";
-  const unit = maxes[maxKey]?.unit || "";
+  const unit = weightUnit || maxes[maxKey]?.unit || "";
   return percents
     .slice(0, 2)
     .map(({ low, high }) => {
@@ -486,7 +537,7 @@ function numericMax(maxes, key) {
   return Number(max?.value ?? max ?? 0) || 0;
 }
 
-function goalProgress(goal, logs, maxes) {
+function goalProgress(goal, logs, maxes, weightUnit) {
   const target = Math.max(1, Number(goal.target) || 1);
   let current = 0;
   let label = "";
@@ -498,7 +549,7 @@ function goalProgress(goal, logs, maxes) {
     label = `${current || 0}/${target}${goal.unit || ""}`;
   } else if (goal.type === "max") {
     current = numericMax(maxes, goal.lift);
-    const unit = maxes[goal.lift]?.unit || goal.unit || "kg";
+    const unit = weightUnit || maxes[goal.lift]?.unit || goal.unit || "kg";
     label = `${current || 0}/${target}${unit}`;
   } else {
     current = Object.values(logs).filter((log) => {
@@ -515,6 +566,10 @@ function goalProgress(goal, logs, maxes) {
     percent: Math.min(100, Math.round((current / target) * 100)),
     complete: current >= target,
   };
+}
+
+function bodyMetricUnit(field, weightUnit) {
+  return field.unitType === "weight" ? weightUnit : field.unit;
 }
 
 function metricLatest(entries, key) {
@@ -680,6 +735,13 @@ function WorkoutListView({ date, workoutGroups, logs, programs, onOpenWorkout, o
           <ArrowLeft size={18} />
         </button>
       </div>
+      <button className="add-workout-button" type="button" onClick={() => setShowAddWorkoutOptions(true)}>
+        <Plus size={20} />
+        <div>
+          <h3>Create workout</h3>
+          <span>New, stored, or AI-generated workout</span>
+        </div>
+      </button>
       {hasPlannedWorkout ? (
         <div className="workout-card-list">
           {workoutGroups.map((group) => (
@@ -696,13 +758,6 @@ function WorkoutListView({ date, workoutGroups, logs, programs, onOpenWorkout, o
       ) : (
         <p className="empty-list-copy">No workouts are scheduled for this day.</p>
       )}
-      <button className="add-workout-button" type="button" onClick={() => setShowAddWorkoutOptions(true)}>
-        <Plus size={20} />
-        <div>
-          <h3>Add workout</h3>
-          <span>New, stored, or AI-generated workout</span>
-        </div>
-      </button>
       {showAddWorkoutOptions && (
         <div className="modal-backdrop" role="presentation">
           <div className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="add-workout-title">
@@ -788,8 +843,8 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, o
   const [openExerciseMenu, setOpenExerciseMenu] = useState("");
   const [collapsedExercises, setCollapsedExercises] = useState({});
   const requiredMaxes = useMemo(() => needsMaxes(workout), [workout]);
+  const weightUnit = loadUserWeightUnit(user.uid);
   const maxValue = (key) => maxes[key]?.value ?? maxes[key] ?? "";
-  const maxUnit = (key) => maxes[key]?.unit || "kg";
   const missingMaxes = requiredMaxes.filter((key) => !Number(maxValue(key)));
   const workoutPhase = workout[0]?.phase || "Custom workout";
   const workoutTitle = workout[0] ? `${workout[0].focus} - Week ${workout[0].week}` : "Create workout";
@@ -1109,18 +1164,10 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, o
                     <span className="max-input-row">
                       <input
                         value={maxValue(key)}
-                        onChange={(event) => setMaxes({ ...maxes, [key]: { value: event.target.value, unit: maxUnit(key) } })}
+                        onChange={(event) => setMaxes({ ...maxes, [key]: { value: event.target.value, unit: weightUnit } })}
                         inputMode="decimal"
-                        placeholder="Max"
+                        placeholder={`Max (${weightUnit})`}
                       />
-                      <select
-                        value={maxUnit(key)}
-                        onChange={(event) => setMaxes({ ...maxes, [key]: { value: maxValue(key), unit: event.target.value } })}
-                        aria-label={`${field.label} unit`}
-                      >
-                        <option value="kg">kg</option>
-                        <option value="lb">lb</option>
-                      </select>
                     </span>
                   </label>
                 );
@@ -1346,7 +1393,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, o
                           value={loads[set.key] ?? (set.key.endsWith(":1") ? loads[item.id] || "" : "")}
                           onChange={(event) => setLoads({ ...loads, [set.key]: event.target.value })}
                           onBlur={() => persist()}
-                          placeholder={prescribedPreview(displayItem, maxes) || "Actual"}
+                          placeholder={prescribedPreview(displayItem, maxes, weightUnit) || "Actual"}
                         />
                       )}
                       <input
@@ -1867,6 +1914,115 @@ function ProgramsPage({ programs, workouts, logs, onProgramCreated, onWorkoutCre
   );
 }
 
+function StorePage() {
+  return (
+    <section className="programs-panel store-panel">
+      <div className="section-heading">
+        <ShoppingBag size={20} />
+        <h2>Store</h2>
+      </div>
+
+      <div className="store-grid">
+        {storePrograms.map((program) => (
+          <article className="store-card" key={program.id}>
+            <div>
+              <p className="eyebrow">{program.eyebrow}</p>
+              <h3>{program.name}</h3>
+            </div>
+            <p>{program.description}</p>
+            <div className="store-card-footer">
+              <strong>{program.price}</strong>
+              <button className="primary" type="button">
+                <ShoppingBag size={17} />
+                Buy program
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function StoredProgramsPage({ programs, workouts, logs }) {
+  const defaultProgram = { id: "default", name: "Default Program", athleteEmail: "dev-athlete@primitive.local" };
+  const programOptions = [defaultProgram, ...programs.filter((program) => program.id !== "default")];
+
+  return (
+    <section className="programs-panel">
+      <div className="section-heading">
+        <ClipboardList size={20} />
+        <h2>Programs</h2>
+      </div>
+
+      <div className="program-card-grid">
+        {programOptions.map((program) => {
+          const programWorkouts = workouts.filter((item) => (item.programId || "default") === program.id);
+          const summary = progressSummary(programWorkouts, logs);
+          return (
+            <article className="program-card" key={program.id}>
+              <div>
+                <p className="eyebrow">{programWorkouts.length} saved workout{programWorkouts.length === 1 ? "" : "s"}</p>
+                <h4>{program.name}</h4>
+              </div>
+              <div className="progress-meter" aria-label={`${summary.percent}% complete`}>
+                <span style={{ width: `${summary.percent}%` }} />
+              </div>
+              <dl className="program-stats">
+                <div>
+                  <dt>Complete</dt>
+                  <dd>{summary.completed}/{summary.total}</dd>
+                </div>
+                <div>
+                  <dt>Next</dt>
+                  <dd>{summary.nextDate ? formatDate(summary.nextDate) : "All caught up"}</dd>
+                </div>
+              </dl>
+              {program.goal && <p className="program-note">{program.goal}</p>}
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function StoredWorkoutsPage({ workouts, logs, programs, onOpenWorkout }) {
+  const programOptions = [{ id: "default", name: "Default Program" }, ...programs.filter((program) => program.id !== "default")];
+  const sortedWorkouts = groupWorkouts(workouts).sort((a, b) => `${a.date || ""}`.localeCompare(`${b.date || ""}`));
+
+  return (
+    <section className="programs-panel">
+      <div className="section-heading">
+        <Dumbbell size={20} />
+        <h2>Workouts</h2>
+      </div>
+
+      {sortedWorkouts.length ? (
+        <div className="stored-workout-list">
+          {sortedWorkouts.map((workout) => {
+            const programName = programOptions.find((program) => program.id === (workout.programId || "default"))?.name || "Default Program";
+            const logKey = workoutLogKey(workout.date, workout.key);
+            const completed = Boolean(logs[logKey]?.completed || logs[workout.date]?.completed);
+            return (
+              <button className="stored-workout-card" key={workout.key} type="button" onClick={() => workout.date && onOpenWorkout(workout.date, workout.key)}>
+                <div>
+                  <p className="eyebrow">{workout.date ? formatDate(workout.date) : "Unscheduled"} | {programName}</p>
+                  <h3>{workout.title}</h3>
+                  <span>{workout.items.length} exercise{workout.items.length === 1 ? "" : "s"} | {workout.week ? `Week ${workout.week}` : workout.phase}</span>
+                </div>
+                {completed ? <CheckCircle2 size={20} /> : <ChevronRight size={20} />}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="empty-list-copy">No stored workouts yet.</p>
+      )}
+    </section>
+  );
+}
+
 function AthletesPage({ programs, workouts, logs }) {
   const defaultProgram = { id: "default", name: "Default Program", athleteEmail: "dev-athlete@primitive.local" };
   const programOptions = [defaultProgram, ...programs.filter((program) => program.id !== "default")];
@@ -2109,9 +2265,171 @@ function ProfileEditPage({ user, onProfileSaved }) {
   );
 }
 
-function SettingsPage({ user, programs, workouts, logs, serviceWorkerRegistration, updateRegistration, onApplyUpdate, onLogout }) {
-  const [activeTab, setActiveTab] = useState("account");
+function ProfileSetupModal({ user, onComplete }) {
+  const initialUnit = loadUserWeightUnit(user.uid);
+  const [measurementSystem, setMeasurementSystem] = useState(initialUnit === "lb" ? "imperial" : "metric");
+  const [gender, setGender] = useState(user.gender || "");
+  const [height, setHeight] = useState(user.height || "");
+  const [weight, setWeight] = useState(user.bodyweight || "");
+  const [experienceLevel, setExperienceLevel] = useState(user.experienceLevel || "");
+  const [trainingGoal, setTrainingGoal] = useState(user.trainingGoal || "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const heightUnit = measurementSystem === "imperial" ? "in" : "cm";
+  const weightUnit = measurementSystem === "imperial" ? "lb" : "kg";
+
+  async function finishSetup(event) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    const profile = {
+      profileSetupCompleted: true,
+      profileSetupCompletedAt: new Date().toISOString(),
+      measurementSystem,
+      gender,
+      height: height.trim(),
+      heightUnit,
+      bodyweight: weight.trim(),
+      bodyweightUnit: weightUnit,
+      experienceLevel,
+      trainingGoal: trainingGoal.trim(),
+    };
+    try {
+      saveUserWeightUnit(user.uid, weightUnit);
+      if (weight.trim()) {
+        const entries = loadBodyMetrics(user.uid);
+        saveBodyMetrics(user.uid, [
+          ...entries,
+          {
+            id: `setup-${Date.now()}`,
+            date: new Date().toISOString(),
+            bodyweight: Number(weight) || "",
+            bodyFat: "",
+            muscleMass: "",
+          },
+        ]);
+      }
+      const savedProfile = await saveUserProfile(user.uid, profile);
+      onComplete(savedProfile);
+    } catch {
+      setError("Could not save setup details.");
+      setSaving(false);
+    }
+  }
+
+  async function skipSetup() {
+    setSaving(true);
+    setError("");
+    try {
+      const savedProfile = await saveUserProfile(user.uid, {
+        profileSetupCompleted: true,
+        profileSetupSkippedAt: new Date().toISOString(),
+      });
+      onComplete(savedProfile);
+    } catch {
+      setError("Could not skip setup right now.");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <div className="modal-panel setup-modal-panel" role="dialog" aria-modal="true" aria-labelledby="profile-setup-title">
+        <div>
+          <p className="eyebrow">Profile setup</p>
+          <h2 id="profile-setup-title">Finish setting up your profile</h2>
+        </div>
+        <form className="modal-form setup-form" onSubmit={finishSetup}>
+          <label>
+            Metric preference
+            <select value={measurementSystem} onChange={(event) => setMeasurementSystem(event.target.value)}>
+              <option value="metric">Metric (kg, cm)</option>
+              <option value="imperial">Imperial (lb, in)</option>
+            </select>
+          </label>
+          <label>
+            Gender
+            <select value={gender} onChange={(event) => setGender(event.target.value)}>
+              <option value="">Prefer not to say</option>
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+              <option value="nonbinary">Non-binary</option>
+              <option value="self-described">Self-described</option>
+            </select>
+          </label>
+          <label>
+            Height
+            <input value={height} onChange={(event) => setHeight(event.target.value)} inputMode="decimal" placeholder={heightUnit} />
+          </label>
+          <label>
+            Weight
+            <input value={weight} onChange={(event) => setWeight(event.target.value)} inputMode="decimal" placeholder={weightUnit} />
+          </label>
+          <label>
+            Training experience
+            <select value={experienceLevel} onChange={(event) => setExperienceLevel(event.target.value)}>
+              <option value="">Optional</option>
+              <option value="beginner">Beginner</option>
+              <option value="intermediate">Intermediate</option>
+              <option value="advanced">Advanced</option>
+            </select>
+          </label>
+          <label>
+            Main goal
+            <input value={trainingGoal} onChange={(event) => setTrainingGoal(event.target.value)} placeholder="Strength, weightlifting, conditioning..." />
+          </label>
+          <button className="primary" type="submit" disabled={saving}>
+            {saving ? "Saving..." : "Save profile setup"}
+          </button>
+          <button className="text-button setup-skip-button" type="button" onClick={skipSetup} disabled={saving}>
+            Skip for now
+          </button>
+          {error && <p className="form-error">{error}</p>}
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function SettingsPage({ onOpenSection }) {
+  return (
+    <section className="profile-panel settings-panel">
+      <div className="profile-header">
+        <span className="profile-avatar">
+          <Settings size={34} />
+        </span>
+        <div>
+          <p className="eyebrow">Profile settings</p>
+          <h2>Settings</h2>
+        </div>
+      </div>
+
+      <div className="settings-option-list" aria-label="Settings options">
+        {settingsSections.map((section) => {
+          const SectionIcon = section.icon;
+          return (
+            <button className="settings-option" type="button" key={section.id} onClick={() => onOpenSection(section.id)}>
+              <span className="settings-option-icon">
+                <SectionIcon size={19} />
+              </span>
+              <span>
+                <strong>{section.title}</strong>
+                <small>{section.eyebrow}</small>
+              </span>
+              <ChevronRight size={18} />
+            </button>
+          );
+        })}
+      </div>
+
+      <p className="app-version">Version {appVersion}</p>
+    </section>
+  );
+}
+
+function SettingsSectionPage({ section, user, programs, workouts, logs, serviceWorkerRegistration, updateRegistration, onApplyUpdate, onLogout, onBack }) {
   const [bodyMetricSettings, setBodyMetricSettings] = useState(() => loadBodyMetricSettings(user.uid));
+  const [weightUnit, setWeightUnit] = useState(() => loadUserWeightUnit(user.uid));
   const [notificationState, setNotificationState] = useState(() => {
     if (!("Notification" in window)) return { status: "unsupported", message: "This browser does not support notifications." };
     return { status: Notification.permission, message: Notification.permission === "granted" ? "Notifications are allowed on this device." : "Notifications are off on this device." };
@@ -2205,39 +2523,33 @@ function SettingsPage({ user, programs, workouts, logs, serviceWorkerRegistratio
     saveBodyMetricSettings(user.uid, nextSettings);
   }
 
+  function updateWeightUnit(unit) {
+    setWeightUnit(unit);
+    saveUserWeightUnit(user.uid, unit);
+  }
+
+  const sectionConfig = settingsSections.find((item) => item.id === section) || settingsSections[0];
+  const SectionIcon = sectionConfig.icon;
+
   return (
     <section className="profile-panel settings-panel">
       <div className="profile-header">
         <span className="profile-avatar">
-          <Settings size={34} />
+          <SectionIcon size={34} />
         </span>
         <div>
-          <p className="eyebrow">Profile settings</p>
-          <h2>Settings</h2>
+          <p className="eyebrow">Settings</p>
+          <h2>{sectionConfig.title}</h2>
         </div>
       </div>
 
-      <div className="settings-tabs" role="tablist" aria-label="Settings sections">
-        <button className={activeTab === "account" ? "settings-tab active" : "settings-tab"} type="button" onClick={() => setActiveTab("account")} role="tab" aria-selected={activeTab === "account"}>
-          <Settings size={17} />
-          Account
-        </button>
-        <button className={activeTab === "programs" ? "settings-tab active" : "settings-tab"} type="button" onClick={() => setActiveTab("programs")} role="tab" aria-selected={activeTab === "programs"}>
-          <ClipboardList size={17} />
-          Programs
-        </button>
-        <button className={activeTab === "metrics" ? "settings-tab active" : "settings-tab"} type="button" onClick={() => setActiveTab("metrics")} role="tab" aria-selected={activeTab === "metrics"}>
-          <TrendingUp size={17} />
-          Metrics
-        </button>
-        <button className={activeTab === "updates" ? "settings-tab active" : "settings-tab"} type="button" onClick={() => setActiveTab("updates")} role="tab" aria-selected={activeTab === "updates"}>
-          <Bell size={17} />
-          What's new
-        </button>
-      </div>
+      <button className="text-button settings-section-back" type="button" onClick={onBack}>
+        <ArrowLeft size={17} />
+        Settings
+      </button>
 
-      {activeTab === "programs" ? (
-        <div className="settings-programs" role="tabpanel">
+      {section === "programs" ? (
+        <div className="settings-programs">
           <div className="program-section">
             <div className="program-section-title">
               <h3>Current Programs</h3>
@@ -2266,8 +2578,19 @@ function SettingsPage({ user, programs, workouts, logs, serviceWorkerRegistratio
             )}
           </div>
         </div>
-      ) : activeTab === "metrics" ? (
-        <div className="settings-metrics" role="tabpanel">
+      ) : section === "metrics" ? (
+        <div className="settings-metrics">
+          <div className="settings-block metric-settings-row">
+            <div>
+              <p className="eyebrow">Weight unit</p>
+              <h3>Training weights</h3>
+              <p>Used for maxes, goals, workout loads, and bodyweight metrics.</p>
+            </div>
+            <select value={weightUnit} onChange={(event) => updateWeightUnit(event.target.value)} aria-label="Weight unit">
+              <option value="kg">kg</option>
+              <option value="lb">lb</option>
+            </select>
+          </div>
           {bodyMetricFields.map((field) => {
             const setting = bodyMetricSettings[field.key] || defaultBodyMetricSettings[field.key];
             return (
@@ -2293,8 +2616,8 @@ function SettingsPage({ user, programs, workouts, logs, serviceWorkerRegistratio
             );
           })}
         </div>
-      ) : activeTab === "updates" ? (
-        <div className="settings-updates" role="tabpanel">
+      ) : section === "updates" ? (
+        <div className="settings-updates">
           <div className="whats-new-card">
             <div>
               <p className="eyebrow">Version {appVersion}</p>
@@ -2311,7 +2634,7 @@ function SettingsPage({ user, programs, workouts, logs, serviceWorkerRegistratio
           </div>
         </div>
       ) : (
-        <div className="settings-actions" role="tabpanel">
+        <div className="settings-actions">
           <div className="settings-block">
             <div>
               <p className="eyebrow">Device</p>
@@ -2351,13 +2674,13 @@ function MaxesPage({ user }) {
   const [maxes, setMaxes] = useState(() => loadUserMaxes(user.uid));
   const [saved, setSaved] = useState(false);
   const [editing, setEditing] = useState(false);
+  const weightUnit = loadUserWeightUnit(user.uid);
   const maxValue = (key) => maxes[key]?.value ?? maxes[key] ?? "";
-  const maxUnit = (key) => maxes[key]?.unit || "kg";
   const savedMaxFields = maxFields.filter((field) => maxValue(field.key));
 
-  function updateMax(key, value, unit = maxUnit(key)) {
+  function updateMax(key, value) {
     setSaved(false);
-    setMaxes({ ...maxes, [key]: { value, unit } });
+    setMaxes({ ...maxes, [key]: { value, unit: weightUnit } });
   }
 
   function persistMaxes(event) {
@@ -2391,7 +2714,7 @@ function MaxesPage({ user }) {
             {savedMaxFields.map((field) => (
               <div className="profile-max" key={field.key}>
                 <span>{field.label}</span>
-                <strong>{maxValue(field.key)}{maxUnit(field.key)}</strong>
+                <strong>{maxValue(field.key)}{weightUnit}</strong>
               </div>
             ))}
           </div>
@@ -2412,16 +2735,8 @@ function MaxesPage({ user }) {
                 value={maxValue(field.key)}
                 onChange={(event) => updateMax(field.key, event.target.value)}
                 inputMode="decimal"
-                placeholder="Max"
+                placeholder={`Max (${weightUnit})`}
               />
-              <select
-                value={maxUnit(field.key)}
-                onChange={(event) => updateMax(field.key, maxValue(field.key), event.target.value)}
-                aria-label={`${field.label} unit`}
-              >
-                <option value="kg">kg</option>
-                <option value="lb">lb</option>
-              </select>
             </span>
           </label>
         ))}
@@ -2457,7 +2772,7 @@ function GoalsPage({ user, logs }) {
   const [target, setTarget] = useState("");
   const [lift, setLift] = useState("backSquat");
   const [metric, setMetric] = useState("bodyweight");
-  const [unit, setUnit] = useState("kg");
+  const weightUnit = loadUserWeightUnit(user.uid);
   const activeGoals = goals.filter((goal) => !goal.archivedAt);
   const archivedGoals = goals.filter((goal) => goal.archivedAt);
 
@@ -2479,8 +2794,8 @@ function GoalsPage({ user, logs }) {
     saveBodyMetrics(user.uid, nextEntries);
   }
 
-  function updateMaxGoalCurrent(key, value, unitValue = maxes[key]?.unit || "kg") {
-    const nextMaxes = { ...maxes, [key]: { value, unit: unitValue } };
+  function updateMaxGoalCurrent(key, value) {
+    const nextMaxes = { ...maxes, [key]: { value, unit: weightUnit } };
     setMaxes(nextMaxes);
     saveUserMaxes(user.uid, nextMaxes);
   }
@@ -2502,14 +2817,13 @@ function GoalsPage({ user, logs }) {
   function saveMaxGoal(field) {
     const targetValue = Number(maxGoalValues[field.key]);
     if (!targetValue) return;
-    const unitValue = maxes[field.key]?.unit || "kg";
     upsertGoal({
-      title: `${field.label} to ${targetValue}${unitValue}`,
+      title: `${field.label} to ${targetValue}${weightUnit}`,
       type: "max",
       target: targetValue,
       lift: field.key,
       metric: "",
-      unit: unitValue,
+      unit: weightUnit,
       startValue: numericMax(maxes, field.key),
       updatedAt: new Date().toISOString(),
     });
@@ -2519,13 +2833,14 @@ function GoalsPage({ user, logs }) {
     const targetValue = Number(metricGoalValues[field.key]);
     if (!targetValue) return;
     const latest = metricLatest(bodyMetrics, field.key);
+    const unitValue = bodyMetricUnit(field, weightUnit);
     upsertGoal({
-      title: `${field.label} to ${targetValue}${field.unit}`,
+      title: `${field.label} to ${targetValue}${unitValue}`,
       type: "metric",
       target: targetValue,
       lift: "",
       metric: field.key,
-      unit: field.unit,
+      unit: unitValue,
       startValue: Number(latest?.[field.key] || 0),
       updatedAt: new Date().toISOString(),
     });
@@ -2538,15 +2853,16 @@ function GoalsPage({ user, logs }) {
     const field = maxFields.find((item) => item.key === lift);
     const metricField = bodyMetricFields.find((item) => item.key === metric);
     const latestMetric = metricLatest(bodyMetrics, metric);
+    const metricUnit = bodyMetricUnit(metricField, weightUnit);
     const nextGoal = {
       id: `goal-${Date.now()}`,
-      title: title.trim() || (type === "metric" ? `${metricField.label} to ${numericTarget}${metricField.unit}` : type === "max" ? `${field.label} to ${numericTarget}${unit}` : `Complete ${numericTarget} workouts`),
+      title: title.trim() || (type === "metric" ? `${metricField.label} to ${numericTarget}${metricUnit}` : type === "max" ? `${field.label} to ${numericTarget}${weightUnit}` : `Complete ${numericTarget} workouts`),
       type,
       target: numericTarget,
       lift: type === "max" ? lift : "",
       metric: type === "metric" ? metric : "",
       startValue: type === "metric" ? Number(latestMetric?.[metric] || 0) : "",
-      unit: type === "max" ? unit : "",
+      unit: type === "max" ? weightUnit : type === "metric" ? metricUnit : "",
       startDate: new Date().toISOString().slice(0, 10),
       createdAt: new Date().toISOString(),
     };
@@ -2574,9 +2890,9 @@ function GoalsPage({ user, logs }) {
     const progress = goal.type === "metric"
       ? {
           ...(metricGoalProgress(goal, latestMetric?.[goal.metric]) || { percent: 0, complete: false }),
-          label: `${latestMetric?.[goal.metric] || 0}/${goal.target}${bodyMetricFields.find((field) => field.key === goal.metric)?.unit || ""}`,
+          label: `${latestMetric?.[goal.metric] || 0}/${goal.target}${bodyMetricUnit(bodyMetricFields.find((field) => field.key === goal.metric) || {}, weightUnit)}`,
         }
-      : goalProgress(goal, logs, maxes);
+      : goalProgress(goal, logs, maxes, weightUnit);
     const liftLabel = maxFields.find((field) => field.key === goal.lift)?.label;
     const metricLabel = bodyMetricFields.find((field) => field.key === goal.metric)?.label;
     return (
@@ -2630,9 +2946,8 @@ function GoalsPage({ user, logs }) {
         <div className="goal-value-grid">
           {maxFields.map((field) => {
             const currentValue = maxes[field.key]?.value ?? maxes[field.key] ?? "";
-            const currentUnit = maxes[field.key]?.unit || "kg";
             const maxGoal = activeGoals.find((goal) => goal.type === "max" && goal.lift === field.key);
-            const progress = maxGoal ? goalProgress(maxGoal, logs, maxes) : null;
+            const progress = maxGoal ? goalProgress(maxGoal, logs, maxes, weightUnit) : null;
             return (
               <div className="goal-value-card" key={field.key}>
                 <div className="metric-card-heading">
@@ -2640,7 +2955,7 @@ function GoalsPage({ user, logs }) {
                     <p className="eyebrow">Strength</p>
                     <h3>{field.label}</h3>
                   </div>
-                  <strong>{currentValue ? `${currentValue}${currentUnit}` : "-"}</strong>
+                  <strong>{currentValue ? `${currentValue}${weightUnit}` : "-"}</strong>
                 </div>
                 {maxGoal && (
                   <div className="progress-meter" aria-label={`${progress.percent}% complete`}>
@@ -2651,11 +2966,7 @@ function GoalsPage({ user, logs }) {
                   <label>
                     Current
                     <span className="max-input-row">
-                      <input value={currentValue} onChange={(event) => updateMaxGoalCurrent(field.key, event.target.value, currentUnit)} inputMode="decimal" placeholder="Current" />
-                      <select value={currentUnit} onChange={(event) => updateMaxGoalCurrent(field.key, currentValue, event.target.value)} aria-label={`${field.label} unit`}>
-                        <option value="kg">kg</option>
-                        <option value="lb">lb</option>
-                      </select>
+                      <input value={currentValue} onChange={(event) => updateMaxGoalCurrent(field.key, event.target.value)} inputMode="decimal" placeholder={`Current (${weightUnit})`} />
                     </span>
                   </label>
                   <label>
@@ -2676,6 +2987,7 @@ function GoalsPage({ user, logs }) {
       <form className="metric-entry-form" onSubmit={saveMetricEntry}>
         {bodyMetricFields.map((field) => {
           const setting = bodyMetricSettings[field.key] || defaultBodyMetricSettings[field.key];
+          const unitValue = bodyMetricUnit(field, weightUnit);
           const latest = metricLatest(bodyMetrics, field.key);
           const metricGoal = activeGoals.find((goal) => goal.type === "metric" && goal.metric === field.key);
           const progress = setting.mode === "goal" ? metricGoalProgress(metricGoal, latest?.[field.key]) : null;
@@ -2688,7 +3000,7 @@ function GoalsPage({ user, logs }) {
                   <p className="eyebrow">{setting.mode === "goal" ? "Goal trend" : "Current"}</p>
                   <h3>{field.label}</h3>
                 </div>
-                <strong>{latest?.[field.key] ? `${latest[field.key]}${field.unit}` : "-"}</strong>
+                <strong>{latest?.[field.key] ? `${latest[field.key]}${unitValue}` : "-"}</strong>
               </div>
               {setting.mode === "goal" && metricGoal && (
                 <>
@@ -2702,11 +3014,11 @@ function GoalsPage({ user, logs }) {
               )}
               <label>
                 Current
-                <input value={metricValues[field.key]} onChange={(event) => setMetricValues({ ...metricValues, [field.key]: event.target.value })} inputMode="decimal" placeholder={field.unit} />
+                <input value={metricValues[field.key]} onChange={(event) => setMetricValues({ ...metricValues, [field.key]: event.target.value })} inputMode="decimal" placeholder={unitValue} />
               </label>
               <label>
                 Goal
-                <input value={metricGoalValues[field.key]} onChange={(event) => setMetricGoalValues({ ...metricGoalValues, [field.key]: event.target.value })} inputMode="decimal" placeholder={field.unit} />
+                <input value={metricGoalValues[field.key]} onChange={(event) => setMetricGoalValues({ ...metricGoalValues, [field.key]: event.target.value })} inputMode="decimal" placeholder={unitValue} />
               </label>
               <button className="quiet-button" type="button" onClick={() => saveMetricGoal(field)}>
                 <Save size={16} />
@@ -2758,15 +3070,6 @@ function GoalsPage({ user, logs }) {
           Target
           <input value={target} onChange={(event) => setTarget(event.target.value)} inputMode="decimal" placeholder={type === "metric" ? "185" : type === "max" ? "120" : "20"} required />
         </label>
-        {type === "max" && (
-          <label>
-            Unit
-            <select value={unit} onChange={(event) => setUnit(event.target.value)}>
-              <option value="kg">kg</option>
-              <option value="lb">lb</option>
-            </select>
-          </label>
-        )}
         <button className="primary" type="submit">
           <Plus size={18} />
           Add goal
@@ -2822,6 +3125,7 @@ function App() {
   const [saveMessage, setSaveMessage] = useState("");
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
   const [showNavMenu, setShowNavMenu] = useState(false);
+  const [showProfileSetup, setShowProfileSetup] = useState(false);
   const [timerMode, setTimerMode] = useState("countup");
   const [countdownSeconds, setCountdownSeconds] = useState(180);
   const [intervalWorkSeconds, setIntervalWorkSeconds] = useState(60);
@@ -2849,6 +3153,7 @@ function App() {
   async function hydrateUser(nextUser) {
     if (!nextUser) {
       setUser(null);
+      setShowProfileSetup(false);
       setLogs({});
       setAthleteProgressLogs({});
       setIsTrainer(false);
@@ -2861,6 +3166,7 @@ function App() {
     const profile = await loadUserProfile(nextUser.uid);
     const profiledUser = mergeUserProfile(nextUser, profile);
     setUser(profiledUser);
+    setShowProfileSetup(profile.profileSetupCompleted !== true);
 
     const [nextLogs, nextTrainer, nextCustomWorkouts, nextPrograms] = await Promise.all([
       loadWorkoutLogs(nextUser.uid),
@@ -3031,6 +3337,12 @@ function App() {
     setView("workout");
   }
 
+  function openStoredWorkout(date, key) {
+    setSelectedDate(date);
+    setSelectedWorkoutKey(key);
+    setView("workout");
+  }
+
   function openBlankWorkout() {
     setSelectedWorkoutKey("blank");
     setView("workout");
@@ -3040,10 +3352,16 @@ function App() {
     setUser((currentUser) => ({ ...currentUser, ...profile }));
   }
 
+  function handleProfileSetupComplete(profile) {
+    setUser((currentUser) => ({ ...currentUser, ...profile }));
+    setShowProfileSetup(false);
+  }
+
   async function handleLogout() {
     await logout();
     setView("client");
     setUser(null);
+    setShowProfileSetup(false);
     setLogs({});
     setAthleteProgressLogs({});
     setIsTrainer(false);
@@ -3219,6 +3537,18 @@ function App() {
               <Settings size={18} />
               Settings
             </button>
+            <button className="menu-link" type="button" onClick={() => openMenuView("store")}>
+              <ShoppingBag size={18} />
+              Store
+            </button>
+            <button className="menu-link" type="button" onClick={() => openMenuView("stored-programs")}>
+              <ClipboardList size={18} />
+              Programs
+            </button>
+            <button className="menu-link" type="button" onClick={() => openMenuView("stored-workouts")}>
+              <Dumbbell size={18} />
+              Workouts
+            </button>
             <button className="menu-link" type="button" onClick={() => openMenuView("maxes")}>
               <Trophy size={18} />
               Maxes
@@ -3233,7 +3563,7 @@ function App() {
               <>
                 <button className="menu-link" type="button" onClick={() => openMenuView("programs")}>
                   <ClipboardList size={18} />
-                  Programs
+                  Program Builder
                 </button>
                 <button className="menu-link" type="button" onClick={() => openMenuView("athletes")}>
                   <UsersRound size={18} />
@@ -3246,6 +3576,10 @@ function App() {
             </button>
           </div>
         </div>
+      )}
+
+      {showProfileSetup && (
+        <ProfileSetupModal user={user} onComplete={handleProfileSetupComplete} />
       )}
 
       {showTimerSettings && (
@@ -3340,7 +3674,10 @@ function App() {
       ) : view === "goals" ? (
         <GoalsPage user={user} logs={logs} />
       ) : view === "settings" ? (
-        <SettingsPage
+        <SettingsPage onOpenSection={(section) => setView(`settings-${section}`)} />
+      ) : view.startsWith("settings-") ? (
+        <SettingsSectionPage
+          section={view.replace("settings-", "")}
           user={user}
           programs={programs}
           workouts={[...importedProgram, ...customWorkouts, ...programWorkouts]}
@@ -3349,7 +3686,14 @@ function App() {
           updateRegistration={updateRegistration}
           onApplyUpdate={applyAppUpdate}
           onLogout={handleLogout}
+          onBack={() => setView("settings")}
         />
+      ) : view === "store" ? (
+        <StorePage />
+      ) : view === "stored-programs" ? (
+        <StoredProgramsPage programs={programs} workouts={[...importedProgram, ...customWorkouts, ...programWorkouts]} logs={logs} />
+      ) : view === "stored-workouts" ? (
+        <StoredWorkoutsPage programs={programs} workouts={[...importedProgram, ...customWorkouts, ...programWorkouts]} logs={logs} onOpenWorkout={openStoredWorkout} />
       ) : view === "programs" ? (
         <ProgramsPage
           programs={programs}
