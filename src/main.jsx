@@ -668,6 +668,50 @@ function metricTrendPoints(entries, key) {
   }).join(" ");
 }
 
+function formatShortDate(date) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(new Date(`${String(date).slice(0, 10)}T12:00:00`));
+}
+
+function metricLineChart(entries, key, targetValue) {
+  const values = entries
+    .map((entry) => ({
+      date: String(entry.date || "").slice(0, 10),
+      value: Number(entry[key]),
+    }))
+    .filter((entry) => entry.date && Number.isFinite(entry.value) && entry.value > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  if (!values.length) return null;
+
+  const target = Number(targetValue);
+  const scaleValues = Number.isFinite(target) && target > 0
+    ? [...values.map((entry) => entry.value), target]
+    : values.map((entry) => entry.value);
+  const min = Math.min(...scaleValues);
+  const max = Math.max(...scaleValues);
+  const span = max - min || 1;
+  const pointFor = (entry, index) => {
+    const x = values.length === 1 ? 50 : 8 + (index / (values.length - 1)) * 84;
+    const y = 76 - ((entry.value - min) / span) * 58;
+    return { ...entry, x, y };
+  };
+  const points = values.map(pointFor);
+  const targetY = Number.isFinite(target) && target > 0
+    ? 76 - ((target - min) / span) * 58
+    : null;
+
+  return {
+    points,
+    line: points.map((point) => `${point.x},${point.y}`).join(" "),
+    targetY,
+    first: values[0],
+    latest: values.at(-1),
+  };
+}
+
 function needsMaxes(workout) {
   return [...new Set(workout.flatMap((item) => {
     const needs = percentages(item).length > 0 || /opener/i.test(`${item.prescription} ${item.intensity}`);
@@ -746,7 +790,6 @@ function CalendarStrip({ sections, selectedDate, onSelectDate, logs, workoutsByD
     <section className="calendar-band" aria-label="Workout calendar">
       <div className="section-heading">
         <CalendarDays size={20} />
-        <h2>Calendar</h2>
       </div>
       <div className="month-stack">
         {sections.map((section) => (
@@ -2256,7 +2299,7 @@ function ProfileAvatar({ user, iconSize = 34 }) {
   );
 }
 
-function ProfilePage({ user, isTrainer, logs, onOpenEdit, onOpenMaxes, onOpenGoals, onOpenSettings }) {
+function ProfilePage({ user, isTrainer, logs, onOpenEdit }) {
   const maxes = loadUserMaxes(user.uid);
   const completedCount = Object.values(logs).filter((log) => log.completed).length;
   const lastUpdated = Object.values(logs)
@@ -2273,27 +2316,6 @@ function ProfilePage({ user, isTrainer, logs, onOpenEdit, onOpenMaxes, onOpenGoa
           <p className="eyebrow">{isTrainer ? "Coach profile" : "Athlete profile"}</p>
           <h2>{user.displayName || user.email || "Profile"}</h2>
         </div>
-      </div>
-
-      <div className="profile-actions">
-        <button className="primary" type="button" onClick={onOpenEdit}>
-          <PencilLine size={18} />
-          Edit
-        </button>
-        <button className="primary" type="button" onClick={onOpenMaxes}>
-          <Trophy size={18} />
-          Maxes
-        </button>
-        {!isTrainer && (
-          <button className="primary" type="button" onClick={onOpenGoals}>
-            <TrendingUp size={18} />
-            Progress
-          </button>
-        )}
-        <button className="secondary" type="button" onClick={onOpenSettings}>
-          <Settings size={18} />
-          Settings
-        </button>
       </div>
 
       <div className="profile-grid">
@@ -2349,6 +2371,13 @@ function ProfilePage({ user, isTrainer, logs, onOpenEdit, onOpenMaxes, onOpenGoa
             );
           })}
         </div>
+      </div>
+
+      <div className="profile-actions profile-actions-bottom">
+        <button className="primary" type="button" onClick={onOpenEdit}>
+          <PencilLine size={18} />
+          Edit
+        </button>
       </div>
     </section>
   );
@@ -3091,6 +3120,9 @@ function GoalsPage({ user, logs, onExit }) {
       : goalProgress(goal, logs, maxes, weightUnit);
     const liftLabel = maxFields.find((field) => field.key === goal.lift)?.label;
     const metricLabel = bodyMetricFields.find((field) => field.key === goal.metric)?.label;
+    const bodyweightChart = goal.type === "metric" && goal.metric === "bodyweight"
+      ? metricLineChart(bodyMetrics, goal.metric, goal.target)
+      : null;
     return (
       <article className={progress.complete ? "goal-card complete" : "goal-card"} key={goal.id}>
         <div className="goal-card-heading">
@@ -3100,9 +3132,37 @@ function GoalsPage({ user, logs, onExit }) {
           </div>
           {progress.complete ? <CheckCircle2 size={20} /> : <TrendingUp size={20} />}
         </div>
-        <div className="progress-meter" aria-label={`${progress.percent}% complete`}>
-          <span style={{ width: `${progress.percent}%` }} />
-        </div>
+        {bodyweightChart ? (
+          <div className="bodyweight-chart" role="img" aria-label="Bodyweight progress over time">
+            <svg viewBox="0 0 100 90" aria-hidden="true">
+              <line className="chart-grid-line" x1="8" x2="92" y1="18" y2="18" />
+              <line className="chart-grid-line" x1="8" x2="92" y1="47" y2="47" />
+              <line className="chart-grid-line" x1="8" x2="92" y1="76" y2="76" />
+              {bodyweightChart.targetY !== null && (
+                <line className="chart-target-line" x1="8" x2="92" y1={bodyweightChart.targetY} y2={bodyweightChart.targetY} />
+              )}
+              {bodyweightChart.points.length > 1 && <polyline className="chart-progress-line" points={bodyweightChart.line} />}
+              {bodyweightChart.points.map((point, index) => (
+                <circle
+                  className={index === bodyweightChart.points.length - 1 ? "chart-point latest" : "chart-point"}
+                  cx={point.x}
+                  cy={point.y}
+                  key={`${point.date}-${index}`}
+                  r={index === bodyweightChart.points.length - 1 ? 3.2 : 2.2}
+                />
+              ))}
+            </svg>
+            <div className="bodyweight-chart-labels">
+              <span>{formatShortDate(bodyweightChart.first.date)}: {bodyweightChart.first.value}{weightUnit}</span>
+              <strong>{bodyweightChart.latest.value}{weightUnit}</strong>
+              <span>{formatShortDate(bodyweightChart.latest.date)}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="progress-meter" aria-label={`${progress.percent}% complete`}>
+            <span style={{ width: `${progress.percent}%` }} />
+          </div>
+        )}
         <dl className="program-stats">
           <div>
             <dt>Progress</dt>
@@ -3585,10 +3645,10 @@ function App() {
         <button className="nav-button nav-icon menu-button" type="button" onClick={() => setShowNavMenu(true)} aria-label="Open menu" title="Menu">
           <Menu size={19} />
         </button>
-        <div className="nav-brand">
+        <button className="nav-brand" type="button" onClick={() => setView("client")} aria-label="Go to home" title="Home">
           <Dumbbell size={22} />
           <span>Primitive</span>
-        </div>
+        </button>
         <div className="nav-actions">
           <button
             className={timerRunning ? "nav-button timer-button active" : "nav-button timer-button"}
