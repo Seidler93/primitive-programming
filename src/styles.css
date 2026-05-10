@@ -480,16 +480,38 @@ select:focus {
   border-top: 1px solid #33243f;
 }
 
+.exercise-row.collapsed {
+  grid-template-columns: 1fr;
+  align-items: center;
+}
+
 .exercise-info {
   position: relative;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
+  cursor: pointer;
 }
 
 .exercise-info > div:first-child {
   min-width: 0;
+}
+
+.collapsed-set-summary {
+  display: none;
+  margin-top: 5px;
+  color: #e6dcf5;
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.exercise-row.collapsed .collapsed-set-summary {
+  display: block;
+}
+
+.exercise-row.collapsed .exercise-info {
+  align-items: center;
 }
 
 .exercise-edit-wrap {
@@ -520,6 +542,23 @@ select:focus {
 
 .exercise-edit-menu label {
   font-size: 0.78rem;
+}
+
+.exercise-edit-menu-header {
+  display: grid;
+  gap: 3px;
+  padding-bottom: 4px;
+}
+
+.exercise-edit-menu-header strong {
+  color: #f3eefb;
+  font-size: 0.9rem;
+}
+
+.exercise-edit-menu-header span {
+  color: #b9a9c9;
+  font-size: 0.78rem;
+  font-weight: 800;
 }
 
 .exercise-row small {
@@ -718,9 +757,20 @@ select:focus {
 }
 
 .choice-list,
-.option-panel {
+.option-panel,
+.timer-mode-grid,
+.timer-settings-grid,
+.timer-settings-actions {
   display: grid;
   gap: 10px;
+}
+
+.timer-settings-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.timer-settings-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .choice-button {
@@ -1372,5 +1422,10 @@ select:focus {
   .settings-block .primary,
   .settings-block .secondary {
     width: 100%;
+  }
+
+  .timer-settings-grid,
+  .timer-settings-actions {
+    grid-template-columns: 1fr;
   }
 }

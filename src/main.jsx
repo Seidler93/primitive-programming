@@ -71,8 +71,9 @@ const warmupPresets = [
 ];
 
 function formatTimer(totalSeconds) {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
+  const safeSeconds = Math.max(0, totalSeconds);
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
@@ -636,6 +637,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
   const [newExerciseName, setNewExerciseName] = useState("");
   const [newExerciseTracksWeight, setNewExerciseTracksWeight] = useState(true);
   const [openExerciseMenu, setOpenExerciseMenu] = useState("");
+  const [collapsedExercises, setCollapsedExercises] = useState({});
   const requiredMaxes = useMemo(() => needsMaxes(workout), [workout]);
   const maxValue = (key) => maxes[key]?.value ?? maxes[key] ?? "";
   const maxUnit = (key) => maxes[key]?.unit || "kg";
@@ -663,6 +665,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
     setNewExerciseName("");
     setNewExerciseTracksWeight(true);
     setOpenExerciseMenu("");
+    setCollapsedExercises({});
     setHydratedDraftFor(`${user.uid}:${date}:${workoutKey}`);
   }, [date, user.uid, workout.length, workoutKey]);
 
@@ -780,6 +783,24 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
 
   function exerciseMenuId(type, id) {
     return `${type}:${id}`;
+  }
+
+  function exerciseCollapseId(type, id) {
+    return `${type}:${id}`;
+  }
+
+  function toggleExerciseCollapse(id) {
+    setCollapsedExercises((current) => ({ ...current, [id]: !current[id] }));
+  }
+
+  function programmedSetSummary(item) {
+    const reps = programmedRows(item).map((set) => loads[`${set.key}:reps`] ?? set.reps);
+    return reps.length ? reps.join(", ") : "No sets";
+  }
+
+  function customSetSummary(exercise) {
+    const reps = exercise.sets.map((set) => set.reps || "set");
+    return reps.length ? reps.join(", ") : "No sets";
   }
 
   function programmedExercise(item) {
@@ -979,21 +1000,29 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
               <p className="empty-list-copy">No exercises yet. Add the first exercise below.</p>
             )}
             {customExercises.filter((exercise) => exercise.section === "warmup").map((exercise) => (
-              <div className="exercise-row custom-exercise-row warmup-exercise-row" key={exercise.id}>
-                <div className="exercise-info">
+              <div className={`exercise-row custom-exercise-row warmup-exercise-row ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] ? "collapsed" : ""}`} key={exercise.id}>
+                <div className="exercise-info" onClick={() => toggleExerciseCollapse(exerciseCollapseId("custom", exercise.id))} role="button" tabIndex={0}>
                   <div>
                     <strong>{exercise.name}</strong>
                     <small>{exercise.trackWeights ? "Warm-up | Track weights" : "Warm-up | Completion only"}</small>
+                    <span className="collapsed-set-summary">{customSetSummary(exercise)}</span>
                   </div>
                   <div className="exercise-edit-wrap">
-                    <button className="icon-button exercise-edit-button" type="button" onClick={() => setOpenExerciseMenu(openExerciseMenu === exerciseMenuId("custom", exercise.id) ? "" : exerciseMenuId("custom", exercise.id))} aria-label={`Edit ${exercise.name}`} title="Edit exercise">
+                    <button className="icon-button exercise-edit-button" type="button" onClick={(event) => {
+                      event.stopPropagation();
+                      setOpenExerciseMenu(openExerciseMenu === exerciseMenuId("custom", exercise.id) ? "" : exerciseMenuId("custom", exercise.id));
+                    }} aria-label={`Edit ${exercise.name}`} title="Edit exercise">
                       <PencilLine size={16} />
                     </button>
                     {openExerciseMenu === exerciseMenuId("custom", exercise.id) && (
                       <div className="exercise-edit-menu">
+                        <div className="exercise-edit-menu-header">
+                          <strong>Change exercise</strong>
+                          <span>Replaces this warm-up for this session.</span>
+                        </div>
                         <label>
-                          Exercise name
-                          <ExerciseAutocomplete value={exercise.name} onChange={(value) => updateCustomExerciseField(exercise.id, { name: value })} id={`exercise-edit-${exercise.id}`} />
+                          New exercise
+                          <ExerciseAutocomplete value={exercise.name} onChange={(value) => updateCustomExerciseField(exercise.id, { name: value })} id={`exercise-edit-${exercise.id}`} placeholder="Type RDL, squat, clean..." />
                         </label>
                         <label className="checkbox-field">
                           <input
@@ -1010,7 +1039,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
                     )}
                   </div>
                 </div>
-                <div className="set-list">
+                {!collapsedExercises[exerciseCollapseId("custom", exercise.id)] && <div className="set-list">
                   {exercise.sets.map((set) => (
                     <label className={`set-row ${exercise.trackWeights ? "tracked-set-row" : "check-set-row"}`} key={set.id}>
                       <input
@@ -1047,28 +1076,37 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
                       </button>
                     </div>
                   </div>
-                </div>
+                </div>}
               </div>
             ))}
             {workout.map((item) => {
               const displayItem = programmedExercise(item);
               const menuId = exerciseMenuId("programmed", item.id);
+              const collapseId = exerciseCollapseId("programmed", item.id);
               return (
-              <div className="exercise-row" key={item.id}>
-                <div className="exercise-info">
+              <div className={`exercise-row ${collapsedExercises[collapseId] ? "collapsed" : ""}`} key={item.id}>
+                <div className="exercise-info" onClick={() => toggleExerciseCollapse(collapseId)} role="button" tabIndex={0}>
                   <div>
                     <strong>{displayItem.exercise}</strong>
                     <small>{displayItem.intensity || "No intensity"} | {displayItem.notes || "No notes"}</small>
+                    <span className="collapsed-set-summary">{programmedSetSummary(item)}</span>
                   </div>
                   <div className="exercise-edit-wrap">
-                    <button className="icon-button exercise-edit-button" type="button" onClick={() => setOpenExerciseMenu(openExerciseMenu === menuId ? "" : menuId)} aria-label={`Edit ${displayItem.exercise}`} title="Edit exercise">
+                    <button className="icon-button exercise-edit-button" type="button" onClick={(event) => {
+                      event.stopPropagation();
+                      setOpenExerciseMenu(openExerciseMenu === menuId ? "" : menuId);
+                    }} aria-label={`Edit ${displayItem.exercise}`} title="Edit exercise">
                       <PencilLine size={16} />
                     </button>
                     {openExerciseMenu === menuId && (
                       <div className="exercise-edit-menu">
+                        <div className="exercise-edit-menu-header">
+                          <strong>Change exercise</strong>
+                          <span>Replaces this programmed lift for this session.</span>
+                        </div>
                         <label>
-                          Substitute
-                          <ExerciseAutocomplete value={displayItem.exercise} onChange={(value) => updateProgrammedExercise(item, { exercise: value })} id={`exercise-sub-${item.id}`} />
+                          New exercise
+                          <ExerciseAutocomplete value={displayItem.exercise} onChange={(value) => updateProgrammedExercise(item, { exercise: value })} id={`exercise-sub-${item.id}`} placeholder="Type RDL, squat, clean..." />
                         </label>
                         <label>
                           Prescription
@@ -1090,7 +1128,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
                     )}
                   </div>
                 </div>
-                <div className="set-list">
+                {!collapsedExercises[collapseId] && <div className="set-list">
                   <p>{displayItem.prescription}</p>
                   <div className="warmup-control-row">
                     <span>Warm-up sets</span>
@@ -1129,7 +1167,12 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
                   ))}
                   {programmedRows(item).map((set) => (
                     <label className={displayItem.trackWeights === false ? "set-row check-set-row" : "set-row tracked-set-row"} key={set.key}>
-                      <span>{set.reps}</span>
+                      <input
+                        value={loads[`${set.key}:reps`] ?? set.reps}
+                        onChange={(event) => setLoads({ ...loads, [`${set.key}:reps`]: event.target.value })}
+                        onBlur={() => persist()}
+                        placeholder="Reps"
+                      />
                       {displayItem.trackWeights !== false && (
                         <input
                           value={loads[set.key] ?? (set.key.endsWith(":1") ? loads[item.id] || "" : "")}
@@ -1158,29 +1201,33 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
                       </button>
                     </div>
                   </div>
-                </div>
+                </div>}
               </div>
               );
             })}
             {customExercises.filter((exercise) => exercise.section !== "warmup" && exercise.section !== "cardio").map((exercise) => (
-              <div className="exercise-row custom-exercise-row" key={exercise.id}>
-                <div className="exercise-info">
+              <div className={`exercise-row custom-exercise-row ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] ? "collapsed" : ""}`} key={exercise.id}>
+                <div className="exercise-info" onClick={() => toggleExerciseCollapse(exerciseCollapseId("custom", exercise.id))} role="button" tabIndex={0}>
                   <div>
                     <strong>{exercise.name}</strong>
                     <small>{exercise.trackWeights ? "Session exercise | Track weights" : "Session exercise | Completion only"}</small>
+                    <span className="collapsed-set-summary">{customSetSummary(exercise)}</span>
                   </div>
                   <div className="exercise-edit-wrap">
-                    <button className="icon-button exercise-edit-button" type="button" onClick={() => setOpenExerciseMenu(openExerciseMenu === exerciseMenuId("custom", exercise.id) ? "" : exerciseMenuId("custom", exercise.id))} aria-label={`Edit ${exercise.name}`} title="Edit exercise">
+                    <button className="icon-button exercise-edit-button" type="button" onClick={(event) => {
+                      event.stopPropagation();
+                      setOpenExerciseMenu(openExerciseMenu === exerciseMenuId("custom", exercise.id) ? "" : exerciseMenuId("custom", exercise.id));
+                    }} aria-label={`Edit ${exercise.name}`} title="Edit exercise">
                       <PencilLine size={16} />
                     </button>
                     {openExerciseMenu === exerciseMenuId("custom", exercise.id) && (
                       <div className="exercise-edit-menu">
+                        <div className="exercise-edit-menu-header">
+                          <strong>Change exercise</strong>
+                          <span>Replaces this added exercise for this session.</span>
+                        </div>
                         <label>
-                          Exercise name
-                          <ExerciseAutocomplete value={exercise.name} onChange={(value) => updateCustomExerciseField(exercise.id, { name: value })} id={`exercise-edit-${exercise.id}`} />
-                        </label>
-                        <label>
-                          Substitute
+                          New exercise
                           <ExerciseAutocomplete value={exercise.name} onChange={(value) => updateCustomExerciseField(exercise.id, { name: value })} id={`exercise-sub-${exercise.id}`} placeholder="Type RDL, squat, clean..." />
                         </label>
                         <label className="checkbox-field">
@@ -1198,7 +1245,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
                     )}
                   </div>
                 </div>
-                <div className="set-list">
+                {!collapsedExercises[exerciseCollapseId("custom", exercise.id)] && <div className="set-list">
                   {exercise.sets.map((set) => (
                     <label className={`set-row ${exercise.trackWeights ? "tracked-set-row" : "check-set-row"}`} key={set.id}>
                       <input
@@ -1235,7 +1282,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
                       </button>
                     </div>
                   </div>
-                </div>
+                </div>}
               </div>
             ))}
             <div className="add-exercise-row">
@@ -1245,20 +1292,28 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
               </button>
             </div>
             {customExercises.filter((exercise) => exercise.section === "cardio").map((exercise) => (
-              <div className="exercise-row custom-exercise-row cardio-exercise-row" key={exercise.id}>
-                <div className="exercise-info">
+              <div className={`exercise-row custom-exercise-row cardio-exercise-row ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] ? "collapsed" : ""}`} key={exercise.id}>
+                <div className="exercise-info" onClick={() => toggleExerciseCollapse(exerciseCollapseId("custom", exercise.id))} role="button" tabIndex={0}>
                   <div>
                     <strong>{exercise.name}</strong>
                     <small>{exercise.trackWeights ? "Cardio | Track numbers" : "Cardio | Completion only"}</small>
+                    <span className="collapsed-set-summary">{customSetSummary(exercise)}</span>
                   </div>
                   <div className="exercise-edit-wrap">
-                    <button className="icon-button exercise-edit-button" type="button" onClick={() => setOpenExerciseMenu(openExerciseMenu === exerciseMenuId("custom", exercise.id) ? "" : exerciseMenuId("custom", exercise.id))} aria-label={`Edit ${exercise.name}`} title="Edit cardio">
+                    <button className="icon-button exercise-edit-button" type="button" onClick={(event) => {
+                      event.stopPropagation();
+                      setOpenExerciseMenu(openExerciseMenu === exerciseMenuId("custom", exercise.id) ? "" : exerciseMenuId("custom", exercise.id));
+                    }} aria-label={`Edit ${exercise.name}`} title="Edit cardio">
                       <PencilLine size={16} />
                     </button>
                     {openExerciseMenu === exerciseMenuId("custom", exercise.id) && (
                       <div className="exercise-edit-menu">
+                        <div className="exercise-edit-menu-header">
+                          <strong>Change cardio</strong>
+                          <span>Replaces this cardio piece for this session.</span>
+                        </div>
                         <label>
-                          Cardio name
+                          New cardio
                           <ExerciseAutocomplete value={exercise.name} onChange={(value) => updateCustomExerciseField(exercise.id, { name: value })} id={`exercise-cardio-${exercise.id}`} />
                         </label>
                         <label className="checkbox-field">
@@ -1276,7 +1331,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
                     )}
                   </div>
                 </div>
-                <div className="set-list">
+                {!collapsedExercises[exerciseCollapseId("custom", exercise.id)] && <div className="set-list">
                   {exercise.sets.map((set) => (
                     <label className={`set-row ${exercise.trackWeights ? "tracked-set-row" : "check-set-row"}`} key={set.id}>
                       <input
@@ -1313,7 +1368,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone })
                       </button>
                     </div>
                   </div>
-                </div>
+                </div>}
               </div>
             ))}
             <div className="add-exercise-row cardio-add-row">
@@ -2151,11 +2206,23 @@ function App() {
   const [serviceWorkerRegistration, setServiceWorkerRegistration] = useState(null);
   const [updateRegistration, setUpdateRegistration] = useState(null);
   const [notificationMessage, setNotificationMessage] = useState("");
+  const [timerMode, setTimerMode] = useState("countup");
+  const [countdownSeconds, setCountdownSeconds] = useState(180);
+  const [intervalWorkSeconds, setIntervalWorkSeconds] = useState(60);
+  const [intervalRestSeconds, setIntervalRestSeconds] = useState(30);
+  const [intervalPhase, setIntervalPhase] = useState("work");
+  const [showTimerSettings, setShowTimerSettings] = useState(false);
+  const [longPressTimer, setLongPressTimer] = useState(null);
+  const [timerPressHandled, setTimerPressHandled] = useState(false);
+  const [lastTimerTap, setLastTimerTap] = useState(0);
   const [timerStartedAt, setTimerStartedAt] = useState(null);
   const [timerBankedSeconds, setTimerBankedSeconds] = useState(0);
   const [timerNow, setTimerNow] = useState(Date.now());
   const timerRunning = Boolean(timerStartedAt);
-  const timerSeconds = timerBankedSeconds + (timerRunning ? Math.floor((timerNow - timerStartedAt) / 1000) : 0);
+  const timerElapsedSeconds = timerBankedSeconds + (timerRunning ? Math.floor((timerNow - timerStartedAt) / 1000) : 0);
+  const activeIntervalSeconds = intervalPhase === "work" ? intervalWorkSeconds : intervalRestSeconds;
+  const timerSeconds = timerMode === "countup" ? timerElapsedSeconds : Math.max(0, (timerMode === "countdown" ? countdownSeconds : activeIntervalSeconds) - timerElapsedSeconds);
+  const timerLabel = timerMode === "interval" ? `${intervalPhase === "work" ? "W" : "R"} ${formatTimer(timerSeconds)}` : formatTimer(timerSeconds);
 
   async function hydrateUser(nextUser) {
     if (!nextUser) {
@@ -2240,6 +2307,18 @@ function App() {
     return () => window.clearInterval(intervalId);
   }, [timerRunning]);
 
+  useEffect(() => {
+    if (!timerRunning || timerMode === "countup") return;
+    const targetSeconds = timerMode === "countdown" ? countdownSeconds : activeIntervalSeconds;
+    if (timerElapsedSeconds < targetSeconds) return;
+
+    if (timerMode === "interval") {
+      setIntervalPhase((phase) => (phase === "work" ? "rest" : "work"));
+    }
+    setTimerStartedAt(null);
+    setTimerBankedSeconds(0);
+  }, [activeIntervalSeconds, countdownSeconds, timerElapsedSeconds, timerMode, timerRunning]);
+
   const allWorkouts = useMemo(() => [...importedProgram, ...customWorkouts, ...programWorkouts], [customWorkouts, programWorkouts]);
   const workoutsByDate = useMemo(() => groupByDate(allWorkouts), [allWorkouts]);
   const workoutDates = useMemo(() => Object.keys(workoutsByDate).sort(), [workoutsByDate]);
@@ -2290,14 +2369,57 @@ function App() {
     activateWaitingServiceWorker(updateRegistration);
   }
 
+  function resetTimer() {
+    setTimerStartedAt(null);
+    setTimerBankedSeconds(0);
+    setTimerNow(Date.now());
+    if (timerMode === "interval") setIntervalPhase("work");
+  }
+
   function toggleTimer() {
     if (timerRunning) {
-      setTimerBankedSeconds(timerSeconds);
+      setTimerBankedSeconds(timerElapsedSeconds);
       setTimerStartedAt(null);
       return;
     }
     setTimerStartedAt(Date.now());
     setTimerNow(Date.now());
+  }
+
+  function startTimerPress() {
+    setTimerPressHandled(false);
+    const timeoutId = window.setTimeout(() => {
+      setTimerPressHandled(true);
+      setShowTimerSettings(true);
+    }, 550);
+    setLongPressTimer(timeoutId);
+  }
+
+  function endTimerPress() {
+    if (longPressTimer) window.clearTimeout(longPressTimer);
+    setLongPressTimer(null);
+  }
+
+  function handleTimerClick() {
+    if (timerPressHandled) {
+      setTimerPressHandled(false);
+      return;
+    }
+    const now = Date.now();
+    if (now - lastTimerTap < 320) {
+      setLastTimerTap(0);
+      resetTimer();
+      return;
+    }
+    setLastTimerTap(now);
+    toggleTimer();
+  }
+
+  function changeTimerMode(mode) {
+    setTimerMode(mode);
+    setTimerStartedAt(null);
+    setTimerBankedSeconds(0);
+    setIntervalPhase("work");
   }
 
   if (checking) return <main className="loading">Loading...</main>;
@@ -2313,13 +2435,17 @@ function App() {
         <div className="nav-actions">
           <button
             className={timerRunning ? "nav-button timer-button active" : "nav-button timer-button"}
-            onClick={toggleTimer}
+            onClick={handleTimerClick}
+            onPointerDown={startTimerPress}
+            onPointerUp={endTimerPress}
+            onPointerCancel={endTimerPress}
+            onPointerLeave={endTimerPress}
             type="button"
-            aria-label={timerRunning ? `Stop timer at ${formatTimer(timerSeconds)}` : `Start timer at ${formatTimer(timerSeconds)}`}
-            title={timerRunning ? "Stop timer" : "Start timer"}
+            aria-label={timerRunning ? `Stop timer at ${timerLabel}` : `Start timer at ${timerLabel}`}
+            title="Tap start/stop, double tap reset, long press settings"
           >
             <Clock size={17} />
-            <span>{formatTimer(timerSeconds)}</span>
+            <span>{timerLabel}</span>
           </button>
           {view !== "client" && (
             <button className="nav-button" onClick={() => setView("client")} type="button">
@@ -2354,6 +2480,57 @@ function App() {
           </button>
         </div>
       </nav>
+
+      {showTimerSettings && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="timer-settings-title">
+            <div>
+              <p className="eyebrow">Timer</p>
+              <h2 id="timer-settings-title">Timer settings</h2>
+            </div>
+            <div className="timer-mode-grid">
+              <button className={timerMode === "countup" ? "choice-button active" : "choice-button"} type="button" onClick={() => changeTimerMode("countup")}>
+                <strong>Count up</strong>
+                <span>Tap to start from zero and stop whenever.</span>
+              </button>
+              <button className={timerMode === "countdown" ? "choice-button active" : "choice-button"} type="button" onClick={() => changeTimerMode("countdown")}>
+                <strong>Countdown</strong>
+                <span>Runs to zero, then stops.</span>
+              </button>
+              <button className={timerMode === "interval" ? "choice-button active" : "choice-button"} type="button" onClick={() => changeTimerMode("interval")}>
+                <strong>Intervals</strong>
+                <span>Alternates work/rest each time it finishes.</span>
+              </button>
+            </div>
+            {timerMode === "countdown" && (
+              <label>
+                Countdown seconds
+                <input value={countdownSeconds} onChange={(event) => setCountdownSeconds(Math.max(1, Number(event.target.value) || 1))} inputMode="numeric" />
+              </label>
+            )}
+            {timerMode === "interval" && (
+              <div className="timer-settings-grid">
+                <label>
+                  Work seconds
+                  <input value={intervalWorkSeconds} onChange={(event) => setIntervalWorkSeconds(Math.max(1, Number(event.target.value) || 1))} inputMode="numeric" />
+                </label>
+                <label>
+                  Rest seconds
+                  <input value={intervalRestSeconds} onChange={(event) => setIntervalRestSeconds(Math.max(1, Number(event.target.value) || 1))} inputMode="numeric" />
+                </label>
+              </div>
+            )}
+            <div className="timer-settings-actions">
+              <button className="secondary" type="button" onClick={resetTimer}>
+                Reset timer
+              </button>
+              <button className="primary" type="button" onClick={() => setShowTimerSettings(false)}>
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {view === "profile" ? (
         <ProfilePage user={user} isTrainer={isTrainer} logs={logs} onOpenEdit={() => setView("edit-profile")} onOpenMaxes={() => setView("maxes")} onOpenSettings={() => setView("settings")} />
