@@ -2498,9 +2498,8 @@ function App() {
             <span>{timerLabel}</span>
           </button>
           {view !== "client" && (
-            <button className="nav-button" onClick={() => setView("client")} type="button">
+            <button className="nav-button nav-icon" onClick={() => setView("client")} type="button" aria-label="Back to home" title="Back">
               <ArrowLeft size={17} />
-              Back
             </button>
           )}
           {isTrainer && (
@@ -2525,9 +2524,6 @@ function App() {
               </button>
             </>
           )}
-          <button className={view === "profile" ? "nav-button nav-icon active" : "nav-button nav-icon"} onClick={() => setView("profile")} type="button" aria-label="Open profile" title="Profile">
-            <UserRound size={17} />
-          </button>
         </div>
       </nav>
 
