@@ -2267,9 +2267,13 @@ function ProfileEditPage({ user, onProfileSaved }) {
 
 function ProfileSetupModal({ user, onComplete }) {
   const initialUnit = loadUserWeightUnit(user.uid);
+  const initialHeight = String(user.height || "");
+  const initialHeightInches = user.heightUnit === "in" ? Number(initialHeight) || 0 : 0;
   const [measurementSystem, setMeasurementSystem] = useState(initialUnit === "lb" ? "imperial" : "metric");
   const [gender, setGender] = useState(user.gender || "");
-  const [height, setHeight] = useState(user.height || "");
+  const [heightCm, setHeightCm] = useState(user.heightUnit === "cm" ? initialHeight : "");
+  const [heightFeet, setHeightFeet] = useState(user.heightFeet || (initialHeightInches ? String(Math.floor(initialHeightInches / 12)) : ""));
+  const [heightInches, setHeightInches] = useState(user.heightInches || (initialHeightInches ? String(initialHeightInches % 12) : ""));
   const [weight, setWeight] = useState(user.bodyweight || "");
   const [experienceLevel, setExperienceLevel] = useState(user.experienceLevel || "");
   const [trainingGoal, setTrainingGoal] = useState(user.trainingGoal || "");
@@ -2282,13 +2286,21 @@ function ProfileSetupModal({ user, onComplete }) {
     event.preventDefault();
     setSaving(true);
     setError("");
+    const imperialHeightEntered = heightFeet.trim() || heightInches.trim();
+    const heightValue = measurementSystem === "imperial"
+      ? imperialHeightEntered
+        ? String((Number(heightFeet) || 0) * 12 + (Number(heightInches) || 0))
+        : ""
+      : heightCm.trim();
     const profile = {
       profileSetupCompleted: true,
       profileSetupCompletedAt: new Date().toISOString(),
       measurementSystem,
       gender,
-      height: height.trim(),
+      height: heightValue,
       heightUnit,
+      heightFeet: measurementSystem === "imperial" ? heightFeet.trim() : "",
+      heightInches: measurementSystem === "imperial" ? heightInches.trim() : "",
       bodyweight: weight.trim(),
       bodyweightUnit: weightUnit,
       experienceLevel,
@@ -2359,7 +2371,20 @@ function ProfileSetupModal({ user, onComplete }) {
           </label>
           <label>
             Height
-            <input value={height} onChange={(event) => setHeight(event.target.value)} inputMode="decimal" placeholder={heightUnit} />
+            {measurementSystem === "imperial" ? (
+              <div className="height-imperial-inputs">
+                <span className="unit-input">
+                  <input value={heightFeet} onChange={(event) => setHeightFeet(event.target.value)} inputMode="numeric" placeholder="5" aria-label="Height feet" />
+                  <small>ft</small>
+                </span>
+                <span className="unit-input">
+                  <input value={heightInches} onChange={(event) => setHeightInches(event.target.value)} inputMode="decimal" placeholder="10" aria-label="Height inches" />
+                  <small>in</small>
+                </span>
+              </div>
+            ) : (
+              <input value={heightCm} onChange={(event) => setHeightCm(event.target.value)} inputMode="decimal" placeholder={heightUnit} />
+            )}
           </label>
           <label>
             Weight
@@ -2427,9 +2452,22 @@ function SettingsPage({ onOpenSection }) {
   );
 }
 
-function SettingsSectionPage({ section, user, programs, workouts, logs, serviceWorkerRegistration, updateRegistration, onApplyUpdate, onLogout, onBack }) {
+function SettingsSectionPage({ section, user, programs, workouts, logs, serviceWorkerRegistration, updateRegistration, onApplyUpdate, onLogout, onBack, onProfileSaved }) {
   const [bodyMetricSettings, setBodyMetricSettings] = useState(() => loadBodyMetricSettings(user.uid));
   const [weightUnit, setWeightUnit] = useState(() => loadUserWeightUnit(user.uid));
+  const [measurementSystem, setMeasurementSystem] = useState(user.measurementSystem || (loadUserWeightUnit(user.uid) === "lb" ? "imperial" : "metric"));
+  const initialHeight = String(user.height || "");
+  const initialHeightInches = user.heightUnit === "in" ? Number(initialHeight) || 0 : 0;
+  const [heightCm, setHeightCm] = useState(user.heightUnit === "cm" ? initialHeight : "");
+  const [heightFeet, setHeightFeet] = useState(user.heightFeet || (initialHeightInches ? String(Math.floor(initialHeightInches / 12)) : ""));
+  const [heightInches, setHeightInches] = useState(user.heightInches || (initialHeightInches ? String(initialHeightInches % 12) : ""));
+  const [bodyweight, setBodyweight] = useState(user.bodyweight || "");
+  const [gender, setGender] = useState(user.gender || "");
+  const [experienceLevel, setExperienceLevel] = useState(user.experienceLevel || "");
+  const [trainingGoal, setTrainingGoal] = useState(user.trainingGoal || "");
+  const [profileSaved, setProfileSaved] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState("");
   const [notificationState, setNotificationState] = useState(() => {
     if (!("Notification" in window)) return { status: "unsupported", message: "This browser does not support notifications." };
     return { status: Notification.permission, message: Notification.permission === "granted" ? "Notifications are allowed on this device." : "Notifications are off on this device." };
@@ -2526,6 +2564,58 @@ function SettingsSectionPage({ section, user, programs, workouts, logs, serviceW
   function updateWeightUnit(unit) {
     setWeightUnit(unit);
     saveUserWeightUnit(user.uid, unit);
+  }
+
+  async function savePhysicalProfile(event) {
+    event.preventDefault();
+    setProfileSaving(true);
+    setProfileSaved(false);
+    setProfileError("");
+    const nextWeightUnit = measurementSystem === "imperial" ? "lb" : "kg";
+    const nextHeightUnit = measurementSystem === "imperial" ? "in" : "cm";
+    const imperialHeightEntered = heightFeet.trim() || heightInches.trim();
+    const heightValue = measurementSystem === "imperial"
+      ? imperialHeightEntered
+        ? String((Number(heightFeet) || 0) * 12 + (Number(heightInches) || 0))
+        : ""
+      : heightCm.trim();
+    const profile = {
+      profileSetupCompleted: true,
+      measurementSystem,
+      gender,
+      height: heightValue,
+      heightUnit: nextHeightUnit,
+      heightFeet: measurementSystem === "imperial" ? heightFeet.trim() : "",
+      heightInches: measurementSystem === "imperial" ? heightInches.trim() : "",
+      bodyweight: bodyweight.trim(),
+      bodyweightUnit: nextWeightUnit,
+      experienceLevel,
+      trainingGoal: trainingGoal.trim(),
+    };
+    try {
+      saveUserWeightUnit(user.uid, nextWeightUnit);
+      setWeightUnit(nextWeightUnit);
+      if (bodyweight.trim()) {
+        const entries = loadBodyMetrics(user.uid);
+        saveBodyMetrics(user.uid, [
+          ...entries,
+          {
+            id: `profile-${Date.now()}`,
+            date: new Date().toISOString(),
+            bodyweight: Number(bodyweight) || "",
+            bodyFat: "",
+            muscleMass: "",
+          },
+        ]);
+      }
+      const savedProfile = await saveUserProfile(user.uid, profile);
+      onProfileSaved?.(savedProfile);
+      setProfileSaved(true);
+    } catch {
+      setProfileError("Could not save profile settings.");
+    } finally {
+      setProfileSaving(false);
+    }
   }
 
   const sectionConfig = settingsSections.find((item) => item.id === section) || settingsSections[0];
@@ -2635,6 +2725,70 @@ function SettingsSectionPage({ section, user, programs, workouts, logs, serviceW
         </div>
       ) : (
         <div className="settings-actions">
+          <form className="settings-block profile-settings-form" onSubmit={savePhysicalProfile}>
+            <div className="settings-block-heading">
+              <p className="eyebrow">Profile</p>
+              <h3>Body details</h3>
+              <p>Metric preference, height, and weight used for goals and body metrics.</p>
+            </div>
+            <label>
+              Metric preference
+              <select value={measurementSystem} onChange={(event) => setMeasurementSystem(event.target.value)}>
+                <option value="metric">Metric (kg, cm)</option>
+                <option value="imperial">Imperial (lb, in)</option>
+              </select>
+            </label>
+            <label>
+              Gender
+              <select value={gender} onChange={(event) => setGender(event.target.value)}>
+                <option value="">Prefer not to say</option>
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+                <option value="nonbinary">Non-binary</option>
+                <option value="self-described">Self-described</option>
+              </select>
+            </label>
+            <label>
+              Height
+              {measurementSystem === "imperial" ? (
+                <div className="height-imperial-inputs">
+                  <span className="unit-input">
+                    <input value={heightFeet} onChange={(event) => setHeightFeet(event.target.value)} inputMode="numeric" placeholder="5" aria-label="Height feet" />
+                    <small>ft</small>
+                  </span>
+                  <span className="unit-input">
+                    <input value={heightInches} onChange={(event) => setHeightInches(event.target.value)} inputMode="decimal" placeholder="10" aria-label="Height inches" />
+                    <small>in</small>
+                  </span>
+                </div>
+              ) : (
+                <input value={heightCm} onChange={(event) => setHeightCm(event.target.value)} inputMode="decimal" placeholder="cm" />
+              )}
+            </label>
+            <label>
+              Weight
+              <input value={bodyweight} onChange={(event) => setBodyweight(event.target.value)} inputMode="decimal" placeholder={measurementSystem === "imperial" ? "lb" : "kg"} />
+            </label>
+            <label>
+              Training experience
+              <select value={experienceLevel} onChange={(event) => setExperienceLevel(event.target.value)}>
+                <option value="">Optional</option>
+                <option value="beginner">Beginner</option>
+                <option value="intermediate">Intermediate</option>
+                <option value="advanced">Advanced</option>
+              </select>
+            </label>
+            <label>
+              Main goal
+              <input value={trainingGoal} onChange={(event) => setTrainingGoal(event.target.value)} placeholder="Strength, weightlifting, conditioning..." />
+            </label>
+            <button className="primary" type="submit" disabled={profileSaving}>
+              <Save size={18} />
+              {profileSaving ? "Saving..." : "Save profile settings"}
+            </button>
+            {profileSaved && <p className="save-status">Profile settings saved.</p>}
+            {profileError && <p className="form-error">{profileError}</p>}
+          </form>
           <div className="settings-block">
             <div>
               <p className="eyebrow">Device</p>
@@ -3687,6 +3841,7 @@ function App() {
           onApplyUpdate={applyAppUpdate}
           onLogout={handleLogout}
           onBack={() => setView("settings")}
+          onProfileSaved={handleProfileSaved}
         />
       ) : view === "store" ? (
         <StorePage />

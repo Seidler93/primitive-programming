@@ -162,16 +162,20 @@ export async function loadUserProfile(userId) {
 
 export async function saveUserProfile(userId, profile) {
   const payload = { ...profile, updatedAt: new Date().toISOString() };
+  const localProfile = JSON.parse(localStorage.getItem(localKey(`profile:${userId}`)) || "{}");
+  const nextLocalProfile = { ...localProfile, ...payload };
+  localStorage.setItem(localKey(`profile:${userId}`), JSON.stringify(nextLocalProfile));
+
   if (db && !isDevUserId(userId)) {
     try {
       await setDoc(doc(db, "users", userId, "profile", "details"), payload, { merge: true });
-      return payload;
+      return nextLocalProfile;
     } catch (error) {
       console.warn("Falling back to local user profile.", error);
     }
   }
-  localStorage.setItem(localKey(`profile:${userId}`), JSON.stringify(payload));
-  return payload;
+
+  return nextLocalProfile;
 }
 
 export async function saveNotificationToken(userId, token) {
