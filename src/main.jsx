@@ -9,9 +9,11 @@ import {
   Clock,
   Dumbbell,
   ArrowLeft,
+  Flame,
   LogOut,
   Menu,
   Minus,
+  PersonStanding,
   PencilLine,
   Plus,
   Save,
@@ -60,7 +62,7 @@ const maxFields = [
 
 const appVersion = packageInfo.version;
 const defaultSelectedDate = "2026-05-11";
-const routeViews = new Set(["client", "workout-list", "workout", "profile", "edit-profile", "maxes", "goals", "progress", "food-log", "settings", "settings-account", "settings-programs", "settings-metrics", "settings-updates", "store", "stored-programs", "stored-workouts", "programs", "athletes"]);
+const routeViews = new Set(["client", "workout-list", "workout", "profile", "edit-profile", "maxes", "goals", "progress", "food-log", "stretches", "warmup-cooldown", "settings", "settings-account", "settings-programs", "settings-metrics", "settings-updates", "store", "stored-programs", "stored-workouts", "programs", "athletes"]);
 const bodyMetricFields = [
   { key: "bodyweight", label: "Bodyweight", unit: "lb", unitType: "weight" },
   { key: "bodyFat", label: "Body fat", unit: "%" },
@@ -2175,6 +2177,30 @@ function FoodLogPage() {
   );
 }
 
+function StretchesPage() {
+  return (
+    <section className="programs-panel">
+      <div className="section-heading">
+        <PersonStanding size={20} />
+        <h2>Stretches</h2>
+      </div>
+      <p className="empty-list-copy">Stretch routines will live here.</p>
+    </section>
+  );
+}
+
+function WarmupCooldownPage() {
+  return (
+    <section className="programs-panel">
+      <div className="section-heading">
+        <Flame size={20} />
+        <h2>Warm Up / Cooldown</h2>
+      </div>
+      <p className="empty-list-copy">Warm-up and cooldown flows will live here.</p>
+    </section>
+  );
+}
+
 function StoredProgramsPage({ programs, workouts, logs }) {
   const defaultProgram = { id: "default", name: "Default Program", athleteEmail: "dev-athlete@primitive.local" };
   const programOptions = [defaultProgram, ...programs.filter((program) => program.id !== "default")];
@@ -3691,11 +3717,6 @@ function App() {
             <Clock size={17} />
             <span>{timerLabel}</span>
           </button>
-          {view !== "client" && (
-            <button className="nav-button nav-icon" onClick={() => setView("client")} type="button" aria-label="Back to home" title="Back">
-              <ArrowLeft size={17} />
-            </button>
-          )}
           {isTrainer && (
             <>
               <button
@@ -3718,6 +3739,9 @@ function App() {
               </button>
             </>
           )}
+          <button className="nav-profile-button" type="button" onClick={() => setView("profile")} aria-label="Open profile" title="Profile">
+            {user.photoURL ? <img src={user.photoURL} alt="" /> : <UserRound size={18} />}
+          </button>
         </div>
       </nav>
 
@@ -3743,10 +3767,6 @@ function App() {
               <UserRound size={18} />
               Profile
             </button>
-            <button className="menu-link" type="button" onClick={() => openMenuView("settings")}>
-              <Settings size={18} />
-              Settings
-            </button>
             <button className="menu-link" type="button" onClick={() => openMenuView("store")}>
               <ShoppingBag size={18} />
               Store
@@ -3762,6 +3782,14 @@ function App() {
             <button className="menu-link" type="button" onClick={() => openMenuView("food-log")}>
               <Utensils size={18} />
               Food Log
+            </button>
+            <button className="menu-link" type="button" onClick={() => openMenuView("stretches")}>
+              <PersonStanding size={18} />
+              Stretches
+            </button>
+            <button className="menu-link" type="button" onClick={() => openMenuView("warmup-cooldown")}>
+              <Flame size={18} />
+              Warm Up / Cooldown
             </button>
             <button className="menu-link" type="button" onClick={() => openMenuView("maxes")}>
               <Trophy size={18} />
@@ -3785,8 +3813,9 @@ function App() {
                 </button>
               </>
             )}
-            <button className="text-button menu-close-button" type="button" onClick={() => setShowNavMenu(false)}>
-              Close
+            <button className="menu-link" type="button" onClick={() => openMenuView("settings")}>
+              <Settings size={18} />
+              Settings
             </button>
           </div>
         </div>
@@ -3907,6 +3936,10 @@ function App() {
         <StorePage />
       ) : view === "food-log" ? (
         <FoodLogPage />
+      ) : view === "stretches" ? (
+        <StretchesPage />
+      ) : view === "warmup-cooldown" ? (
+        <WarmupCooldownPage />
       ) : view === "stored-programs" ? (
         <StoredProgramsPage programs={programs} workouts={[...importedProgram, ...customWorkouts, ...programWorkouts]} logs={logs} />
       ) : view === "stored-workouts" ? (

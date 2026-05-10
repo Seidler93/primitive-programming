@@ -313,6 +313,33 @@ select:focus {
   outline-offset: 4px;
 }
 
+.nav-profile-button {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: 0;
+  color: #fff;
+  background: #241832;
+  border: 1px solid #4a365c;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.nav-profile-button img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.nav-profile-button:hover,
+.nav-profile-button:focus-visible {
+  border-color: #8b5cf6;
+  outline: none;
+}
+
 .menu-button {
   flex: 0 0 auto;
 }
