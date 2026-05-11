@@ -71,6 +71,7 @@ const maxFields = [
 
 const appVersion = packageInfo.version;
 const defaultSelectedDate = "2026-05-11";
+const flexibleScheduleMode = "unknown-days";
 const routeViews = new Set(["client", "workout-list", "workout", "profile", "edit-profile", "maxes", "goals", "progress", "food-log", "stretches", "warmup-cooldown", "settings", "settings-account", "settings-preferences", "settings-metrics", "settings-updates", "store", "community", "messages", "news", "stored-programs", "stored-workouts", "programs", "athletes"]);
 const bodyMetricFields = [
   { key: "bodyweight", label: "Bodyweight", unit: "lb", unitType: "weight" },
@@ -531,6 +532,10 @@ function startOfWeekMonday(date) {
   return day;
 }
 
+function isDateInSameWeek(date, weekDate) {
+  return startOfWeekMonday(`${date}T12:00:00`).toISOString().slice(0, 10) === startOfWeekMonday(`${weekDate}T12:00:00`).toISOString().slice(0, 10);
+}
+
 function endOfWeekSunday(date) {
   const day = new Date(date);
   const offset = (7 - day.getDay()) % 7;
@@ -663,6 +668,68 @@ function progressSummary(workouts, logs) {
     percent: dates.length ? Math.round((completed / dates.length) * 100) : 0,
     nextDate,
   };
+}
+
+function programDayGroups(workouts, programId) {
+  return groupWorkouts(
+    workouts
+      .filter((item) => (item.programId || "default") === programId && item.date)
+      .sort((a, b) => a.date.localeCompare(b.date) || String(a.focus || "").localeCompare(String(b.focus || ""))),
+  );
+}
+
+function programWeekNumber(program, date) {
+  if (!program.startDate) return 1;
+  return Math.max(1, Math.floor(daysBetweenDates(program.startDate, date) / 7) + 1);
+}
+
+function completedFlexibleProgramDaysThisWeek(logs, programId, date) {
+  return Object.entries(logs).filter(([key, log]) => {
+    if (!log?.completed || log.programId !== programId || log.scheduleMode !== flexibleScheduleMode) return false;
+    const logDate = logDateFromKey(log.date || key);
+    return logDate && isDateInSameWeek(logDate, date);
+  }).length;
+}
+
+function flexibleProgramWorkoutGroups(date, programs, workouts, logs) {
+  return programs
+    .filter((program) => program.status === "active" && program.scheduleMode === flexibleScheduleMode)
+    .flatMap((program) => {
+      const week = programWeekNumber(program, date);
+      const weekGroups = programDayGroups(workouts, program.id)
+        .filter((group) => Number(group.week) === week);
+      if (!weekGroups.length) return [];
+
+      const dayIndex = completedFlexibleProgramDaysThisWeek(logs, program.id, date);
+      const sourceGroup = weekGroups[dayIndex];
+      if (!sourceGroup) return [];
+
+      const dayNumber = dayIndex + 1;
+      const title = `Day ${dayNumber} of ${program.name}`;
+      return [{
+        ...sourceGroup,
+        key: [
+          program.id,
+          date,
+          `flex-week-${week}`,
+          `day-${dayNumber}`,
+          sourceGroup.focus || "Workout",
+        ].join("|"),
+        date,
+        title,
+        phase: sourceGroup.phase || program.name,
+        week,
+        programId: program.id,
+        flexibleProgramDay: dayNumber,
+        items: sourceGroup.items.map((item) => ({
+          ...item,
+          date,
+          day: new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date(`${date}T12:00:00`)),
+          sourceDate: item.sourceDate || item.date,
+          scheduleMode: flexibleScheduleMode,
+        })),
+      }];
+    });
 }
 
 function logDateFromKey(key) {
@@ -1087,6 +1154,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, o
   const missingMaxes = requiredMaxes.filter((key) => !Number(maxValue(key)));
   const workoutPhase = workout[0]?.phase || "Custom workout";
   const workoutTitle = workout[0] ? `${workout[0].focus} - Week ${workout[0].week}` : workoutKey === "blank" ? "Create workout" : "Scheduled Workout";
+  const canMoveWorkout = workoutKey !== "blank" && workout[0]?.scheduleMode !== flexibleScheduleMode;
 
   useEffect(() => {
     const draft = loadWorkoutDraft(user.uid, date, workoutKey);
@@ -1137,6 +1205,14 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, o
   }, [date, hydratedDraftFor, maxes, requiredMaxes, user.uid, weightUnit, workoutKey]);
 
   async function persist(payload = {}, stateOverrides = {}) {
+    const workoutMeta = workout[0] ? {
+      date,
+      programId: workout[0].programId || "default",
+      programWeek: workout[0].week,
+      workoutFocus: workout[0].focus,
+      sourceDate: workout[0].sourceDate || workout[0].date,
+      scheduleMode: workout[0].scheduleMode,
+    } : { date };
     const nextState = {
       maxes,
       loads,
@@ -1147,7 +1223,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, o
       customExercises,
       ...stateOverrides,
     };
-    const next = { ...existing, ...nextState, ...payload, updatedAt: new Date().toISOString() };
+    const next = { ...existing, ...workoutMeta, ...nextState, ...payload, updatedAt: new Date().toISOString() };
     setLogs({ ...logs, [logKey]: next });
     const result = await saveWorkoutLog(user.uid, logKey, next);
     onSaveStatus?.(result);
@@ -1428,7 +1504,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, o
               <p className="eyebrow">{formatDate(date)} | {workoutPhase}</p>
               <h2>{workoutTitle}</h2>
             </div>
-            {workoutKey !== "blank" && moveWorkoutButton}
+            {canMoveWorkout && moveWorkoutButton}
           </div>
           {requiredMaxes.length > 0 && (
             <div className="max-grid">
@@ -1471,7 +1547,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, o
               <h2>{workoutTitle}</h2>
             </div>
             <div className="workout-title-actions">
-              {workoutKey !== "blank" && moveWorkoutButton}
+              {canMoveWorkout && moveWorkoutButton}
               <button className="icon-button" type="button" onClick={() => finishWorkout({ completed: true })} aria-label="Mark complete" title="Mark complete">
                 <CheckCircle2 size={20} />
               </button>
@@ -2027,6 +2103,7 @@ function ProgramsPage({ programs, workouts, logs, selectedDate, onProgramCreated
   const [openProgramMenu, setOpenProgramMenu] = useState("");
   const [startingProgram, setStartingProgram] = useState(null);
   const [programStartDate, setProgramStartDate] = useState(defaultSelectedDate);
+  const [programScheduleMode, setProgramScheduleMode] = useState("fixed");
   const savedDefaultProgram = programs.find((program) => program.id === "default");
   const defaultProgram = {
     id: "default",
@@ -2103,6 +2180,7 @@ function ProgramsPage({ programs, workouts, logs, selectedDate, onProgramCreated
   function openStartProgram(program) {
     setStartingProgram(program);
     setProgramStartDate(program.startDate || new Date().toISOString().slice(0, 10));
+    setProgramScheduleMode(program.scheduleMode || "fixed");
     setOpenProgramMenu("");
   }
 
@@ -2113,6 +2191,7 @@ function ProgramsPage({ programs, workouts, logs, selectedDate, onProgramCreated
     const savedProgram = {
       ...startingProgram,
       startDate: programStartDate,
+      scheduleMode: programScheduleMode,
       status: "active",
       statusUpdatedAt: new Date().toISOString(),
     };
@@ -2123,7 +2202,7 @@ function ProgramsPage({ programs, workouts, logs, selectedDate, onProgramCreated
 
     await saveProgram(savedProgram);
 
-    if (startingProgram.id !== "default" && firstWorkoutDate && firstWorkoutDate !== programStartDate) {
+    if (programScheduleMode !== flexibleScheduleMode && startingProgram.id !== "default" && firstWorkoutDate && firstWorkoutDate !== programStartDate) {
       const offset = daysBetweenDates(firstWorkoutDate, programStartDate);
       await Promise.all(programWorkouts.map((workout) => {
         const nextDate = shiftDate(workout.date, offset);
@@ -2137,6 +2216,7 @@ function ProgramsPage({ programs, workouts, logs, selectedDate, onProgramCreated
 
     setStartingProgram(null);
     setProgramStartDate(defaultSelectedDate);
+    setProgramScheduleMode("fixed");
     onProgramCreated();
   }
 
@@ -2326,8 +2406,20 @@ function ProgramsPage({ programs, workouts, logs, selectedDate, onProgramCreated
               Start date
               <input type="date" value={programStartDate} onChange={(event) => setProgramStartDate(event.target.value)} required />
             </label>
+            <div className="choice-list" role="radiogroup" aria-label="Program scheduling">
+              <button className={programScheduleMode === "fixed" ? "choice-button active" : "choice-button"} type="button" onClick={() => setProgramScheduleMode("fixed")}>
+                <strong>Known workout days</strong>
+                <span>Keep workouts on the programmed calendar days.</span>
+              </button>
+              <button className={programScheduleMode === flexibleScheduleMode ? "choice-button active" : "choice-button"} type="button" onClick={() => setProgramScheduleMode(flexibleScheduleMode)}>
+                <strong>Unknown workout days</strong>
+                <span>When you pick a day, show the next program day for that week.</span>
+              </button>
+            </div>
             <p className="modal-helper-copy">
-              {startingProgram.id === "default"
+              {programScheduleMode === flexibleScheduleMode
+                ? "Each calendar week advances by completed program days, so the next selected day shows the next workout."
+                : startingProgram.id === "default"
                 ? "The program status will use this date."
                 : "Program workouts will move so the first scheduled workout starts on this date."}
             </p>
@@ -2449,7 +2541,7 @@ function WarmupCooldownPage() {
 }
 
 function StoredProgramsPage({ programs, workouts, logs }) {
-  const programOptions = programs;
+  const programOptions = [{ id: "default", name: "Default Program", goal: "Nine-week Olympic lifting meet prep" }, ...programs.filter((program) => program.id !== "default")];
 
   return (
     <section className="programs-panel">
@@ -3752,16 +3844,26 @@ function App() {
     setTimerBankedSeconds(0);
   }, [activeIntervalSeconds, countdownSeconds, intervalCurrentRound, intervalEndless, intervalPhase, intervalRounds, timerElapsedSeconds, timerMode, timerRunning]);
 
+  const activeFlexibleProgramIds = useMemo(() => new Set(programs
+    .filter((program) => program.status === "active" && program.scheduleMode === flexibleScheduleMode)
+    .map((program) => program.id)), [programs]);
   const starterProgramWorkouts = useMemo(() => (
-    isDevUser(user?.uid)
-      ? importedProgram.map((item) => (
+    activeFlexibleProgramIds.has("default")
+      ? []
+      : importedProgram.map((item) => (
         workoutScheduleOverrides[item.id] ? { ...item, date: workoutScheduleOverrides[item.id] } : item
       ))
-      : []
-  ), [user?.uid, workoutScheduleOverrides]);
+  ), [activeFlexibleProgramIds, workoutScheduleOverrides]);
   const savedWorkouts = useMemo(() => [...customWorkouts, ...programWorkouts], [customWorkouts, programWorkouts]);
-  const allWorkouts = useMemo(() => [...starterProgramWorkouts, ...savedWorkouts], [savedWorkouts, starterProgramWorkouts]);
-  const workoutsByDate = useMemo(() => groupByDate(allWorkouts), [allWorkouts]);
+  const allProgramSourceWorkouts = useMemo(() => [...importedProgram, ...savedWorkouts], [savedWorkouts]);
+  const scheduledWorkouts = useMemo(() => [
+    ...starterProgramWorkouts,
+    ...savedWorkouts.filter((item) => !activeFlexibleProgramIds.has(item.programId || "default")),
+  ], [activeFlexibleProgramIds, savedWorkouts, starterProgramWorkouts]);
+  const flexibleWorkoutGroupsForSelectedDate = useMemo(() => (
+    flexibleProgramWorkoutGroups(selectedDate, programs, allProgramSourceWorkouts, logs)
+  ), [allProgramSourceWorkouts, logs, programs, selectedDate]);
+  const workoutsByDate = useMemo(() => groupByDate(scheduledWorkouts), [scheduledWorkouts]);
   const programLedWorkoutDates = useMemo(() => (
     [...starterProgramWorkouts, ...programWorkouts]
       .map((item) => item.date)
@@ -3770,7 +3872,10 @@ function App() {
   ), [programWorkouts, starterProgramWorkouts]);
   const calendarMonths = useMemo(() => calendarSections(programLedWorkoutDates, new Date(), visibleCalendarMonths), [programLedWorkoutDates, visibleCalendarMonths]);
   const dates = useMemo(() => calendarMonths.flatMap((section) => section.dates), [calendarMonths]);
-  const selectedWorkoutGroups = useMemo(() => groupWorkouts(workoutsByDate[selectedDate] || []), [selectedDate, workoutsByDate]);
+  const selectedWorkoutGroups = useMemo(() => [
+    ...groupWorkouts(workoutsByDate[selectedDate] || []),
+    ...flexibleWorkoutGroupsForSelectedDate,
+  ], [flexibleWorkoutGroupsForSelectedDate, selectedDate, workoutsByDate]);
   const selectedWorkout = selectedWorkoutKey === "blank"
     ? []
     : (selectedWorkoutGroups.find((group) => group.key === selectedWorkoutKey)?.items || selectedWorkoutGroups[0]?.items || [])
@@ -4309,20 +4414,20 @@ function App() {
       ) : view === "warmup-cooldown" ? (
         <WarmupCooldownPage />
       ) : view === "stored-programs" ? (
-        <StoredProgramsPage programs={programs} workouts={savedWorkouts} logs={logs} />
+        <StoredProgramsPage programs={programs} workouts={allProgramSourceWorkouts} logs={logs} />
       ) : view === "stored-workouts" ? (
-        <StoredWorkoutsPage programs={programs} workouts={savedWorkouts} logs={logs} onOpenWorkout={openStoredWorkout} />
+        <StoredWorkoutsPage programs={programs} workouts={allProgramSourceWorkouts} logs={logs} onOpenWorkout={openStoredWorkout} />
       ) : view === "programs" ? (
         <ProgramsPage
           programs={programs}
-          workouts={allWorkouts}
+          workouts={allProgramSourceWorkouts}
           logs={athleteProgressLogs}
           selectedDate={selectedDate}
           onProgramCreated={refreshCustomWorkouts}
           onWorkoutCreated={handleProgramWorkoutCreated}
         />
       ) : view === "athletes" ? (
-        <AthletesPage programs={programs} workouts={allWorkouts} logs={athleteProgressLogs} />
+        <AthletesPage programs={programs} workouts={allProgramSourceWorkouts} logs={athleteProgressLogs} />
       ) : view === "workout-list" ? (
         <WorkoutListView date={selectedDate} workoutGroups={selectedWorkoutGroups} logs={logs} programs={programs} onOpenWorkout={openWorkout} onAddWorkout={openBlankWorkout} onChangeDate={openWorkoutList} />
       ) : view === "workout" ? (
