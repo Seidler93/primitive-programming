@@ -1846,6 +1846,10 @@ select:focus {
   gap: 10px;
 }
 
+.redeem-code-button {
+  justify-self: stretch;
+}
+
 .settings-option {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr) auto;

@@ -255,6 +255,10 @@ function saveUserWeightUnit(userId, unit) {
   localStorage.setItem(userWeightUnitKey(userId), unit === "lb" ? "lb" : "kg");
 }
 
+function isDevUser(userId = "") {
+  return String(userId).startsWith("dev-");
+}
+
 function userGoalsKey(userId) {
   return `primitive-programming:goals:${userId}`;
 }
@@ -2202,8 +2206,7 @@ function WarmupCooldownPage() {
 }
 
 function StoredProgramsPage({ programs, workouts, logs }) {
-  const defaultProgram = { id: "default", name: "Default Program", athleteEmail: "dev-athlete@primitive.local" };
-  const programOptions = [defaultProgram, ...programs.filter((program) => program.id !== "default")];
+  const programOptions = programs;
 
   return (
     <section className="programs-panel">
@@ -2212,8 +2215,9 @@ function StoredProgramsPage({ programs, workouts, logs }) {
         <h2>Programs</h2>
       </div>
 
-      <div className="program-card-grid">
-        {programOptions.map((program) => {
+      {programOptions.length ? (
+        <div className="program-card-grid">
+          {programOptions.map((program) => {
           const programWorkouts = workouts.filter((item) => (item.programId || "default") === program.id);
           const summary = progressSummary(programWorkouts, logs);
           return (
@@ -2238,8 +2242,11 @@ function StoredProgramsPage({ programs, workouts, logs }) {
               {program.goal && <p className="program-note">{program.goal}</p>}
             </article>
           );
-        })}
-      </div>
+          })}
+        </div>
+      ) : (
+        <p className="empty-list-copy">No saved programs yet.</p>
+      )}
     </section>
   );
 }
@@ -2660,6 +2667,17 @@ function ProfileSetupModal({ user, onComplete }) {
 }
 
 function SettingsPage({ onOpenSection }) {
+  const [showRedeemCode, setShowRedeemCode] = useState(false);
+  const [redeemCode, setRedeemCode] = useState("");
+  const [redeemMessage, setRedeemMessage] = useState("");
+
+  function redeemAccessCode(event) {
+    event.preventDefault();
+    const code = redeemCode.trim();
+    if (!code) return;
+    setRedeemMessage("Code redemption will be available soon.");
+  }
+
   return (
     <section className="profile-panel settings-panel">
       <div className="profile-header">
@@ -2690,7 +2708,42 @@ function SettingsPage({ onOpenSection }) {
         })}
       </div>
 
+      <button className="secondary redeem-code-button" type="button" onClick={() => {
+        setRedeemMessage("");
+        setShowRedeemCode(true);
+      }}>
+        <Plus size={18} />
+        Redeem code
+      </button>
+
       <p className="app-version">Version {appVersion}</p>
+
+      {showRedeemCode && (
+        <div className="modal-backdrop" role="presentation">
+          <form className="modal-panel modal-form" role="dialog" aria-modal="true" aria-labelledby="redeem-code-title" onSubmit={redeemAccessCode}>
+            <div>
+              <p className="eyebrow">Program access</p>
+              <h2 id="redeem-code-title">Redeem code</h2>
+            </div>
+            <label>
+              Access code
+              <input value={redeemCode} onChange={(event) => {
+                setRedeemCode(event.target.value.toUpperCase());
+                setRedeemMessage("");
+              }} placeholder="ENTER CODE" autoCapitalize="characters" />
+            </label>
+            <div className="modal-action-row">
+              <button className="secondary" type="button" onClick={() => setShowRedeemCode(false)}>
+                Cancel
+              </button>
+              <button className="primary" type="submit" disabled={!redeemCode.trim()}>
+                Redeem
+              </button>
+            </div>
+            {redeemMessage && <p className="save-status">{redeemMessage}</p>}
+          </form>
+        </div>
+      )}
     </section>
   );
 }
@@ -3344,12 +3397,12 @@ function App() {
     setUser(profiledUser);
     setShowProfileSetup(profile.profileSetupCompleted !== true);
 
-    const [nextLogs, nextTrainer, nextCustomWorkouts, nextPrograms] = await Promise.all([
+    const [nextLogs, nextTrainer, nextCustomWorkouts] = await Promise.all([
       loadWorkoutLogs(nextUser.uid),
       isTrainerUser(nextUser),
       loadCustomWorkouts("default"),
-      loadPrograms(),
     ]);
+    const nextPrograms = nextTrainer || isDevUser(nextUser.uid) ? await loadPrograms() : [];
 
     setLogs(nextLogs);
     setIsTrainer(nextTrainer);
@@ -3475,12 +3528,15 @@ function App() {
     setTimerBankedSeconds(0);
   }, [activeIntervalSeconds, countdownSeconds, intervalCurrentRound, intervalEndless, intervalPhase, intervalRounds, timerElapsedSeconds, timerMode, timerRunning]);
 
-  const rescheduledImportedProgram = useMemo(() => (
-    importedProgram.map((item) => (
-      workoutScheduleOverrides[item.id] ? { ...item, date: workoutScheduleOverrides[item.id] } : item
-    ))
-  ), [workoutScheduleOverrides]);
-  const allWorkouts = useMemo(() => [...rescheduledImportedProgram, ...customWorkouts, ...programWorkouts], [customWorkouts, programWorkouts, rescheduledImportedProgram]);
+  const starterProgramWorkouts = useMemo(() => (
+    isDevUser(user?.uid)
+      ? importedProgram.map((item) => (
+        workoutScheduleOverrides[item.id] ? { ...item, date: workoutScheduleOverrides[item.id] } : item
+      ))
+      : []
+  ), [user?.uid, workoutScheduleOverrides]);
+  const savedWorkouts = useMemo(() => [...customWorkouts, ...programWorkouts], [customWorkouts, programWorkouts]);
+  const allWorkouts = useMemo(() => [...starterProgramWorkouts, ...savedWorkouts], [savedWorkouts, starterProgramWorkouts]);
   const workoutsByDate = useMemo(() => groupByDate(allWorkouts), [allWorkouts]);
   const workoutDates = useMemo(() => Object.keys(workoutsByDate).sort(), [workoutsByDate]);
   const calendarMonths = useMemo(() => calendarSections(workoutDates), [workoutDates]);
@@ -3494,7 +3550,7 @@ function App() {
     ? null
     : selectedWorkoutGroups.find((group) => group.key === activeWorkoutKey) || selectedWorkoutGroups[0] || null;
   const today = new Date().toISOString().slice(0, 10);
-  const todayTarget = workoutsByDate[today] ? today : dates.find((date) => date >= today) || dates[0];
+  const todayTarget = workoutsByDate[today] ? today : dates.find((date) => date >= today) || dates[0] || today;
 
   function openWorkoutList(date) {
     setSelectedDate(date);
@@ -3923,7 +3979,7 @@ function App() {
           section={view.replace("settings-", "")}
           user={user}
           programs={programs}
-          workouts={[...importedProgram, ...customWorkouts, ...programWorkouts]}
+          workouts={allWorkouts}
           logs={logs}
           serviceWorkerRegistration={serviceWorkerRegistration}
           updateRegistration={updateRegistration}
@@ -3941,19 +3997,19 @@ function App() {
       ) : view === "warmup-cooldown" ? (
         <WarmupCooldownPage />
       ) : view === "stored-programs" ? (
-        <StoredProgramsPage programs={programs} workouts={[...importedProgram, ...customWorkouts, ...programWorkouts]} logs={logs} />
+        <StoredProgramsPage programs={programs} workouts={savedWorkouts} logs={logs} />
       ) : view === "stored-workouts" ? (
-        <StoredWorkoutsPage programs={programs} workouts={[...importedProgram, ...customWorkouts, ...programWorkouts]} logs={logs} onOpenWorkout={openStoredWorkout} />
+        <StoredWorkoutsPage programs={programs} workouts={savedWorkouts} logs={logs} onOpenWorkout={openStoredWorkout} />
       ) : view === "programs" ? (
         <ProgramsPage
           programs={programs}
-          workouts={[...importedProgram, ...customWorkouts, ...programWorkouts]}
+          workouts={allWorkouts}
           logs={athleteProgressLogs}
           onProgramCreated={refreshCustomWorkouts}
           onWorkoutCreated={refreshCustomWorkouts}
         />
       ) : view === "athletes" ? (
-        <AthletesPage programs={programs} workouts={[...importedProgram, ...customWorkouts, ...programWorkouts]} logs={athleteProgressLogs} />
+        <AthletesPage programs={programs} workouts={allWorkouts} logs={athleteProgressLogs} />
       ) : view === "workout-list" ? (
         <WorkoutListView date={selectedDate} workoutGroups={selectedWorkoutGroups} logs={logs} programs={programs} onOpenWorkout={openWorkout} onAddWorkout={openBlankWorkout} onChangeDate={openWorkoutList} />
       ) : view === "workout" ? (
