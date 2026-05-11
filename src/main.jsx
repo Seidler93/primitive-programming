@@ -1155,6 +1155,8 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, o
   const workoutPhase = workout[0]?.phase || "Custom workout";
   const workoutTitle = workout[0] ? `${workout[0].focus} - Week ${workout[0].week}` : workoutKey === "blank" ? "Create workout" : "Scheduled Workout";
   const canMoveWorkout = workoutKey !== "blank" && workout[0]?.scheduleMode !== flexibleScheduleMode;
+  const isFutureWorkout = date > new Date().toISOString().slice(0, 10);
+  const finishButtonLabel = isFutureWorkout ? "Save workout" : "Complete workout";
 
   useEffect(() => {
     const draft = loadWorkoutDraft(user.uid, date, workoutKey);
@@ -1954,9 +1956,9 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, o
             Session notes
             <textarea value={notes} onChange={(event) => setNotes(event.target.value)} onBlur={() => persist()} rows={3} />
           </label>
-          <button className="secondary" type="button" onClick={() => finishWorkout()}>
-            <Save size={18} />
-            Save workout
+          <button className="secondary" type="button" onClick={() => finishWorkout(isFutureWorkout ? {} : { completed: true })}>
+            {isFutureWorkout ? <Save size={18} /> : <CheckCircle2 size={18} />}
+            {finishButtonLabel}
           </button>
           {showAddExercise && (
             <div className="modal-backdrop" role="presentation">
