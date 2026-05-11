@@ -541,27 +541,25 @@ select:focus {
 }
 
 .date-tile.completed:not(.empty)::before {
-  background: #70e3a2;
-  opacity: 0.22;
+  background: #fff;
+  opacity: 0.12;
 }
 
-.date-tile.completed:not(.selected) {
-  border-color: #2f6f4b;
-}
-
-.date-tile.completed.selected::before {
-  background: #dcfce7;
-  opacity: 0.28;
+.date-tile.completed {
+  color: #fff;
+  background: #8b5cf6;
+  border-color: #8b5cf6;
 }
 
 .date-tile > * {
   position: relative;
 }
 
-.date-tile.selected {
+.date-tile.selected:not(.completed) {
   color: #fff;
-  background: #8b5cf6;
+  background: #21172b;
   border-color: #8b5cf6;
+  box-shadow: inset 0 0 0 1px #8b5cf6;
 }
 
 .date-tile.empty {
@@ -573,10 +571,16 @@ select:focus {
   opacity: 0.48;
 }
 
-.date-tile.empty.selected {
+.date-tile.empty.selected:not(.completed) {
   color: #fff;
-  background: #c7b6dc;
-  border-color: #c7b6dc;
+  background: #15101b;
+  border-color: #8b5cf6;
+  box-shadow: inset 0 0 0 1px #8b5cf6;
+}
+
+.date-tile:focus-visible {
+  outline: 2px solid #c7b6dc;
+  outline-offset: 3px;
 }
 
 .date-tile span {
