@@ -7,7 +7,9 @@ import {
   signOut,
 } from "firebase/auth";
 import {
+  arrayUnion,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -52,6 +54,8 @@ export const hasPushConfig = Boolean(hasFirebaseConfig && vapidKey);
 const localKey = (key) => `primitive-programming:${key}`;
 const isDevUserId = (userId = "") => userId.startsWith("dev-");
 const readTimeoutMs = 3500;
+const defaultProgramAccess = ["default"];
+const flexibleProgramScheduleMode = "unknown-days";
 
 function withTimeout(promise, message) {
   return Promise.race([
@@ -115,32 +119,105 @@ export async function logout() {
   localStorage.removeItem(localKey("demoUser"));
 }
 
-export async function loadWorkoutLogs(userId) {
+function workoutRecordFromData(id, data = {}) {
+  const status = data.status || (data.completed ? "completed" : "scheduled");
+  return {
+    ...data,
+    id: data.id || id,
+    status,
+    completed: status === "completed" || data.completed === true,
+  };
+}
+
+function workoutRecordPayload(payload = {}) {
+  const completed = payload.completed === true || payload.status === "completed";
+  return {
+    ...payload,
+    status: completed ? "completed" : payload.status || "scheduled",
+    completed,
+    completedAt: completed ? payload.completedAt || new Date().toISOString() : payload.completedAt || null,
+    updatedAt: payload.updatedAt || new Date().toISOString(),
+  };
+}
+
+async function loadLegacyWorkoutLogs(userId) {
+  const localLogs = readJson(localStorage.getItem(localKey(`logs:${userId}`)), {});
   if (db && !isDevUserId(userId)) {
     try {
       const snapshot = await withTimeout(
         getDocs(collection(db, "users", userId, "logs")),
-        "Workout logs request timed out.",
+        "Legacy workout logs request timed out.",
       );
-      return Object.fromEntries(snapshot.docs.map((item) => [item.id, item.data()]));
+      return {
+        ...localLogs,
+        ...Object.fromEntries(snapshot.docs.map((item) => [item.id, item.data()])),
+      };
     } catch (error) {
-      console.warn("Falling back to local workout logs.", error);
+      console.warn("Could not read legacy workout logs.", error);
     }
   }
-  return JSON.parse(localStorage.getItem(localKey(`logs:${userId}`)) || "{}");
+  return localLogs;
 }
 
-export async function saveWorkoutLog(userId, date, payload) {
-  const logs = await loadWorkoutLogs(userId);
-  logs[date] = { ...(logs[date] || {}), ...payload };
-  localStorage.setItem(localKey(`logs:${userId}`), JSON.stringify(logs));
+async function deleteLegacyWorkoutLogs(userId, ids) {
+  localStorage.removeItem(localKey(`logs:${userId}`));
+  if (db && !isDevUserId(userId)) {
+    await Promise.all(ids.map(async (id) => {
+      try {
+        await deleteDoc(doc(db, "users", userId, "logs", id));
+      } catch (error) {
+        console.warn("Could not delete legacy workout log.", error);
+      }
+    }));
+  }
+}
+
+export async function loadUserWorkouts(userId) {
+  let workouts = {};
+  if (db && !isDevUserId(userId)) {
+    try {
+      const snapshot = await withTimeout(
+        getDocs(collection(db, "users", userId, "workouts")),
+        "User workouts request timed out.",
+      );
+      workouts = Object.fromEntries(snapshot.docs.map((item) => [item.id, workoutRecordFromData(item.id, item.data())]));
+    } catch (error) {
+      console.warn("Falling back to local user workouts.", error);
+    }
+  }
+
+  const localWorkouts = readJson(localStorage.getItem(localKey(`workouts:${userId}`)), {});
+  workouts = { ...localWorkouts, ...workouts };
+
+  const legacyLogs = await loadLegacyWorkoutLogs(userId);
+  const legacyIds = Object.keys(legacyLogs);
+  if (legacyIds.length) {
+    const migrated = Object.fromEntries(legacyIds.map((id) => [id, workoutRecordFromData(id, legacyLogs[id])]));
+    workouts = { ...migrated, ...workouts };
+    localStorage.setItem(localKey(`workouts:${userId}`), JSON.stringify(workouts));
+    if (db && !isDevUserId(userId)) {
+      await Promise.all(Object.entries(migrated).map(([id, workout]) => (
+        setDoc(doc(db, "users", userId, "workouts", id), workoutRecordPayload(workout), { merge: true })
+      )));
+    }
+    await deleteLegacyWorkoutLogs(userId, legacyIds);
+  }
+
+  return workouts;
+}
+
+export async function saveUserWorkout(userId, workoutId, payload) {
+  const workouts = await loadUserWorkouts(userId);
+  const nextPayload = workoutRecordPayload({ ...(workouts[workoutId] || {}), ...payload });
+  workouts[workoutId] = nextPayload;
+  localStorage.setItem(localKey(`workouts:${userId}`), JSON.stringify(workouts));
 
   if (db && !isDevUserId(userId)) {
     try {
-      await setDoc(doc(db, "users", userId, "logs", date), payload, { merge: true });
+      await setDoc(doc(db, "users", userId, "workouts", workoutId), nextPayload, { merge: true });
       return { synced: true };
     } catch (error) {
-      console.warn("Saved workout log locally; cloud sync failed.", error);
+      console.warn("Saved user workout locally; cloud sync failed.", error);
       return { synced: false, local: true };
     }
   }
@@ -183,6 +260,156 @@ export async function saveUserProfile(userId, profile) {
   }
 
   return nextLocalProfile;
+}
+
+function userProgramsLocalKey(userId) {
+  return localKey(`user-programs:${userId}`);
+}
+
+function readJson(value, fallback) {
+  try {
+    return JSON.parse(value || JSON.stringify(fallback));
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeProgramAccess(programs) {
+  const ids = Array.isArray(programs) ? programs : [];
+  return [...new Set([...defaultProgramAccess, ...ids].filter(Boolean))];
+}
+
+function normalizeActivePrograms(activePrograms) {
+  if (!Array.isArray(activePrograms)) return [];
+  const byId = new Map();
+  activePrograms.forEach((program) => {
+    const id = program?.id || program?.programId;
+    if (!id) return;
+    const normalized = {
+      id,
+      startDate: program.startDate || "",
+      scheduled: program.scheduled !== false,
+    };
+    if (program.workoutDates && typeof program.workoutDates === "object" && !Array.isArray(program.workoutDates)) {
+      normalized.workoutDates = program.workoutDates;
+    }
+    if (program.currentWeek !== undefined) {
+      normalized.currentWeek = Math.max(1, Number(program.currentWeek) || 1);
+    }
+    if (program.nextWorkoutIndex !== undefined) {
+      normalized.nextWorkoutIndex = Math.max(0, Number(program.nextWorkoutIndex) || 0);
+    }
+    byId.set(id, normalized);
+  });
+  return [...byId.values()];
+}
+
+export async function ensureUserDocument(user) {
+  if (!user?.uid) return {};
+  const localProfile = readJson(localStorage.getItem(localKey(`profile:${user.uid}`)), {});
+  const localProgramIds = normalizeProgramAccess(readJson(localStorage.getItem(userProgramsLocalKey(user.uid)), []));
+  localStorage.setItem(userProgramsLocalKey(user.uid), JSON.stringify(localProgramIds));
+
+  if (db && !isDevUserId(user.uid)) {
+    const payload = {
+      uid: user.uid,
+      email: user.email || "",
+      displayName: user.displayName || "",
+      programs: arrayUnion(...defaultProgramAccess),
+      updatedAt: new Date().toISOString(),
+    };
+    try {
+      await setDoc(doc(db, "users", user.uid), payload, { merge: true });
+    } catch (error) {
+      console.warn("Could not ensure user document.", error);
+    }
+  }
+
+  return { ...localProfile, programs: localProgramIds };
+}
+
+export async function loadUserProgramIds(userId) {
+  if (db && !isDevUserId(userId)) {
+    try {
+      const snapshot = await withTimeout(getDoc(doc(db, "users", userId)), "User programs request timed out.");
+      if (snapshot.exists()) {
+        return normalizeProgramAccess(snapshot.data().programs);
+      }
+    } catch (error) {
+      console.warn("Falling back to local user programs.", error);
+    }
+  }
+  try {
+    return normalizeProgramAccess(readJson(localStorage.getItem(userProgramsLocalKey(userId)), []));
+  } catch {
+    return defaultProgramAccess;
+  }
+}
+
+export async function grantUserProgramAccess(userId, programId) {
+  if (!userId || !programId) return { synced: false };
+  const localProgramIds = normalizeProgramAccess(readJson(localStorage.getItem(userProgramsLocalKey(userId)), []));
+  const nextProgramIds = normalizeProgramAccess([...localProgramIds, programId]);
+  localStorage.setItem(userProgramsLocalKey(userId), JSON.stringify(nextProgramIds));
+
+  if (db && !isDevUserId(userId)) {
+    try {
+      await setDoc(doc(db, "users", userId), {
+        programs: arrayUnion(programId),
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+      return { synced: true };
+    } catch (error) {
+      console.warn("Saved user program access locally; cloud sync failed.", error);
+      return { synced: false, local: true };
+    }
+  }
+
+  return { synced: false, local: true };
+}
+
+function userActiveProgramsLocalKey(userId) {
+  return localKey(`active-programs:${userId}`);
+}
+
+export async function loadUserActivePrograms(userId) {
+  if (db && !isDevUserId(userId)) {
+    try {
+      const snapshot = await withTimeout(getDoc(doc(db, "users", userId)), "User active programs request timed out.");
+      if (snapshot.exists()) {
+        return normalizeActivePrograms(snapshot.data().activePrograms);
+      }
+    } catch (error) {
+      console.warn("Falling back to local active programs.", error);
+    }
+  }
+  return normalizeActivePrograms(readJson(localStorage.getItem(userActiveProgramsLocalKey(userId)), []));
+}
+
+export async function saveUserActiveProgram(userId, activeProgram) {
+  if (!userId || !activeProgram?.id) return { synced: false };
+  const current = await loadUserActivePrograms(userId);
+  const next = normalizeActivePrograms([
+    ...current.filter((program) => program.id !== activeProgram.id),
+    activeProgram,
+  ]);
+  localStorage.setItem(userActiveProgramsLocalKey(userId), JSON.stringify(next));
+
+  if (db && !isDevUserId(userId)) {
+    try {
+      await setDoc(doc(db, "users", userId), {
+        activePrograms: next,
+        programs: arrayUnion(activeProgram.id),
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+      return { synced: true };
+    } catch (error) {
+      console.warn("Saved active program locally; cloud sync failed.", error);
+      return { synced: false, local: true };
+    }
+  }
+
+  return { synced: false, local: true };
 }
 
 export async function uploadUserProfileImage(userId, file, fallbackDataUrl) {
@@ -312,6 +539,50 @@ export async function loadPrograms() {
     }
   }
   return JSON.parse(localStorage.getItem(localKey("programs")) || "[]");
+}
+
+export async function loadProgramsForUser(user) {
+  const programs = await loadPrograms();
+  if (!user?.uid) return [];
+  const [programIdList, activeProgramList] = await Promise.all([
+    loadUserProgramIds(user.uid),
+    loadUserActivePrograms(user.uid),
+  ]);
+  const programIds = new Set(programIdList);
+  const activePrograms = new Map(activeProgramList.map((program) => [program.id, program]));
+  const userEmail = user.email?.toLowerCase() || "";
+  const accessiblePrograms = programs.filter((program) => {
+    const athleteEmail = program.athleteEmail?.toLowerCase() || "";
+    return programIds.has(program.id) || (userEmail && athleteEmail === userEmail);
+  });
+  const backfillProgramIds = accessiblePrograms
+    .map((program) => program.id)
+    .filter((programId) => !programIds.has(programId));
+  await Promise.all(backfillProgramIds.map((programId) => grantUserProgramAccess(user.uid, programId)));
+
+  const activeBackfills = accessiblePrograms
+    .filter((program) => program.status === "active" && !activePrograms.has(program.id))
+    .map((program) => ({
+      id: program.id,
+      startDate: program.startDate || "",
+      scheduled: program.scheduleMode !== flexibleProgramScheduleMode,
+      currentWeek: 1,
+      nextWorkoutIndex: 0,
+    }));
+  await Promise.all(activeBackfills.map((program) => saveUserActiveProgram(user.uid, program)));
+  activeBackfills.forEach((program) => activePrograms.set(program.id, program));
+
+  return accessiblePrograms.map((program) => {
+    const activeProgram = activePrograms.get(program.id);
+    if (!activeProgram) return program;
+    return {
+      ...program,
+      activeProgram,
+      status: "active",
+      startDate: activeProgram.startDate || program.startDate,
+      scheduleMode: activeProgram.scheduled ? "fixed" : flexibleProgramScheduleMode,
+    };
+  });
 }
 
 export async function saveProgram(program) {

@@ -42,17 +42,20 @@ import {
   isTrainerUser,
   loadCustomWorkouts,
   loadPrograms,
+  loadProgramsForUser,
   loadUserMaxes as loadCloudUserMaxes,
   loadUserProfile,
-  loadWorkoutLogs,
+  loadUserWorkouts,
   login,
   loginDev,
   logout,
   observeAuth,
   saveProgram,
   saveCustomWorkout,
+  ensureUserDocument,
+  saveUserActiveProgram,
   saveUserMaxes as saveCloudUserMaxes,
-  saveWorkoutLog,
+  saveUserWorkout,
   saveUserProfile,
   requestNotificationAccess,
   listenForForegroundMessages,
@@ -683,6 +686,53 @@ function programWeekNumber(program, date) {
   return Math.max(1, Math.floor(daysBetweenDates(program.startDate, date) / 7) + 1);
 }
 
+function workoutDateMapKey(workout, index = 0) {
+  return workout.id || `${workout.programId || "default"}:${workout.week || "week"}:${workout.day || "day"}:${workout.exercise || "exercise"}:${index}`;
+}
+
+function buildWorkoutDatesForProgram(programWorkouts, startDate) {
+  if (!startDate || !programWorkouts.length) return {};
+  const sortedWorkouts = [...programWorkouts]
+    .filter((workout) => workout.date)
+    .sort((a, b) => `${a.date}`.localeCompare(`${b.date}`));
+  const firstWorkoutDate = sortedWorkouts[0]?.date;
+  if (!firstWorkoutDate) return {};
+  const offset = daysBetweenDates(firstWorkoutDate, startDate);
+  return Object.fromEntries(sortedWorkouts.map((workout, index) => [
+    workoutDateMapKey(workout, index),
+    shiftDate(workout.date, offset),
+  ]));
+}
+
+function applyActiveProgramDates(workouts, programs) {
+  const programAccess = new Map(programs.map((program) => [program.id, program.activeProgram]));
+  const mappedDates = new Map();
+  Object.values(workouts.reduce((groups, workout) => {
+    const programId = workout.programId || "default";
+    groups[programId] = [...(groups[programId] || []), workout];
+    return groups;
+  }, {})).forEach((group) => {
+    group
+      .filter((workout) => workout.date)
+      .sort((a, b) => `${a.date}`.localeCompare(`${b.date}`))
+      .forEach((workout, index) => {
+        const activeProgram = programAccess.get(workout.programId || "default");
+        const mappedDate = activeProgram?.scheduled && activeProgram.workoutDates?.[workoutDateMapKey(workout, index)];
+        if (mappedDate) mappedDates.set(workout.id, mappedDate);
+      });
+  });
+  return workouts.map((workout) => {
+    const mappedDate = mappedDates.get(workout.id);
+    if (!mappedDate) return workout;
+    return {
+      ...workout,
+      sourceDate: workout.sourceDate || workout.date,
+      date: mappedDate,
+      day: new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date(`${mappedDate}T12:00:00`)),
+    };
+  });
+}
+
 function completedFlexibleProgramDaysThisWeek(logs, programId, date) {
   return Object.entries(logs).filter(([key, log]) => {
     if (!log?.completed || log.programId !== programId || log.scheduleMode !== flexibleScheduleMode) return false;
@@ -932,7 +982,7 @@ function AuthCard({ onAuthed }) {
           <span className="brand-mark"><Dumbbell size={24} /></span>
           <div>
             <p>Primitive Programming</p>
-            <h1>Training logs for lifters and coaches.</h1>
+            <h1>Training plans for lifters and coaches.</h1>
           </div>
         </div>
         <form onSubmit={submit} className="auth-form">
@@ -1227,7 +1277,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, o
     };
     const next = { ...existing, ...workoutMeta, ...nextState, ...payload, updatedAt: new Date().toISOString() };
     setLogs({ ...logs, [logKey]: next });
-    const result = await saveWorkoutLog(user.uid, logKey, next);
+    const result = await saveUserWorkout(user.uid, logKey, next);
     onSaveStatus?.(result);
   }
 
@@ -2089,7 +2139,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, o
   );
 }
 
-function ProgramsPage({ programs, workouts, logs, selectedDate, onProgramCreated, onWorkoutCreated }) {
+function ProgramsPage({ user, isTrainer, programs, workouts, logs, selectedDate, onProgramCreated, onWorkoutCreated }) {
   const [programName, setProgramName] = useState("");
   const [athleteEmail, setAthleteEmail] = useState("dev-athlete@primitive.local");
   const [startDate, setStartDate] = useState(selectedDate || defaultSelectedDate);
@@ -2200,20 +2250,19 @@ function ProgramsPage({ programs, workouts, logs, selectedDate, onProgramCreated
     const programWorkouts = workouts
       .filter((item) => (item.programId || "default") === startingProgram.id && item.date)
       .sort((a, b) => a.date.localeCompare(b.date));
-    const firstWorkoutDate = programWorkouts[0]?.date;
+    const scheduled = programScheduleMode !== flexibleScheduleMode;
+    const activeProgram = {
+      id: startingProgram.id,
+      startDate: programStartDate,
+      scheduled,
+      currentWeek: 1,
+      nextWorkoutIndex: 0,
+      ...(scheduled ? { workoutDates: buildWorkoutDatesForProgram(programWorkouts, programStartDate) } : {}),
+    };
 
     await saveProgram(savedProgram);
-
-    if (programScheduleMode !== flexibleScheduleMode && startingProgram.id !== "default" && firstWorkoutDate && firstWorkoutDate !== programStartDate) {
-      const offset = daysBetweenDates(firstWorkoutDate, programStartDate);
-      await Promise.all(programWorkouts.map((workout) => {
-        const nextDate = shiftDate(workout.date, offset);
-        return saveCustomWorkout(startingProgram.id, {
-          ...workout,
-          date: nextDate,
-          day: new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date(`${nextDate}T12:00:00`)),
-        });
-      }));
+    if (!isTrainer && user?.uid) {
+      await saveUserActiveProgram(user.uid, activeProgram);
     }
 
     setStartingProgram(null);
@@ -2735,12 +2784,12 @@ function ProfilePage({ user, isTrainer, logs, onOpenEdit }) {
               <dd>{completedCount}</dd>
             </div>
             <div>
-              <dt>Logged sessions</dt>
+              <dt>Workout records</dt>
               <dd>{Object.keys(logs).length}</dd>
             </div>
             <div>
               <dt>Last updated</dt>
-              <dd>{lastUpdated ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(lastUpdated)) : "Not logged yet"}</dd>
+              <dd>{lastUpdated ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(lastUpdated)) : "No workouts yet"}</dd>
             </div>
           </dl>
         </div>
@@ -2878,8 +2927,6 @@ function ProfileSetupModal({ user, onComplete }) {
   const [heightFeet, setHeightFeet] = useState(user.heightFeet || (initialHeightInches ? String(Math.floor(initialHeightInches / 12)) : ""));
   const [heightInches, setHeightInches] = useState(user.heightInches || (initialHeightInches ? String(initialHeightInches % 12) : ""));
   const [weight, setWeight] = useState(user.bodyweight || "");
-  const [experienceLevel, setExperienceLevel] = useState(user.experienceLevel || "");
-  const [trainingGoal, setTrainingGoal] = useState(user.trainingGoal || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const heightUnit = measurementSystem === "imperial" ? "in" : "cm";
@@ -2906,8 +2953,6 @@ function ProfileSetupModal({ user, onComplete }) {
       heightInches: measurementSystem === "imperial" ? heightInches.trim() : "",
       bodyweight: weight.trim(),
       bodyweightUnit: weightUnit,
-      experienceLevel,
-      trainingGoal: trainingGoal.trim(),
     };
     try {
       saveUserWeightUnit(user.uid, weightUnit);
@@ -2992,19 +3037,6 @@ function ProfileSetupModal({ user, onComplete }) {
           <label>
             Weight
             <input value={weight} onChange={(event) => setWeight(event.target.value)} inputMode="decimal" placeholder={weightUnit} />
-          </label>
-          <label>
-            Training experience
-            <select value={experienceLevel} onChange={(event) => setExperienceLevel(event.target.value)}>
-              <option value="">Optional</option>
-              <option value="beginner">Beginner</option>
-              <option value="intermediate">Intermediate</option>
-              <option value="advanced">Advanced</option>
-            </select>
-          </label>
-          <label>
-            Main goal
-            <input value={trainingGoal} onChange={(event) => setTrainingGoal(event.target.value)} placeholder="Strength, weightlifting, conditioning..." />
           </label>
           <button className="primary" type="submit" disabled={saving}>
             {saving ? "Saving..." : "Save preferences"}
@@ -3113,8 +3145,6 @@ function SettingsSectionPage({ section, user, serviceWorkerRegistration, updateR
   const [heightInches, setHeightInches] = useState(user.heightInches || (initialHeightInches ? String(initialHeightInches % 12) : ""));
   const [bodyweight, setBodyweight] = useState(user.bodyweight || "");
   const [gender, setGender] = useState(user.gender || "");
-  const [experienceLevel, setExperienceLevel] = useState(user.experienceLevel || "");
-  const [trainingGoal, setTrainingGoal] = useState(user.trainingGoal || "");
   const [profileSaved, setProfileSaved] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState("");
@@ -3196,8 +3226,6 @@ function SettingsSectionPage({ section, user, serviceWorkerRegistration, updateR
       heightInches: measurementSystem === "imperial" ? heightInches.trim() : "",
       bodyweight: bodyweight.trim(),
       bodyweightUnit: nextWeightUnit,
-      experienceLevel,
-      trainingGoal: trainingGoal.trim(),
     };
     try {
       saveUserWeightUnit(user.uid, nextWeightUnit);
@@ -3370,19 +3398,6 @@ function SettingsSectionPage({ section, user, serviceWorkerRegistration, updateR
             <label>
               Weight
               <input value={bodyweight} onChange={(event) => setBodyweight(event.target.value)} inputMode="decimal" placeholder={measurementSystem === "imperial" ? "lb" : "kg"} />
-            </label>
-            <label>
-              Training experience
-              <select value={experienceLevel} onChange={(event) => setExperienceLevel(event.target.value)}>
-                <option value="">Optional</option>
-                <option value="beginner">Beginner</option>
-                <option value="intermediate">Intermediate</option>
-                <option value="advanced">Advanced</option>
-              </select>
-            </label>
-            <label>
-              Main goal
-              <input value={trainingGoal} onChange={(event) => setTrainingGoal(event.target.value)} placeholder="Strength, weightlifting, conditioning..." />
             </label>
             <button className="primary" type="submit" disabled={profileSaving}>
               <Save size={18} />
@@ -3692,6 +3707,7 @@ function App() {
     const [profile, cloudMaxes] = await Promise.all([
       loadUserProfile(nextUser.uid),
       loadCloudUserMaxes(nextUser.uid),
+      ensureUserDocument(nextUser),
     ]);
     saveUserMaxes(nextUser.uid, cloudMaxes);
     const profiledUser = mergeUserProfile(nextUser, profile);
@@ -3699,31 +3715,65 @@ function App() {
     setShowProfileSetup(profile.profileSetupCompleted !== true);
 
     const [nextLogs, nextTrainer, nextCustomWorkouts] = await Promise.all([
-      loadWorkoutLogs(nextUser.uid),
+      loadUserWorkouts(nextUser.uid),
       isTrainerUser(nextUser),
       loadCustomWorkouts("default"),
     ]);
-    const nextPrograms = nextTrainer || isDevUser(nextUser.uid) ? await loadPrograms() : [];
+    const nextPrograms = nextTrainer || isDevUser(nextUser.uid) ? await loadPrograms() : await loadProgramsForUser(profiledUser);
 
     setLogs(nextLogs);
     setIsTrainer(nextTrainer);
-    setAthleteProgressLogs(nextTrainer ? await loadWorkoutLogs("dev-athlete") : nextLogs);
+    setAthleteProgressLogs(nextTrainer ? await loadUserWorkouts("dev-athlete") : nextLogs);
     setCustomWorkouts(nextCustomWorkouts);
-    setPrograms(nextPrograms);
     setWorkoutScheduleOverrides(loadWorkoutScheduleOverrides(nextUser.uid));
-    const programWorkoutLists = await Promise.all(nextPrograms.map((program) => loadCustomWorkouts(program.id)));
-    setProgramWorkouts(programWorkoutLists.flat());
+    const programWorkoutState = await loadProgramWorkoutState(nextUser, nextPrograms, nextTrainer);
+    setPrograms(programWorkoutState.programs);
+    setProgramWorkouts(programWorkoutState.workouts);
+  }
+
+  async function loadProgramWorkoutState(currentUser, nextPrograms, userIsTrainer = isTrainer) {
+    const programWorkoutLists = await Promise.all(nextPrograms.map(async (program) => (
+      (await loadCustomWorkouts(program.id)).map((workout) => ({
+        ...workout,
+        programId: workout.programId || program.id,
+      }))
+    )));
+    const rawWorkouts = programWorkoutLists.flat();
+    if (userIsTrainer || isDevUser(currentUser?.uid)) {
+      return { programs: nextPrograms, workouts: rawWorkouts };
+    }
+
+    const programsWithSchedules = await Promise.all(nextPrograms.map(async (program) => {
+      const activeProgram = program.activeProgram;
+      if (!activeProgram?.scheduled) return program;
+      const programItems = rawWorkouts.filter((workout) => (workout.programId || "default") === program.id);
+      const expectedDates = buildWorkoutDatesForProgram(programItems, activeProgram.startDate || program.startDate);
+      const missingDates = Object.keys(expectedDates).some((key) => !activeProgram.workoutDates?.[key]);
+      if (!missingDates) return program;
+      const nextActiveProgram = {
+        ...activeProgram,
+        workoutDates: {
+          ...expectedDates,
+          ...(activeProgram.workoutDates || {}),
+        },
+      };
+      await saveUserActiveProgram(currentUser.uid, nextActiveProgram);
+      return { ...program, activeProgram: nextActiveProgram };
+    }));
+
+    return {
+      programs: programsWithSchedules,
+      workouts: applyActiveProgramDates(rawWorkouts, programsWithSchedules),
+    };
   }
 
   async function refreshCustomWorkouts() {
-    const [nextDefaultWorkouts, nextPrograms] = await Promise.all([
-      loadCustomWorkouts("default"),
-      loadPrograms(),
-    ]);
-    const programWorkoutLists = await Promise.all(nextPrograms.map((program) => loadCustomWorkouts(program.id)));
+    const nextDefaultWorkouts = await loadCustomWorkouts("default");
+    const nextPrograms = isTrainer || isDevUser(user?.uid) ? await loadPrograms() : user ? await loadProgramsForUser(user) : [];
+    const programWorkoutState = await loadProgramWorkoutState(user, nextPrograms);
     setCustomWorkouts(nextDefaultWorkouts);
-    setPrograms(nextPrograms);
-    setProgramWorkouts(programWorkoutLists.flat());
+    setPrograms(programWorkoutState.programs);
+    setProgramWorkouts(programWorkoutState.workouts);
   }
 
   async function handleProgramWorkoutCreated(workoutDate) {
@@ -4421,6 +4471,8 @@ function App() {
         <StoredWorkoutsPage programs={programs} workouts={allProgramSourceWorkouts} logs={logs} onOpenWorkout={openStoredWorkout} />
       ) : view === "programs" ? (
         <ProgramsPage
+          user={user}
+          isTrainer={isTrainer}
           programs={programs}
           workouts={allProgramSourceWorkouts}
           logs={athleteProgressLogs}
