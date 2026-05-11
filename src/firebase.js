@@ -106,10 +106,16 @@ export async function login(email, password, mode = "login") {
   if (auth) {
     const fn = mode === "signup" ? createUserWithEmailAndPassword : signInWithEmailAndPassword;
     const result = await fn(auth, email, password);
+    if (mode === "signup") {
+      await ensureUserDocument(result.user, { role: "athlete" });
+    }
     return result.user;
   }
-  const user = { uid: email.toLowerCase(), email };
+  const user = { uid: email.toLowerCase(), email, role: "athlete" };
   localStorage.setItem(localKey("demoUser"), JSON.stringify(user));
+  if (mode === "signup") {
+    await ensureUserDocument(user, { role: "athlete" });
+  }
   return user;
 }
 
@@ -304,17 +310,19 @@ function normalizeActivePrograms(activePrograms) {
   return [...byId.values()];
 }
 
-export async function ensureUserDocument(user) {
+export async function ensureUserDocument(user, defaults = {}) {
   if (!user?.uid) return {};
   const localProfile = readJson(localStorage.getItem(localKey(`profile:${user.uid}`)), {});
   const localProgramIds = normalizeProgramAccess(readJson(localStorage.getItem(userProgramsLocalKey(user.uid)), []));
   localStorage.setItem(userProgramsLocalKey(user.uid), JSON.stringify(localProgramIds));
+  const role = defaults.role || user.role || localProfile.role || "athlete";
 
   if (db && !isDevUserId(user.uid)) {
     const payload = {
       uid: user.uid,
       email: user.email || "",
       displayName: user.displayName || "",
+      role,
       programs: arrayUnion(...defaultProgramAccess),
       updatedAt: new Date().toISOString(),
     };
@@ -325,7 +333,7 @@ export async function ensureUserDocument(user) {
     }
   }
 
-  return { ...localProfile, programs: localProgramIds };
+  return { ...localProfile, role, programs: localProgramIds };
 }
 
 export async function loadUserProgramIds(userId) {
@@ -632,6 +640,7 @@ export async function saveCustomWorkout(programId, workout) {
 export async function isTrainerUser(user) {
   if (user?.uid === "dev-coach") return true;
   if (user?.uid === "dev-athlete") return false;
+  if (user?.role === "athlete") return false;
   if (!hasFirebaseConfig) return true;
   const configuredEmail = import.meta.env.VITE_TRAINER_EMAIL;
   if (configuredEmail && user?.email?.toLowerCase() === configuredEmail.toLowerCase()) return true;
