@@ -379,8 +379,56 @@ select:focus {
   border-bottom: 1px solid #33243f;
 }
 
+.nav-menu-edit-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+
+.nav-menu-edit-actions button,
+.menu-edit-controls button {
+  min-width: 34px;
+  min-height: 34px;
+  display: grid;
+  place-items: center;
+  color: #f3eefb;
+  background: #21172a;
+  border: 1px solid #4a365b;
+  border-radius: 8px;
+  font-weight: 850;
+}
+
+.nav-menu-edit-actions button {
+  padding: 0 10px;
+}
+
+.nav-menu-edit-actions button:hover,
+.nav-menu-edit-actions button:focus-visible,
+.menu-edit-controls button:hover,
+.menu-edit-controls button:focus-visible {
+  border-color: #8b5cf6;
+  background: #2a1d35;
+  outline: none;
+}
+
+.menu-edit-controls button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.menu-edit-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.menu-edit-row.hidden .menu-link {
+  opacity: 0.52;
+}
+
 .menu-link {
   min-height: 44px;
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -391,6 +439,22 @@ select:focus {
   border-radius: 8px;
   font-weight: 850;
   text-align: left;
+}
+
+.menu-link span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.menu-drag-icon {
+  flex: 0 0 auto;
+  color: #a99ab7;
+}
+
+.menu-edit-controls {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
 }
 
 .menu-link:hover,
@@ -427,6 +491,11 @@ select:focus {
 .month-stack {
   display: grid;
   gap: 28px;
+}
+
+.calendar-more-button {
+  width: 100%;
+  margin-top: 24px;
 }
 
 .calendar-month {
@@ -885,6 +954,13 @@ select:focus {
 
 .modal-panel h2 {
   margin: 0;
+}
+
+.modal-helper-copy {
+  margin: 0;
+  color: #b9a9c9;
+  font-size: 0.9rem;
+  line-height: 1.45;
 }
 
 .modal-form {
@@ -1699,11 +1775,6 @@ select:focus {
   gap: 16px;
 }
 
-.progress-exit-button {
-  align-self: flex-start;
-  color: #b9a9c9;
-}
-
 .goal-section {
   display: grid;
   gap: 12px;
@@ -1971,6 +2042,7 @@ select:focus {
   gap: 4px;
 }
 
+.settings-preferences,
 .settings-metrics {
   display: grid;
   gap: 12px;
@@ -1987,6 +2059,7 @@ select:focus {
   border-radius: 8px;
 }
 
+.preference-settings-row select,
 .metric-settings-row select {
   max-width: 190px;
 }
@@ -2012,7 +2085,6 @@ select:focus {
   flex: 0 0 auto;
 }
 
-.settings-programs,
 .settings-updates {
   display: grid;
   gap: 16px;

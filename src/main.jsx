@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
+  ArrowDown,
   CalendarDays,
   Bell,
   ChevronRight,
@@ -9,16 +10,23 @@ import {
   Clock,
   Dumbbell,
   ArrowLeft,
+  ArrowUp,
+  Eye,
+  EyeOff,
   Flame,
+  GripVertical,
   LogOut,
   Menu,
+  MessageCircle,
   Minus,
+  Newspaper,
   PersonStanding,
   PencilLine,
   Plus,
   Save,
   Settings,
   ShoppingBag,
+  SlidersHorizontal,
   TrendingUp,
   Trophy,
   Utensils,
@@ -62,7 +70,7 @@ const maxFields = [
 
 const appVersion = packageInfo.version;
 const defaultSelectedDate = "2026-05-11";
-const routeViews = new Set(["client", "workout-list", "workout", "profile", "edit-profile", "maxes", "goals", "progress", "food-log", "stretches", "warmup-cooldown", "settings", "settings-account", "settings-programs", "settings-metrics", "settings-updates", "store", "stored-programs", "stored-workouts", "programs", "athletes"]);
+const routeViews = new Set(["client", "workout-list", "workout", "profile", "edit-profile", "maxes", "goals", "progress", "food-log", "stretches", "warmup-cooldown", "settings", "settings-account", "settings-preferences", "settings-metrics", "settings-updates", "store", "community", "messages", "news", "stored-programs", "stored-workouts", "programs", "athletes"]);
 const bodyMetricFields = [
   { key: "bodyweight", label: "Bodyweight", unit: "lb", unitType: "weight" },
   { key: "bodyFat", label: "Body fat", unit: "%" },
@@ -91,10 +99,30 @@ const warmupPresets = [
 ];
 const settingsSections = [
   { id: "account", title: "Account", eyebrow: "Device and login", icon: Settings },
-  { id: "programs", title: "Programs", eyebrow: "History and progress", icon: ClipboardList },
+  { id: "preferences", title: "Preferences", eyebrow: "Notifications and units", icon: SlidersHorizontal },
   { id: "metrics", title: "Metrics", eyebrow: "Profile data display", icon: TrendingUp },
   { id: "updates", title: "What's new", eyebrow: "Version and releases", icon: Bell },
 ];
+const menuButtonItems = [
+  { id: "home", view: "client", label: "Home", icon: CalendarDays },
+  { id: "profile", view: "profile", label: "Profile", icon: UserRound },
+  { id: "store", view: "store", label: "Store", icon: ShoppingBag },
+  { id: "community", view: "community", label: "Community", icon: UsersRound },
+  { id: "messages", view: "messages", label: "Messages", icon: MessageCircle },
+  { id: "news", view: "news", label: "News", icon: Newspaper },
+  { id: "stored-programs", view: "stored-programs", label: "Programs", icon: ClipboardList },
+  { id: "stored-workouts", view: "stored-workouts", label: "Workouts", icon: Dumbbell },
+  { id: "food-log", view: "food-log", label: "Food Log", icon: Utensils },
+  { id: "stretches", view: "stretches", label: "Stretches", icon: PersonStanding },
+  { id: "warmup-cooldown", view: "warmup-cooldown", label: "Warm Up / Cooldown", icon: Flame },
+  { id: "maxes", view: "maxes", label: "Maxes", icon: Trophy },
+  { id: "progress", view: "progress", label: "Progress", icon: TrendingUp, hideForTrainer: true },
+  { id: "programs", view: "programs", label: "Program Builder", icon: ClipboardList, trainerOnly: true },
+  { id: "athletes", view: "athletes", label: "Athletes", icon: UsersRound, trainerOnly: true },
+  { id: "settings", view: "settings", label: "Settings", icon: Settings },
+];
+const defaultMenuButtonOrder = menuButtonItems.map((item) => item.id);
+const menuButtonItemMap = Object.fromEntries(menuButtonItems.map((item) => [item.id, item]));
 const storePrograms = [
   {
     id: "strength-base",
@@ -255,6 +283,23 @@ function saveUserWeightUnit(userId, unit) {
   localStorage.setItem(userWeightUnitKey(userId), unit === "lb" ? "lb" : "kg");
 }
 
+function userDistanceUnitKey(userId) {
+  return `primitive-programming:distance-unit:${userId}`;
+}
+
+function loadUserDistanceUnit(userId) {
+  try {
+    const stored = localStorage.getItem(userDistanceUnitKey(userId));
+    return stored === "mi" ? "mi" : "km";
+  } catch {
+    return "km";
+  }
+}
+
+function saveUserDistanceUnit(userId, unit) {
+  localStorage.setItem(userDistanceUnitKey(userId), unit === "mi" ? "mi" : "km");
+}
+
 function isDevUser(userId = "") {
   return String(userId).startsWith("dev-");
 }
@@ -305,6 +350,36 @@ function loadBodyMetricSettings(userId) {
 
 function saveBodyMetricSettings(userId, settings) {
   localStorage.setItem(bodyMetricSettingsKey(userId), JSON.stringify(settings));
+}
+
+function menuButtonPreferencesKey() {
+  return "primitive-programming:menu-button-preferences";
+}
+
+function normalizeMenuButtonPreferences(preferences = {}) {
+  const savedOrder = Array.isArray(preferences.order) ? preferences.order : [];
+  const knownIds = new Set(defaultMenuButtonOrder);
+  const order = [
+    ...savedOrder.filter((id) => knownIds.has(id)),
+    ...defaultMenuButtonOrder.filter((id) => !savedOrder.includes(id)),
+  ];
+  const hidden = Array.isArray(preferences.hidden)
+    ? preferences.hidden.filter((id) => knownIds.has(id))
+    : [];
+
+  return { order, hidden };
+}
+
+function loadMenuButtonPreferences() {
+  try {
+    return normalizeMenuButtonPreferences(JSON.parse(localStorage.getItem(menuButtonPreferencesKey()) || "{}"));
+  } catch {
+    return normalizeMenuButtonPreferences();
+  }
+}
+
+function saveMenuButtonPreferences(preferences) {
+  localStorage.setItem(menuButtonPreferencesKey(), JSON.stringify(normalizeMenuButtonPreferences(preferences)));
 }
 
 function readAppRoute() {
@@ -381,6 +456,12 @@ function shiftDate(date, offset) {
   return nextDate.toISOString().slice(0, 10);
 }
 
+function daysBetweenDates(startDate, endDate) {
+  const start = new Date(`${startDate}T12:00:00`);
+  const end = new Date(`${endDate}T12:00:00`);
+  return Math.round((end - start) / 86400000);
+}
+
 function groupByDate(items) {
   return items.reduce((map, item) => {
     map[item.date] = [...(map[item.date] || []), item];
@@ -446,14 +527,16 @@ function monthLabel(date) {
   }).format(date);
 }
 
-function calendarSections(workoutDates, todayValue = new Date()) {
+function calendarSections(workoutDates, todayValue = new Date(), minimumMonthCount = 3) {
   const today = new Date(todayValue);
   const startMonth = new Date(today.getFullYear(), today.getMonth(), 1, 12);
   const latestWorkout = workoutDates
     .map((date) => new Date(`${date}T12:00:00`))
     .filter((date) => date >= startMonth)
     .sort((a, b) => b - a)[0];
-  const endMonth = latestWorkout || startMonth;
+  const minimumEndMonth = new Date(startMonth);
+  minimumEndMonth.setMonth(minimumEndMonth.getMonth() + Math.max(1, minimumMonthCount) - 1);
+  const endMonth = latestWorkout && latestWorkout > minimumEndMonth ? latestWorkout : minimumEndMonth;
   const sections = [];
 
   for (
@@ -799,12 +882,9 @@ function AuthCard({ onAuthed }) {
   );
 }
 
-function CalendarStrip({ sections, selectedDate, onSelectDate, logs, workoutsByDate }) {
+function CalendarStrip({ sections, selectedDate, onSelectDate, logs, workoutsByDate, onShowMoreMonths }) {
   return (
     <section className="calendar-band" aria-label="Workout calendar">
-      <div className="section-heading">
-        <CalendarDays size={20} />
-      </div>
       <div className="month-stack">
         {sections.map((section) => (
           <div className="calendar-month" key={section.key}>
@@ -829,6 +909,9 @@ function CalendarStrip({ sections, selectedDate, onSelectDate, logs, workoutsByD
           </div>
         ))}
       </div>
+      <button className="secondary calendar-more-button" type="button" onClick={onShowMoreMonths}>
+        Show more months
+      </button>
     </section>
   );
 }
@@ -1895,6 +1978,8 @@ function ProgramsPage({ programs, workouts, logs, onProgramCreated, onWorkoutCre
   const [intensity, setIntensity] = useState("");
   const [notes, setNotes] = useState("");
   const [openProgramMenu, setOpenProgramMenu] = useState("");
+  const [startingProgram, setStartingProgram] = useState(null);
+  const [programStartDate, setProgramStartDate] = useState(defaultSelectedDate);
   const savedDefaultProgram = programs.find((program) => program.id === "default");
   const defaultProgram = {
     id: "default",
@@ -1960,6 +2045,46 @@ function ProgramsPage({ programs, workouts, logs, onProgramCreated, onWorkoutCre
     onProgramCreated();
   }
 
+  function openStartProgram(program) {
+    setStartingProgram(program);
+    setProgramStartDate(program.startDate || new Date().toISOString().slice(0, 10));
+    setOpenProgramMenu("");
+  }
+
+  async function startProgram(event) {
+    event.preventDefault();
+    if (!startingProgram || !programStartDate) return;
+
+    const savedProgram = {
+      ...startingProgram,
+      startDate: programStartDate,
+      status: "active",
+      statusUpdatedAt: new Date().toISOString(),
+    };
+    const programWorkouts = workouts
+      .filter((item) => (item.programId || "default") === startingProgram.id && item.date)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const firstWorkoutDate = programWorkouts[0]?.date;
+
+    await saveProgram(savedProgram);
+
+    if (startingProgram.id !== "default" && firstWorkoutDate && firstWorkoutDate !== programStartDate) {
+      const offset = daysBetweenDates(firstWorkoutDate, programStartDate);
+      await Promise.all(programWorkouts.map((workout) => {
+        const nextDate = shiftDate(workout.date, offset);
+        return saveCustomWorkout(startingProgram.id, {
+          ...workout,
+          date: nextDate,
+          day: new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date(`${nextDate}T12:00:00`)),
+        });
+      }));
+    }
+
+    setStartingProgram(null);
+    setProgramStartDate(defaultSelectedDate);
+    onProgramCreated();
+  }
+
   function programStatusLabel(status) {
     if (status === "active") return "Started";
     if (status === "paused") return "Paused";
@@ -2004,7 +2129,7 @@ function ProgramsPage({ programs, workouts, logs, onProgramCreated, onWorkoutCre
                       </button>
                       {openProgramMenu === program.id && (
                         <div className="program-action-menu" role="menu">
-                          <button type="button" role="menuitem" onClick={() => updateProgramStatus(program, "active")}>
+                          <button type="button" role="menuitem" onClick={() => openStartProgram(program)}>
                             Start program
                           </button>
                           <button type="button" role="menuitem" onClick={() => updateProgramStatus(program, "paused")}>
@@ -2135,6 +2260,33 @@ function ProgramsPage({ programs, workouts, logs, onProgramCreated, onWorkoutCre
           </form>
         </div>
       </div>
+      {startingProgram && (
+        <div className="modal-backdrop" role="presentation">
+          <form className="modal-panel modal-form start-program-form" onSubmit={startProgram} role="dialog" aria-modal="true" aria-labelledby="start-program-title">
+            <div>
+              <p className="eyebrow">Start program</p>
+              <h2 id="start-program-title">{startingProgram.name}</h2>
+            </div>
+            <label>
+              Start date
+              <input type="date" value={programStartDate} onChange={(event) => setProgramStartDate(event.target.value)} required />
+            </label>
+            <p className="modal-helper-copy">
+              {startingProgram.id === "default"
+                ? "The program status will use this date."
+                : "Program workouts will move so the first scheduled workout starts on this date."}
+            </p>
+            <div className="modal-action-row">
+              <button className="secondary" type="button" onClick={() => setStartingProgram(null)}>
+                Cancel
+              </button>
+              <button className="primary" type="submit" disabled={!programStartDate}>
+                Start program
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </section>
   );
 }
@@ -2165,6 +2317,42 @@ function StorePage() {
           </article>
         ))}
       </div>
+    </section>
+  );
+}
+
+function CommunityPage() {
+  return (
+    <section className="programs-panel">
+      <div className="section-heading">
+        <UsersRound size={20} />
+        <h2>Community</h2>
+      </div>
+      <p className="empty-list-copy">Community features will live here.</p>
+    </section>
+  );
+}
+
+function MessagesPage() {
+  return (
+    <section className="programs-panel">
+      <div className="section-heading">
+        <MessageCircle size={20} />
+        <h2>Messages</h2>
+      </div>
+      <p className="empty-list-copy">Messages will live here.</p>
+    </section>
+  );
+}
+
+function NewsPage() {
+  return (
+    <section className="programs-panel">
+      <div className="section-heading">
+        <Newspaper size={20} />
+        <h2>News</h2>
+      </div>
+      <p className="empty-list-copy">News updates will live here.</p>
     </section>
   );
 }
@@ -2748,9 +2936,10 @@ function SettingsPage({ onOpenSection }) {
   );
 }
 
-function SettingsSectionPage({ section, user, programs, workouts, logs, serviceWorkerRegistration, updateRegistration, onApplyUpdate, onLogout, onBack, onProfileSaved }) {
+function SettingsSectionPage({ section, user, serviceWorkerRegistration, updateRegistration, onApplyUpdate, onLogout, onBack, onProfileSaved }) {
   const [bodyMetricSettings, setBodyMetricSettings] = useState(() => loadBodyMetricSettings(user.uid));
   const [weightUnit, setWeightUnit] = useState(() => loadUserWeightUnit(user.uid));
+  const [distanceUnit, setDistanceUnit] = useState(() => loadUserDistanceUnit(user.uid));
   const [measurementSystem, setMeasurementSystem] = useState(user.measurementSystem || (loadUserWeightUnit(user.uid) === "lb" ? "imperial" : "metric"));
   const initialHeight = String(user.height || "");
   const initialHeightInches = user.heightUnit === "in" ? Number(initialHeight) || 0 : 0;
@@ -2769,20 +2958,6 @@ function SettingsSectionPage({ section, user, programs, workouts, logs, serviceW
     return { status: Notification.permission, message: Notification.permission === "granted" ? "Notifications are allowed on this device." : "Notifications are off on this device." };
   });
   const [savingNotifications, setSavingNotifications] = useState(false);
-  const userEmail = (user.email || "").toLowerCase();
-  const defaultProgram = { id: "default", name: "Default Program", athleteEmail: "dev-athlete@primitive.local" };
-  const programOptions = [defaultProgram, ...programs.filter((program) => program.id !== "default")];
-  const athletePrograms = programOptions
-    .filter((program) => (program.athleteEmail || "").toLowerCase() === userEmail)
-    .map((program) => {
-      const programWorkouts = workouts.filter((item) => (item.programId || "default") === program.id);
-      const summary = programTimelineSummary(programWorkouts, logs);
-      const isCurrent = summary.nextDate || (summary.lastDate && summary.lastDate >= new Date().toISOString().slice(0, 10));
-      return { ...program, workouts: programWorkouts, summary, status: isCurrent ? "Current" : "Past" };
-    })
-    .sort((a, b) => (b.summary.lastDate || b.startDate || "").localeCompare(a.summary.lastDate || a.startDate || ""));
-  const currentPrograms = athletePrograms.filter((program) => program.status === "Current");
-  const pastPrograms = athletePrograms.filter((program) => program.status === "Past");
   const releaseNotes = [
     {
       title: "PWA install and updates",
@@ -2801,40 +2976,6 @@ function SettingsSectionPage({ section, user, programs, workouts, logs, serviceW
       body: "Kept the recent coach program tools, athlete progress views, profile updates, and workout logging refinements in the live build.",
     },
   ];
-
-  function renderProgramCard(program) {
-    const { summary } = program;
-    return (
-      <article className="program-card" key={program.id}>
-        <div>
-          <p className="eyebrow">{program.status}</p>
-          <h4>{program.name}</h4>
-        </div>
-        <div className="progress-meter" aria-label={`${summary.percent}% complete`}>
-          <span style={{ width: `${summary.percent}%` }} />
-        </div>
-        <dl className="program-stats">
-          <div>
-            <dt>Complete</dt>
-            <dd>{summary.completed}/{summary.total}</dd>
-          </div>
-          <div>
-            <dt>Next</dt>
-            <dd>{summary.nextDate ? formatDate(summary.nextDate) : "All done"}</dd>
-          </div>
-          <div>
-            <dt>Started</dt>
-            <dd>{summary.firstDate ? formatDate(summary.firstDate) : "Not scheduled"}</dd>
-          </div>
-          <div>
-            <dt>Last</dt>
-            <dd>{summary.lastDate ? formatDate(summary.lastDate) : "Not scheduled"}</dd>
-          </div>
-        </dl>
-        {program.goal && <p className="program-note">{program.goal}</p>}
-      </article>
-    );
-  }
 
   async function enableNotifications() {
     setSavingNotifications(true);
@@ -2860,6 +3001,11 @@ function SettingsSectionPage({ section, user, programs, workouts, logs, serviceW
   function updateWeightUnit(unit) {
     setWeightUnit(unit);
     saveUserWeightUnit(user.uid, unit);
+  }
+
+  function updateDistanceUnit(unit) {
+    setDistanceUnit(unit);
+    saveUserDistanceUnit(user.uid, unit);
   }
 
   async function savePhysicalProfile(event) {
@@ -2934,39 +3080,20 @@ function SettingsSectionPage({ section, user, programs, workouts, logs, serviceW
         Settings
       </button>
 
-      {section === "programs" ? (
-        <div className="settings-programs">
-          <div className="program-section">
-            <div className="program-section-title">
-              <h3>Current Programs</h3>
-              <span>{currentPrograms.length}</span>
+      {section === "preferences" ? (
+        <div className="settings-preferences">
+          <div className="settings-block preference-settings-row">
+            <div>
+              <p className="eyebrow">Device</p>
+              <h3>Notifications</h3>
+              <p>{notificationState.message}</p>
             </div>
-            {currentPrograms.length ? (
-              <div className="program-card-grid">
-                {currentPrograms.map(renderProgramCard)}
-              </div>
-            ) : (
-              <p className="empty-list-copy">No current programs assigned.</p>
-            )}
+            <button className="secondary" type="button" onClick={enableNotifications} disabled={savingNotifications || notificationState.status === "granted"}>
+              <Bell size={18} />
+              {savingNotifications ? "Enabling..." : notificationState.status === "granted" ? "Enabled" : "Enable notifications"}
+            </button>
           </div>
-
-          <div className="program-section">
-            <div className="program-section-title">
-              <h3>Past Programs</h3>
-              <span>{pastPrograms.length}</span>
-            </div>
-            {pastPrograms.length ? (
-              <div className="program-card-grid">
-                {pastPrograms.map(renderProgramCard)}
-              </div>
-            ) : (
-              <p className="empty-list-copy">No past programs yet.</p>
-            )}
-          </div>
-        </div>
-      ) : section === "metrics" ? (
-        <div className="settings-metrics">
-          <div className="settings-block metric-settings-row">
+          <div className="settings-block preference-settings-row">
             <div>
               <p className="eyebrow">Weight unit</p>
               <h3>Training weights</h3>
@@ -2977,6 +3104,20 @@ function SettingsSectionPage({ section, user, programs, workouts, logs, serviceW
               <option value="lb">lb</option>
             </select>
           </div>
+          <div className="settings-block preference-settings-row">
+            <div>
+              <p className="eyebrow">Distance unit</p>
+              <h3>Running and conditioning</h3>
+              <p>Used anywhere distance-based work is shown or logged.</p>
+            </div>
+            <select value={distanceUnit} onChange={(event) => updateDistanceUnit(event.target.value)} aria-label="Distance unit">
+              <option value="km">km</option>
+              <option value="mi">mi</option>
+            </select>
+          </div>
+        </div>
+      ) : section === "metrics" ? (
+        <div className="settings-metrics">
           {bodyMetricFields.map((field) => {
             const setting = bodyMetricSettings[field.key] || defaultBodyMetricSettings[field.key];
             return (
@@ -3085,17 +3226,6 @@ function SettingsSectionPage({ section, user, programs, workouts, logs, serviceW
             {profileSaved && <p className="save-status">Profile settings saved.</p>}
             {profileError && <p className="form-error">{profileError}</p>}
           </form>
-          <div className="settings-block">
-            <div>
-              <p className="eyebrow">Device</p>
-              <h3>Notifications</h3>
-              <p>{notificationState.message}</p>
-            </div>
-            <button className="secondary" type="button" onClick={enableNotifications} disabled={savingNotifications || notificationState.status === "granted"}>
-              <Bell size={18} />
-              {savingNotifications ? "Enabling..." : notificationState.status === "granted" ? "Enabled" : "Enable notifications"}
-            </button>
-          </div>
           {updateRegistration && (
             <div className="settings-block">
               <div>
@@ -3203,7 +3333,7 @@ function MaxesPage({ user }) {
   );
 }
 
-function GoalsPage({ user, logs, onExit }) {
+function GoalsPage({ user, logs }) {
   const goals = loadUserGoals(user.uid);
   const bodyMetrics = loadBodyMetrics(user.uid);
   const maxes = loadUserMaxes(user.uid);
@@ -3291,10 +3421,6 @@ function GoalsPage({ user, logs, onExit }) {
             <h2>Progress</h2>
           </div>
         </div>
-        <button className="quiet-button progress-exit-button" type="button" onClick={onExit}>
-          <ArrowLeft size={16} />
-          Exit
-        </button>
       </div>
 
       <div className="progress-snapshot-grid">
@@ -3349,7 +3475,11 @@ function App() {
   const [saveMessage, setSaveMessage] = useState("");
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
   const [showNavMenu, setShowNavMenu] = useState(false);
+  const [menuEditMode, setMenuEditMode] = useState(false);
+  const [menuPressHandled, setMenuPressHandled] = useState(false);
+  const [menuButtonPreferences, setMenuButtonPreferences] = useState(loadMenuButtonPreferences);
   const [showProfileSetup, setShowProfileSetup] = useState(false);
+  const [visibleCalendarMonths, setVisibleCalendarMonths] = useState(3);
   const [timerMode, setTimerMode] = useState("countup");
   const [countdownSeconds, setCountdownSeconds] = useState(180);
   const [intervalWorkSeconds, setIntervalWorkSeconds] = useState(60);
@@ -3366,6 +3496,7 @@ function App() {
   const [timerBankedSeconds, setTimerBankedSeconds] = useState(0);
   const [timerNow, setTimerNow] = useState(Date.now());
   const routeWritePending = useRef(false);
+  const menuLongPressTimer = useRef(null);
   const timerRunning = Boolean(timerStartedAt);
   const timerElapsedSeconds = timerBankedSeconds + (timerRunning ? Math.floor((timerNow - timerStartedAt) / 1000) : 0);
   const activeIntervalSeconds = intervalPhase === "work" ? intervalWorkSeconds : intervalRestSeconds;
@@ -3480,6 +3611,14 @@ function App() {
   }, []);
 
   useEffect(() => {
+    saveMenuButtonPreferences(menuButtonPreferences);
+  }, [menuButtonPreferences]);
+
+  useEffect(() => () => {
+    if (menuLongPressTimer.current) window.clearTimeout(menuLongPressTimer.current);
+  }, []);
+
+  useEffect(() => {
     if (!user) return undefined;
     let unsubscribe = () => {};
     let active = true;
@@ -3538,8 +3677,13 @@ function App() {
   const savedWorkouts = useMemo(() => [...customWorkouts, ...programWorkouts], [customWorkouts, programWorkouts]);
   const allWorkouts = useMemo(() => [...starterProgramWorkouts, ...savedWorkouts], [savedWorkouts, starterProgramWorkouts]);
   const workoutsByDate = useMemo(() => groupByDate(allWorkouts), [allWorkouts]);
-  const workoutDates = useMemo(() => Object.keys(workoutsByDate).sort(), [workoutsByDate]);
-  const calendarMonths = useMemo(() => calendarSections(workoutDates), [workoutDates]);
+  const programLedWorkoutDates = useMemo(() => (
+    [...starterProgramWorkouts, ...programWorkouts]
+      .map((item) => item.date)
+      .filter(Boolean)
+      .sort()
+  ), [programWorkouts, starterProgramWorkouts]);
+  const calendarMonths = useMemo(() => calendarSections(programLedWorkoutDates, new Date(), visibleCalendarMonths), [programLedWorkoutDates, visibleCalendarMonths]);
   const dates = useMemo(() => calendarMonths.flatMap((section) => section.dates), [calendarMonths]);
   const selectedWorkoutGroups = useMemo(() => groupWorkouts(workoutsByDate[selectedDate] || []), [selectedDate, workoutsByDate]);
   const selectedWorkout = selectedWorkoutKey === "blank"
@@ -3551,6 +3695,22 @@ function App() {
     : selectedWorkoutGroups.find((group) => group.key === activeWorkoutKey) || selectedWorkoutGroups[0] || null;
   const today = new Date().toISOString().slice(0, 10);
   const todayTarget = workoutsByDate[today] ? today : dates.find((date) => date >= today) || dates[0] || today;
+  const orderedMenuButtons = useMemo(() => {
+    const normalized = normalizeMenuButtonPreferences(menuButtonPreferences);
+    const hiddenIds = new Set(normalized.hidden);
+    const applicableItems = normalized.order
+      .map((id) => menuButtonItemMap[id])
+      .filter(Boolean)
+      .filter((item) => {
+        if (item.trainerOnly && !isTrainer) return false;
+        if (item.hideForTrainer && isTrainer) return false;
+        return true;
+      });
+    const visibleItems = applicableItems.filter((item) => !hiddenIds.has(item.id));
+    if (!menuEditMode) return visibleItems.length ? visibleItems : [menuButtonItemMap.settings];
+    return applicableItems;
+  }, [isTrainer, menuButtonPreferences, menuEditMode]);
+  const hiddenMenuButtonIds = useMemo(() => new Set(normalizeMenuButtonPreferences(menuButtonPreferences).hidden), [menuButtonPreferences]);
 
   function openWorkoutList(date) {
     setSelectedDate(date);
@@ -3726,9 +3886,63 @@ function App() {
     setTimerBankedSeconds(0);
   }
 
+  function startMenuButtonPress() {
+    if (menuEditMode) return;
+    setMenuPressHandled(false);
+    if (menuLongPressTimer.current) window.clearTimeout(menuLongPressTimer.current);
+    menuLongPressTimer.current = window.setTimeout(() => {
+      setMenuPressHandled(true);
+      setMenuEditMode(true);
+    }, 600);
+  }
+
+  function endMenuButtonPress() {
+    if (menuLongPressTimer.current) window.clearTimeout(menuLongPressTimer.current);
+    menuLongPressTimer.current = null;
+  }
+
+  function handleMenuButtonClick(item) {
+    if (menuPressHandled) {
+      setMenuPressHandled(false);
+      return;
+    }
+    if (menuEditMode) return;
+    openMenuView(item.view);
+  }
+
+  function moveMenuButton(itemId, targetItemId) {
+    setMenuButtonPreferences((current) => {
+      const nextPreferences = normalizeMenuButtonPreferences(current);
+      const currentIndex = nextPreferences.order.indexOf(itemId);
+      const nextIndex = nextPreferences.order.indexOf(targetItemId);
+      if (currentIndex < 0 || nextIndex < 0 || nextIndex >= nextPreferences.order.length) return nextPreferences;
+      const nextOrder = [...nextPreferences.order];
+      [nextOrder[currentIndex], nextOrder[nextIndex]] = [nextOrder[nextIndex], nextOrder[currentIndex]];
+      return { ...nextPreferences, order: nextOrder };
+    });
+  }
+
+  function toggleMenuButtonHidden(itemId) {
+    setMenuButtonPreferences((current) => {
+      const nextPreferences = normalizeMenuButtonPreferences(current);
+      const hidden = new Set(nextPreferences.hidden);
+      if (hidden.has(itemId)) {
+        hidden.delete(itemId);
+      } else {
+        hidden.add(itemId);
+      }
+      return { ...nextPreferences, hidden: [...hidden] };
+    });
+  }
+
+  function resetMenuButtons() {
+    setMenuButtonPreferences(normalizeMenuButtonPreferences());
+  }
+
   function openMenuView(nextView) {
     setView(nextView);
     setShowNavMenu(false);
+    setMenuEditMode(false);
   }
 
   function handleWorkoutSaveStatus(result) {
@@ -3808,71 +4022,60 @@ function App() {
           onPointerDown={(event) => event.stopPropagation()}
           onPointerUp={(event) => event.stopPropagation()}
           onPointerCancel={(event) => event.stopPropagation()}
-          onClick={() => setShowNavMenu(false)}
+          onClick={() => {
+            setShowNavMenu(false);
+            setMenuEditMode(false);
+          }}
         >
           <div className="nav-menu-panel" role="dialog" aria-modal="true" aria-label="Main menu" onClick={(event) => event.stopPropagation()}>
             <div className="nav-menu-header">
               <Dumbbell size={22} />
               <strong>Primitive</strong>
+              {menuEditMode && (
+                <div className="nav-menu-edit-actions">
+                  <button type="button" onClick={resetMenuButtons}>Reset</button>
+                  <button type="button" onClick={() => setMenuEditMode(false)}>Done</button>
+                </div>
+              )}
             </div>
-            <button className="menu-link" type="button" onClick={() => openMenuView("client")}>
-              <CalendarDays size={18} />
-              Home
-            </button>
-            <button className="menu-link" type="button" onClick={() => openMenuView("profile")}>
-              <UserRound size={18} />
-              Profile
-            </button>
-            <button className="menu-link" type="button" onClick={() => openMenuView("store")}>
-              <ShoppingBag size={18} />
-              Store
-            </button>
-            <button className="menu-link" type="button" onClick={() => openMenuView("stored-programs")}>
-              <ClipboardList size={18} />
-              Programs
-            </button>
-            <button className="menu-link" type="button" onClick={() => openMenuView("stored-workouts")}>
-              <Dumbbell size={18} />
-              Workouts
-            </button>
-            <button className="menu-link" type="button" onClick={() => openMenuView("food-log")}>
-              <Utensils size={18} />
-              Food Log
-            </button>
-            <button className="menu-link" type="button" onClick={() => openMenuView("stretches")}>
-              <PersonStanding size={18} />
-              Stretches
-            </button>
-            <button className="menu-link" type="button" onClick={() => openMenuView("warmup-cooldown")}>
-              <Flame size={18} />
-              Warm Up / Cooldown
-            </button>
-            <button className="menu-link" type="button" onClick={() => openMenuView("maxes")}>
-              <Trophy size={18} />
-              Maxes
-            </button>
-            {!isTrainer && (
-              <button className="menu-link" type="button" onClick={() => openMenuView("progress")}>
-                <TrendingUp size={18} />
-                Progress
-              </button>
-            )}
-            {isTrainer && (
-              <>
-                <button className="menu-link" type="button" onClick={() => openMenuView("programs")}>
-                  <ClipboardList size={18} />
-                  Program Builder
-                </button>
-                <button className="menu-link" type="button" onClick={() => openMenuView("athletes")}>
-                  <UsersRound size={18} />
-                  Athletes
-                </button>
-              </>
-            )}
-            <button className="menu-link" type="button" onClick={() => openMenuView("settings")}>
-              <Settings size={18} />
-              Settings
-            </button>
+            {orderedMenuButtons.map((item, index) => {
+              const Icon = item.icon;
+              const isHidden = hiddenMenuButtonIds.has(item.id);
+              const previousItem = orderedMenuButtons[index - 1];
+              const nextItem = orderedMenuButtons[index + 1];
+              return (
+                <div className={isHidden ? "menu-edit-row hidden" : "menu-edit-row"} key={item.id}>
+                  <button
+                    className="menu-link"
+                    type="button"
+                    onClick={() => handleMenuButtonClick(item)}
+                    onPointerDown={startMenuButtonPress}
+                    onPointerUp={endMenuButtonPress}
+                    onPointerCancel={endMenuButtonPress}
+                    onPointerLeave={endMenuButtonPress}
+                    aria-disabled={menuEditMode}
+                    title={menuEditMode ? "Editing menu" : "Long press to edit menu"}
+                  >
+                    {menuEditMode && <GripVertical className="menu-drag-icon" size={16} />}
+                    <Icon size={18} />
+                    <span>{item.label}</span>
+                  </button>
+                  {menuEditMode && (
+                    <div className="menu-edit-controls" aria-label={`${item.label} menu controls`}>
+                      <button type="button" onClick={() => previousItem && moveMenuButton(item.id, previousItem.id)} disabled={!previousItem} aria-label={`Move ${item.label} up`}>
+                        <ArrowUp size={15} />
+                      </button>
+                      <button type="button" onClick={() => nextItem && moveMenuButton(item.id, nextItem.id)} disabled={!nextItem} aria-label={`Move ${item.label} down`}>
+                        <ArrowDown size={15} />
+                      </button>
+                      <button type="button" onClick={() => toggleMenuButtonHidden(item.id)} aria-label={isHidden ? `Show ${item.label}` : `Hide ${item.label}`}>
+                        {isHidden ? <Eye size={15} /> : <EyeOff size={15} />}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -3971,16 +4174,13 @@ function App() {
       ) : view === "maxes" ? (
         <MaxesPage user={user} />
       ) : view === "progress" ? (
-        <GoalsPage user={user} logs={logs} onExit={() => setView("profile")} />
+        <GoalsPage user={user} logs={logs} />
       ) : view === "settings" ? (
         <SettingsPage onOpenSection={(section) => setView(`settings-${section}`)} />
       ) : view.startsWith("settings-") ? (
         <SettingsSectionPage
           section={view.replace("settings-", "")}
           user={user}
-          programs={programs}
-          workouts={allWorkouts}
-          logs={logs}
           serviceWorkerRegistration={serviceWorkerRegistration}
           updateRegistration={updateRegistration}
           onApplyUpdate={applyAppUpdate}
@@ -3990,6 +4190,12 @@ function App() {
         />
       ) : view === "store" ? (
         <StorePage />
+      ) : view === "community" ? (
+        <CommunityPage />
+      ) : view === "messages" ? (
+        <MessagesPage />
+      ) : view === "news" ? (
+        <NewsPage />
       ) : view === "food-log" ? (
         <FoodLogPage />
       ) : view === "stretches" ? (
@@ -4018,11 +4224,17 @@ function App() {
         <>
           <div className="today-row">
             <button className="primary" type="button" onClick={() => openWorkoutList(todayTarget)}>
-              <CalendarDays size={18} />
               View today's workout
             </button>
           </div>
-          <CalendarStrip sections={calendarMonths} selectedDate={selectedDate} onSelectDate={openWorkoutList} logs={logs} workoutsByDate={workoutsByDate} />
+          <CalendarStrip
+            sections={calendarMonths}
+            selectedDate={selectedDate}
+            onSelectDate={openWorkoutList}
+            logs={logs}
+            workoutsByDate={workoutsByDate}
+            onShowMoreMonths={() => setVisibleCalendarMonths((count) => count + 3)}
+          />
         </>
       )}
       {!isOnline && <div className="connection-banner" role="status">Offline. Workout changes save on this device.</div>}
