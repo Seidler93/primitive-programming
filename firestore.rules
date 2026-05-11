@@ -32,6 +32,12 @@ service cloud.firestore {
       }
     }
 
+    match /communities/{communityId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn();
+      allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
     match /trainers/{trainerId} {
       allow read: if signedIn();
       allow write: if false;
