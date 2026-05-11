@@ -113,7 +113,7 @@ const menuButtonItems = [
   { id: "home", view: "client", label: "Home", icon: CalendarDays },
   { id: "profile", view: "profile", label: "Profile", icon: UserRound },
   { id: "store", view: "store", label: "Store", icon: ShoppingBag },
-  { id: "community", view: "community", label: "Community", icon: UsersRound },
+  { id: "community", view: "community", label: "Communities", icon: UsersRound },
   { id: "messages", view: "messages", label: "Messages", icon: MessageCircle },
   { id: "news", view: "news", label: "News", icon: Newspaper },
   { id: "stored-programs", view: "stored-programs", label: "Programs", icon: ClipboardList },
@@ -123,7 +123,7 @@ const menuButtonItems = [
   { id: "warmup-cooldown", view: "warmup-cooldown", label: "Warm Up / Cooldown", icon: Flame },
   { id: "maxes", view: "maxes", label: "Maxes", icon: Trophy },
   { id: "progress", view: "progress", label: "Progress", icon: TrendingUp, hideForTrainer: true },
-  { id: "programs", view: "programs", label: "Program Builder", icon: ClipboardList, trainerOnly: true },
+  { id: "programs", view: "programs", label: "Program Builder", icon: ClipboardList, trainerOnly: true, hideOnMobile: true },
   { id: "athletes", view: "athletes", label: "Athletes", icon: UsersRound, trainerOnly: true },
   { id: "settings", view: "settings", label: "Settings", icon: Settings },
 ];
@@ -3828,6 +3828,9 @@ function App() {
   const [notificationMessage, setNotificationMessage] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
+  const [isMobileViewport, setIsMobileViewport] = useState(() => (
+    typeof window === "undefined" ? false : window.matchMedia("(max-width: 760px)").matches
+  ));
   const [showNavMenu, setShowNavMenu] = useState(false);
   const [menuEditMode, setMenuEditMode] = useState(false);
   const [menuPressHandled, setMenuPressHandled] = useState(false);
@@ -3858,6 +3861,41 @@ function App() {
   const timerLabel = timerMode === "interval" ? `${intervalPhase === "work" ? "W" : "R"}${intervalEndless ? "" : intervalCurrentRound} ${formatTimer(timerSeconds)}` : formatTimer(timerSeconds);
   const countdownMinutes = Math.floor(countdownSeconds / 60);
   const countdownRemainderSeconds = countdownSeconds % 60;
+
+  useEffect(() => {
+    if (!showNavMenu || typeof document === "undefined" || typeof window === "undefined") return undefined;
+
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const previousStyles = {
+      overflow: body.style.overflow,
+      position: body.style.position,
+      top: body.style.top,
+      width: body.style.width,
+    };
+
+    body.style.overflow = "hidden";
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.width = "100%";
+
+    return () => {
+      body.style.overflow = previousStyles.overflow;
+      body.style.position = previousStyles.position;
+      body.style.top = previousStyles.top;
+      body.style.width = previousStyles.width;
+      window.scrollTo(0, scrollY);
+    };
+  }, [showNavMenu]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const mobileQuery = window.matchMedia("(max-width: 760px)");
+    const syncMobileViewport = () => setIsMobileViewport(mobileQuery.matches);
+    syncMobileViewport();
+    mobileQuery.addEventListener("change", syncMobileViewport);
+    return () => mobileQuery.removeEventListener("change", syncMobileViewport);
+  }, []);
 
   async function hydrateUser(nextUser) {
     if (!nextUser) {
@@ -4065,6 +4103,12 @@ function App() {
     setTimerBankedSeconds(0);
   }, [activeIntervalSeconds, countdownSeconds, intervalCurrentRound, intervalEndless, intervalPhase, intervalRounds, timerElapsedSeconds, timerMode, timerRunning]);
 
+  useEffect(() => {
+    if (isMobileViewport && view === "programs") {
+      setView("client");
+    }
+  }, [isMobileViewport, view]);
+
   const activeFlexibleProgramIds = useMemo(() => new Set(programs
     .filter((program) => program.status === "active" && program.scheduleMode === flexibleScheduleMode)
     .map((program) => program.id)), [programs]);
@@ -4116,12 +4160,13 @@ function App() {
       .filter((item) => {
         if (item.trainerOnly && !isTrainer) return false;
         if (item.hideForTrainer && isTrainer) return false;
+        if (item.hideOnMobile && isMobileViewport) return false;
         return true;
       });
     const visibleItems = applicableItems.filter((item) => !hiddenIds.has(item.id));
     if (!menuEditMode) return visibleItems.length ? visibleItems : [menuButtonItemMap.settings];
     return applicableItems;
-  }, [isTrainer, menuButtonPreferences, menuEditMode]);
+  }, [isMobileViewport, isTrainer, menuButtonPreferences, menuEditMode]);
   const hiddenMenuButtonIds = useMemo(() => new Set(normalizeMenuButtonPreferences(menuButtonPreferences).hidden), [menuButtonPreferences]);
 
   function openWorkoutList(date) {
