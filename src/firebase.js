@@ -22,6 +22,12 @@ import {
   isSupported as isMessagingSupported,
   onMessage,
 } from "firebase/messaging";
+import {
+  getDownloadURL,
+  getStorage,
+  ref as storageRef,
+  uploadBytes,
+} from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -40,6 +46,7 @@ export const hasFirebaseConfig = Boolean(
 const app = hasFirebaseConfig ? initializeApp(firebaseConfig) : null;
 export const auth = app ? getAuth(app) : null;
 export const db = app ? getFirestore(app) : null;
+export const storage = app ? getStorage(app) : null;
 export const hasPushConfig = Boolean(hasFirebaseConfig && vapidKey);
 
 const localKey = (key) => `primitive-programming:${key}`;
@@ -176,6 +183,26 @@ export async function saveUserProfile(userId, profile) {
   }
 
   return nextLocalProfile;
+}
+
+export async function uploadUserProfileImage(userId, file, fallbackDataUrl) {
+  if (!file) throw new Error("No profile image selected.");
+
+  if (storage && !isDevUserId(userId)) {
+    const extension = file.name?.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+    const path = `users/${userId}/profile/profile-image-${Date.now()}.${extension}`;
+    const imageRef = storageRef(storage, path);
+    await uploadBytes(imageRef, file, {
+      contentType: file.type || "image/jpeg",
+      customMetadata: {
+        userId,
+        uploadedAt: new Date().toISOString(),
+      },
+    });
+    return getDownloadURL(imageRef);
+  }
+
+  return fallbackDataUrl;
 }
 
 export async function loadUserMaxes(userId) {

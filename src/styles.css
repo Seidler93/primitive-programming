@@ -1735,6 +1735,48 @@ select:focus {
   grid-column: 1 / -1;
 }
 
+.profile-upload-field {
+  display: grid;
+  gap: 8px;
+  color: #c8bad8;
+  font-weight: 800;
+}
+
+.upload-picture-button {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  color: #f3eefb;
+  background: #21172a;
+  border: 1px solid #4a365b;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.upload-picture-button:hover,
+.upload-picture-button:focus-within {
+  border-color: #8b5cf6;
+  background: #2a1d35;
+}
+
+.upload-picture-button.disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
+.upload-picture-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .maxes-form button,
 .goal-form button,
 .save-status {

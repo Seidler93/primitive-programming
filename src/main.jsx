@@ -56,6 +56,7 @@ import {
   saveUserProfile,
   requestNotificationAccess,
   listenForForegroundMessages,
+  uploadUserProfileImage,
 } from "./firebase";
 import { activateWaitingServiceWorker, registerAppServiceWorker } from "./pwa";
 
@@ -2630,6 +2631,7 @@ function ProfileEditPage({ user, onProfileSaved }) {
   const [photoURL, setPhotoURL] = useState(user.photoURL || "");
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [imageError, setImageError] = useState("");
 
   async function handlePictureUpload(event) {
@@ -2637,10 +2639,18 @@ function ProfileEditPage({ user, onProfileSaved }) {
     if (!file) return;
     setImageError("");
     setSaved(false);
+    setUploadingImage(true);
     try {
-      setPhotoURL(await imageFileToDataUrl(file));
+      const fallbackDataUrl = await imageFileToDataUrl(file);
+      const uploadedUrl = await uploadUserProfileImage(user.uid, file, fallbackDataUrl);
+      setPhotoURL(uploadedUrl);
+      const savedProfile = await saveUserProfile(user.uid, { photoURL: uploadedUrl });
+      onProfileSaved(savedProfile);
+      setSaved(true);
     } catch {
-      setImageError("Could not read that picture.");
+      setImageError("Could not upload that picture.");
+    } finally {
+      setUploadingImage(false);
     }
   }
 
@@ -2684,17 +2694,17 @@ function ProfileEditPage({ user, onProfileSaved }) {
           Email
           <input value={email} onChange={(event) => { setSaved(false); setEmail(event.target.value); }} type="email" placeholder="you@example.com" />
         </label>
-        <label className="wide">
-          Profile picture URL
-          <input value={photoURL} onChange={(event) => { setSaved(false); setPhotoURL(event.target.value); }} placeholder="https://..." />
-        </label>
-        <label className="wide">
-          Upload profile picture
-          <input type="file" accept="image/*" onChange={handlePictureUpload} />
-        </label>
-        <button className="primary" type="submit" disabled={saving}>
+        <div className="wide profile-upload-field">
+          <span>Profile picture</span>
+          <label className={uploadingImage || saving ? "upload-picture-button disabled" : "upload-picture-button"}>
+            <Plus size={18} />
+            {uploadingImage ? "Uploading..." : photoURL ? "Change photo" : "Upload photo"}
+            <input type="file" accept="image/*" onChange={handlePictureUpload} disabled={uploadingImage || saving} />
+          </label>
+        </div>
+        <button className="primary" type="submit" disabled={saving || uploadingImage}>
           <Save size={18} />
-          {saving ? "Saving..." : "Save profile"}
+          {uploadingImage ? "Uploading..." : saving ? "Saving..." : "Save profile"}
         </button>
         {saved && <p className="save-status">Profile saved.</p>}
         {imageError && <p className="form-error">{imageError}</p>}
