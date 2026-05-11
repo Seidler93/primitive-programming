@@ -1533,6 +1533,44 @@ select:focus {
   gap: 10px;
 }
 
+.workout-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workout-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 14px;
+  color: #c7b6dc;
+  background: #160f1e;
+  border: 1px solid #3a2948;
+  border-radius: 8px;
+  font-weight: 850;
+}
+
+.workout-tab.active,
+.workout-tab:hover,
+.workout-tab:focus-visible {
+  color: #fff;
+  background: #201728;
+  border-color: #8b5cf6;
+  outline: none;
+}
+
+.workout-tab span {
+  min-width: 24px;
+  padding: 2px 7px;
+  color: #1b1224;
+  text-align: center;
+  background: #d8c7f0;
+  border-radius: 999px;
+  font-size: 0.78rem;
+}
+
 .stored-workout-card {
   display: flex;
   align-items: center;
@@ -1568,6 +1606,10 @@ select:focus {
   color: #b9a9c9;
   font-size: 0.86rem;
   font-weight: 800;
+}
+
+.load-more-button {
+  justify-self: start;
 }
 
 .progress-list {

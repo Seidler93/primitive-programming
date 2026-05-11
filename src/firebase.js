@@ -316,6 +316,7 @@ export async function ensureUserDocument(user, defaults = {}) {
   const localProgramIds = normalizeProgramAccess(readJson(localStorage.getItem(userProgramsLocalKey(user.uid)), []));
   localStorage.setItem(userProgramsLocalKey(user.uid), JSON.stringify(localProgramIds));
   const role = defaults.role || user.role || localProfile.role || "athlete";
+  let rootData = {};
 
   if (db && !isDevUserId(user.uid)) {
     const payload = {
@@ -327,13 +328,22 @@ export async function ensureUserDocument(user, defaults = {}) {
       updatedAt: new Date().toISOString(),
     };
     try {
+      const snapshot = await getDoc(doc(db, "users", user.uid));
+      rootData = snapshot.exists() ? snapshot.data() : {};
       await setDoc(doc(db, "users", user.uid), payload, { merge: true });
     } catch (error) {
       console.warn("Could not ensure user document.", error);
     }
   }
 
-  return { ...localProfile, role, programs: localProgramIds };
+  return {
+    ...localProfile,
+    ...rootData,
+    role: rootData.role || role,
+    programs: normalizeProgramAccess(rootData.programs || localProgramIds),
+    activePrograms: normalizeActivePrograms(rootData.activePrograms),
+    workoutTemplates: Array.isArray(rootData.workoutTemplates) ? rootData.workoutTemplates.slice(0, 10) : [],
+  };
 }
 
 export async function loadUserProgramIds(userId) {
