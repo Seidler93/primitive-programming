@@ -4250,28 +4250,6 @@ function App() {
             <Clock size={17} />
             <span>{timerLabel}</span>
           </button>
-          {isTrainer && (
-            <>
-              <button
-                className={view === "athletes" ? "nav-button nav-icon active" : "nav-button nav-icon"}
-                onClick={() => setView(view === "athletes" ? "client" : "athletes")}
-                type="button"
-                aria-label="View all athletes"
-                title="Athletes"
-              >
-                <UsersRound size={17} />
-              </button>
-              <button
-                className={view === "programs" ? "nav-button nav-icon active" : "nav-button nav-icon"}
-                onClick={() => setView(view === "programs" ? "client" : "programs")}
-                type="button"
-                aria-label="Open programs"
-                title="Programs"
-              >
-                <ClipboardList size={17} />
-              </button>
-            </>
-          )}
           <button className="nav-profile-button" type="button" onClick={() => setView("profile")} aria-label="Open profile" title="Profile">
             {user.photoURL ? <img src={user.photoURL} alt="" /> : <UserRound size={18} />}
           </button>
