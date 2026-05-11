@@ -510,6 +510,12 @@ function groupWorkouts(items) {
   }, {}));
 }
 
+function workoutExerciseCount(group, logs = {}) {
+  const programmedCount = group.items.filter((item) => !item.scheduledPlaceholder).length;
+  const loggedCustomCount = logs[workoutLogKey(group.date, group.key)]?.customExercises?.filter((exercise) => exercise.section !== "warmup").length || 0;
+  return Math.max(programmedCount, loggedCustomCount);
+}
+
 function dateRange(startDate, endDate) {
   const range = [];
   for (const day = new Date(startDate); day <= endDate; day.setDate(day.getDate() + 1)) {
@@ -931,7 +937,12 @@ function CalendarStrip({ sections, selectedDate, onSelectDate, logs, workoutsByD
 function WorkoutListView({ date, workoutGroups, logs, programs, onOpenWorkout, onAddWorkout, onChangeDate }) {
   const [showAddWorkoutOptions, setShowAddWorkoutOptions] = useState(false);
   const [selectedAddMode, setSelectedAddMode] = useState("new");
+  const [isSchedulingWorkout, setIsSchedulingWorkout] = useState(false);
   const hasPlannedWorkout = workoutGroups.length > 0;
+  const today = new Date().toISOString().slice(0, 10);
+  const isFutureDate = date > today;
+  const workoutActionLabel = isFutureDate ? "Schedule workout" : "Create workout";
+  const workoutActionCopy = isFutureDate ? "Schedule a new workout for this day" : "New, stored, or AI-generated workout";
   const programName = (programId) => {
     if (!programId || programId === "default") return "Default Program";
     return programs.find((program) => program.id === programId)?.name || "Program";
@@ -956,22 +967,25 @@ function WorkoutListView({ date, workoutGroups, logs, programs, onOpenWorkout, o
       <button className="add-workout-button" type="button" onClick={() => setShowAddWorkoutOptions(true)}>
         <Plus size={20} />
         <div>
-          <h3>Create workout</h3>
-          <span>New, stored, or AI-generated workout</span>
+          <h3>{workoutActionLabel}</h3>
+          <span>{workoutActionCopy}</span>
         </div>
       </button>
       {hasPlannedWorkout ? (
         <div className="workout-card-list">
-          {workoutGroups.map((group) => (
-            <button className="workout-card-button" type="button" key={group.key} onClick={() => onOpenWorkout(group.key)}>
-              <div>
-                <p className="eyebrow">{programName(group.programId)}</p>
-                <h3>{group.title}</h3>
-                <span>{group.week ? `Week ${group.week}` : group.phase} | {group.items.length} exercises</span>
-              </div>
-              {logs[date]?.completed ? <CheckCircle2 size={20} /> : <Dumbbell size={20} />}
-            </button>
-          ))}
+          {workoutGroups.map((group) => {
+            const exerciseCount = workoutExerciseCount(group, logs);
+            return (
+              <button className="workout-card-button" type="button" key={group.key} onClick={() => onOpenWorkout(group.key)}>
+                <div>
+                  <p className="eyebrow">{programName(group.programId)}</p>
+                  <h3>{group.title}</h3>
+                  <span>{group.week ? `Week ${group.week}` : group.phase} | {exerciseCount} exercise{exerciseCount === 1 ? "" : "s"}</span>
+                </div>
+                {logs[date]?.completed ? <CheckCircle2 size={20} /> : <Dumbbell size={20} />}
+              </button>
+            );
+          })}
         </div>
       ) : (
         <p className="empty-list-copy">No workouts are scheduled for this day.</p>
@@ -999,13 +1013,18 @@ function WorkoutListView({ date, workoutGroups, logs, programs, onOpenWorkout, o
             </div>
             {selectedAddMode === "new" ? (
               <div className="option-panel">
-                <p>Create a blank workout for this day. You can add warm-ups, lifts, accessories, and cardio next.</p>
-                <button className="primary" type="button" onClick={() => {
-                  setShowAddWorkoutOptions(false);
-                  onAddWorkout();
+                <p>{isFutureDate ? "Schedule a blank workout for this day. You can add warm-ups, lifts, accessories, and cardio next." : "Create a blank workout for this day. You can add warm-ups, lifts, accessories, and cardio next."}</p>
+                <button className="primary" type="button" disabled={isSchedulingWorkout} onClick={async () => {
+                  try {
+                    setIsSchedulingWorkout(true);
+                    setShowAddWorkoutOptions(false);
+                    await onAddWorkout();
+                  } finally {
+                    setIsSchedulingWorkout(false);
+                  }
                 }}>
                   <Plus size={18} />
-                  Start blank workout
+                  {isFutureDate ? "Schedule blank workout" : "Start blank workout"}
                 </button>
               </div>
             ) : selectedAddMode === "stored" ? (
@@ -1067,7 +1086,7 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, o
   const maxValue = (key) => maxes[key]?.value ?? maxes[key] ?? "";
   const missingMaxes = requiredMaxes.filter((key) => !Number(maxValue(key)));
   const workoutPhase = workout[0]?.phase || "Custom workout";
-  const workoutTitle = workout[0] ? `${workout[0].focus} - Week ${workout[0].week}` : "Create workout";
+  const workoutTitle = workout[0] ? `${workout[0].focus} - Week ${workout[0].week}` : workoutKey === "blank" ? "Create workout" : "Scheduled Workout";
 
   useEffect(() => {
     const draft = loadWorkoutDraft(user.uid, date, workoutKey);
@@ -3754,7 +3773,8 @@ function App() {
   const selectedWorkoutGroups = useMemo(() => groupWorkouts(workoutsByDate[selectedDate] || []), [selectedDate, workoutsByDate]);
   const selectedWorkout = selectedWorkoutKey === "blank"
     ? []
-    : selectedWorkoutGroups.find((group) => group.key === selectedWorkoutKey)?.items || selectedWorkoutGroups[0]?.items || [];
+    : (selectedWorkoutGroups.find((group) => group.key === selectedWorkoutKey)?.items || selectedWorkoutGroups[0]?.items || [])
+      .filter((item) => !item.scheduledPlaceholder);
   const activeWorkoutKey = selectedWorkoutKey || selectedWorkoutGroups[0]?.key || "blank";
   const activeWorkoutGroup = selectedWorkoutKey === "blank"
     ? null
@@ -3810,9 +3830,29 @@ function App() {
     setView("workout");
   }
 
-  function openBlankWorkout() {
-    setSelectedWorkoutKey("blank");
+  async function openBlankWorkout() {
+    const scheduledWorkout = {
+      id: `scheduled-${selectedDate}-${Date.now()}`,
+      date: selectedDate,
+      focus: "Scheduled Workout",
+      exercise: "",
+      prescription: "",
+      intensity: "",
+      notes: "",
+      programId: "default",
+      day: new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date(`${selectedDate}T12:00:00`)),
+      phase: "Scheduled Workout",
+      week: "Custom",
+      scheduledPlaceholder: true,
+      createdAt: new Date().toISOString(),
+    };
+    const nextWorkoutKey = workoutGroupKey(scheduledWorkout);
+    setCustomWorkouts((current) => [...current.filter((item) => item.id !== scheduledWorkout.id), scheduledWorkout]);
+    setSelectedWorkoutKey(nextWorkoutKey);
     setView("workout");
+    await saveCustomWorkout("default", scheduledWorkout);
+    await refreshCustomWorkouts();
+    setSelectedWorkoutKey(nextWorkoutKey);
   }
 
   function handleProfileSaved(profile) {
