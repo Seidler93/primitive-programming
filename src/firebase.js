@@ -295,7 +295,9 @@ export async function requestNotificationAccess(userId, serviceWorkerRegistratio
 export async function listenForForegroundMessages(callback) {
   const messaging = await messagingClient();
   if (!messaging) return () => {};
-  return onMessage(messaging, callback);
+  return onMessage(messaging, (payload = {}) => {
+    callback(payload || {});
+  });
 }
 
 export async function loadPrograms() {

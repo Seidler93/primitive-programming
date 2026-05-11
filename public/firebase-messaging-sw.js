@@ -82,7 +82,7 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-messaging.onBackgroundMessage((payload) => {
+messaging.onBackgroundMessage((payload = {}) => {
   const notification = payload.notification || {};
   const data = payload.data || {};
   const title = notification.title || data.title || "Primitive Programming";

@@ -1992,14 +1992,14 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, o
   );
 }
 
-function ProgramsPage({ programs, workouts, logs, onProgramCreated, onWorkoutCreated }) {
+function ProgramsPage({ programs, workouts, logs, selectedDate, onProgramCreated, onWorkoutCreated }) {
   const [programName, setProgramName] = useState("");
   const [athleteEmail, setAthleteEmail] = useState("dev-athlete@primitive.local");
-  const [startDate, setStartDate] = useState("2026-05-11");
+  const [startDate, setStartDate] = useState(selectedDate || defaultSelectedDate);
   const [programGoal, setProgramGoal] = useState("");
   const [programNotes, setProgramNotes] = useState("");
   const [workoutProgramId, setWorkoutProgramId] = useState("default");
-  const [date, setDate] = useState("2026-05-11");
+  const [date, setDate] = useState(selectedDate || defaultSelectedDate);
   const [focus, setFocus] = useState("");
   const [exercise, setExercise] = useState("");
   const [prescription, setPrescription] = useState("");
@@ -2020,6 +2020,13 @@ function ProgramsPage({ programs, workouts, logs, onProgramCreated, onWorkoutCre
   const createdProgramIds = new Set(programs.map((program) => program.id));
   const visiblePrograms = programOptions.filter((program) => program.id === "default" || createdProgramIds.has(program.id));
   const currentWorkoutProgram = programOptions.find((program) => program.id === workoutProgramId) || defaultProgram;
+
+  useEffect(() => {
+    if (selectedDate) {
+      setDate(selectedDate);
+      setStartDate((current) => current || selectedDate);
+    }
+  }, [selectedDate]);
 
   async function createProgram(event) {
     event.preventDefault();
@@ -2042,15 +2049,16 @@ function ProgramsPage({ programs, workouts, logs, onProgramCreated, onWorkoutCre
 
   async function createWorkout(event) {
     event.preventDefault();
+    const scheduledDate = date || selectedDate || defaultSelectedDate;
     const workout = {
-      date,
+      date: scheduledDate,
       focus,
       exercise,
       prescription,
       intensity,
       notes,
       programId: workoutProgramId || "default",
-      day: new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date(`${date}T12:00:00`)),
+      day: new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date(`${scheduledDate}T12:00:00`)),
       phase: currentWorkoutProgram.name,
       week: "Custom",
     };
@@ -2059,7 +2067,7 @@ function ProgramsPage({ programs, workouts, logs, onProgramCreated, onWorkoutCre
     setPrescription("");
     setIntensity("");
     setNotes("");
-    onWorkoutCreated();
+    await onWorkoutCreated(scheduledDate);
   }
 
   async function updateProgramStatus(program, status) {
@@ -3605,6 +3613,13 @@ function App() {
     setProgramWorkouts(programWorkoutLists.flat());
   }
 
+  async function handleProgramWorkoutCreated(workoutDate) {
+    await refreshCustomWorkouts();
+    if (workoutDate) {
+      openWorkoutList(workoutDate);
+    }
+  }
+
   useEffect(() => {
     return observeAuth((nextUser) => {
       setUser(mergeUserProfile(nextUser));
@@ -3672,9 +3687,11 @@ function App() {
     let unsubscribe = () => {};
     let active = true;
 
-    listenForForegroundMessages((payload) => {
-      const title = payload.notification?.title || payload.data?.title || "Primitive Programming";
-      const body = payload.notification?.body || payload.data?.body || "New training update received.";
+    listenForForegroundMessages((payload = {}) => {
+      const notification = payload?.notification || {};
+      const data = payload?.data || {};
+      const title = notification.title || data.title || "Primitive Programming";
+      const body = notification.body || data.body || "New training update received.";
       setNotificationMessage(`${title}: ${body}`);
       window.setTimeout(() => setNotificationMessage(""), 5000);
     }).then((nextUnsubscribe) => {
@@ -4260,8 +4277,9 @@ function App() {
           programs={programs}
           workouts={allWorkouts}
           logs={athleteProgressLogs}
+          selectedDate={selectedDate}
           onProgramCreated={refreshCustomWorkouts}
-          onWorkoutCreated={refreshCustomWorkouts}
+          onWorkoutCreated={handleProgramWorkoutCreated}
         />
       ) : view === "athletes" ? (
         <AthletesPage programs={programs} workouts={allWorkouts} logs={athleteProgressLogs} />
