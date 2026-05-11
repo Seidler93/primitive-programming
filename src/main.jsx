@@ -443,6 +443,17 @@ function imageFileToDataUrl(file) {
   });
 }
 
+function dataUrlToBlob(dataUrl) {
+  const [header, payload] = dataUrl.split(",");
+  const mimeType = header.match(/data:(.*?);base64/)?.[1] || "image/jpeg";
+  const binary = atob(payload || "");
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new Blob([bytes], { type: mimeType });
+}
+
 function formatDate(date) {
   return new Intl.DateTimeFormat("en-US", {
     weekday: "long",
@@ -1087,8 +1098,24 @@ function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, o
   useEffect(() => {
     if (hydratedDraftFor !== `${user.uid}:${date}:${workoutKey}`) return;
     saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises });
-    saveUserMaxes(user.uid, maxes);
   }, [customExercises, date, exerciseOverrides, hydratedDraftFor, loads, maxes, notes, programmedSetCounts, started, user.uid, warmupSetCounts, workoutKey]);
+
+  useEffect(() => {
+    if (hydratedDraftFor !== `${user.uid}:${date}:${workoutKey}` || !requiredMaxes.length) return;
+    const nextSavedMaxes = loadUserMaxes(user.uid);
+    let changed = false;
+    requiredMaxes.forEach((key) => {
+      const value = maxValue(key);
+      if (!Number(value)) return;
+      const previousValue = nextSavedMaxes[key]?.value ?? nextSavedMaxes[key] ?? "";
+      if (String(previousValue) === String(value) && nextSavedMaxes[key]?.unit === weightUnit) return;
+      nextSavedMaxes[key] = { value, unit: weightUnit };
+      changed = true;
+    });
+    if (changed) {
+      void syncUserMaxes(user.uid, nextSavedMaxes);
+    }
+  }, [date, hydratedDraftFor, maxes, requiredMaxes, user.uid, weightUnit, workoutKey]);
 
   async function persist(payload = {}, stateOverrides = {}) {
     const nextState = {
@@ -2628,48 +2655,53 @@ function ProfilePage({ user, isTrainer, logs, onOpenEdit }) {
 function ProfileEditPage({ user, onProfileSaved }) {
   const [displayName, setDisplayName] = useState(user.displayName || "");
   const [email, setEmail] = useState(user.email || "");
-  const [photoURL, setPhotoURL] = useState(user.photoURL || "");
-  const [saved, setSaved] = useState(false);
+  const [profileImage, setProfileImage] = useState(user.photoURL || "");
+  const [profileMessage, setProfileMessage] = useState("");
+  const [imageMessage, setImageMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [profileError, setProfileError] = useState("");
   const [imageError, setImageError] = useState("");
 
   async function handlePictureUpload(event) {
     const file = event.target.files?.[0];
     if (!file) return;
     setImageError("");
-    setSaved(false);
+    setImageMessage("");
     setUploadingImage(true);
     try {
       const fallbackDataUrl = await imageFileToDataUrl(file);
-      const uploadedUrl = await uploadUserProfileImage(user.uid, file, fallbackDataUrl);
-      setPhotoURL(uploadedUrl);
+      setProfileImage(fallbackDataUrl);
+      const uploadFile = dataUrlToBlob(fallbackDataUrl);
+      const uploadedUrl = await uploadUserProfileImage(user.uid, uploadFile, fallbackDataUrl);
       const savedProfile = await saveUserProfile(user.uid, { photoURL: uploadedUrl });
+      setProfileImage(uploadedUrl);
       onProfileSaved(savedProfile);
-      setSaved(true);
+      setImageMessage("Profile picture saved.");
     } catch {
       setImageError("Could not upload that picture.");
     } finally {
       setUploadingImage(false);
+      event.target.value = "";
     }
   }
 
   async function persistProfile(event) {
     event.preventDefault();
     setSaving(true);
-    setSaved(false);
-    setImageError("");
+    setProfileMessage("Profile saved. Syncing...");
+    setProfileError("");
     const profile = {
       displayName: displayName.trim(),
       email: email.trim(),
-      photoURL: photoURL.trim(),
     };
+    onProfileSaved(profile);
     try {
       const savedProfile = await saveUserProfile(user.uid, profile);
       onProfileSaved(savedProfile);
-      setSaved(true);
+      setProfileMessage("Profile saved.");
     } catch {
-      setImageError("Could not save your profile picture.");
+      setProfileError("Profile saved on this device. Cloud sync will need another try.");
     } finally {
       setSaving(false);
     }
@@ -2678,7 +2710,7 @@ function ProfileEditPage({ user, onProfileSaved }) {
   return (
     <section className="profile-panel settings-panel">
       <div className="profile-header">
-        <ProfileAvatar user={{ ...user, photoURL }} />
+        <ProfileAvatar user={{ ...user, photoURL: profileImage }} />
         <div>
           <p className="eyebrow">Profile details</p>
           <h2>Edit profile</h2>
@@ -2698,7 +2730,7 @@ function ProfileEditPage({ user, onProfileSaved }) {
           <span>Profile picture</span>
           <label className={uploadingImage || saving ? "upload-picture-button disabled" : "upload-picture-button"}>
             <Plus size={18} />
-            {uploadingImage ? "Uploading..." : photoURL ? "Change photo" : "Upload photo"}
+            {uploadingImage ? "Uploading..." : profileImage ? "Change photo" : "Upload photo"}
             <input type="file" accept="image/*" onChange={handlePictureUpload} disabled={uploadingImage || saving} />
           </label>
         </div>
@@ -2706,7 +2738,9 @@ function ProfileEditPage({ user, onProfileSaved }) {
           <Save size={18} />
           {uploadingImage ? "Uploading..." : saving ? "Saving..." : "Save profile"}
         </button>
-        {saved && <p className="save-status">Profile saved.</p>}
+        {profileMessage && <p className="save-status">{profileMessage}</p>}
+        {imageMessage && <p className="save-status">{imageMessage}</p>}
+        {profileError && <p className="form-error">{profileError}</p>}
         {imageError && <p className="form-error">{imageError}</p>}
       </form>
     </section>
@@ -3265,6 +3299,7 @@ function MaxesPage({ user }) {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const weightUnit = loadUserWeightUnit(user.uid);
   const maxValue = (key) => maxes[key]?.value ?? maxes[key] ?? "";
   const savedMaxFields = maxFields.filter((field) => maxValue(field.key));
@@ -3277,10 +3312,12 @@ function MaxesPage({ user }) {
   async function persistMaxes(event) {
     event.preventDefault();
     setSaving(true);
-    await syncUserMaxes(user.uid, maxes);
+    setSaveError("");
+    const result = await syncUserMaxes(user.uid, maxes);
     setSaving(false);
     setSaved(true);
     setEditing(false);
+    setSaveError(result?.local ? "Maxes saved on this device. Cloud sync did not complete." : "");
   }
 
   return (
@@ -3316,6 +3353,7 @@ function MaxesPage({ user }) {
         )}
         <div>
           {saved && <p className="save-status">Maxes saved.</p>}
+          {saveError && <p className="form-error">{saveError}</p>}
         </div>
       </div>
 
@@ -3338,6 +3376,7 @@ function MaxesPage({ user }) {
           {saving ? "Saving..." : "Save maxes"}
         </button>
         {saved && <p className="save-status">Maxes saved.</p>}
+        {saveError && <p className="form-error">{saveError}</p>}
       </form>}
     </section>
   );
