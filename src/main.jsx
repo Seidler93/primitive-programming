@@ -40,6 +40,7 @@ import { exerciseSuggestions, similarExercises } from "./exerciseLibrary";
 import {
   hasFirebaseConfig,
   isTrainerUser,
+  loadAthletes,
   loadCustomWorkouts,
   loadPrograms,
   loadProgramsForUser,
@@ -2154,6 +2155,12 @@ function ProgramsPage({ user, isTrainer, programs, workouts, logs, selectedDate,
   const [notes, setNotes] = useState("");
   const [openProgramMenu, setOpenProgramMenu] = useState("");
   const [startingProgram, setStartingProgram] = useState(null);
+  const [assigningProgram, setAssigningProgram] = useState(null);
+  const [athleteOptions, setAthleteOptions] = useState([]);
+  const [assignAthleteId, setAssignAthleteId] = useState("");
+  const [assignStartDate, setAssignStartDate] = useState(defaultSelectedDate);
+  const [assignScheduleMode, setAssignScheduleMode] = useState("fixed");
+  const [assignmentMessage, setAssignmentMessage] = useState("");
   const [programStartDate, setProgramStartDate] = useState(defaultSelectedDate);
   const [programScheduleMode, setProgramScheduleMode] = useState("fixed");
   const savedDefaultProgram = programs.find((program) => program.id === "default");
@@ -2175,6 +2182,19 @@ function ProgramsPage({ user, isTrainer, programs, workouts, logs, selectedDate,
       setStartDate((current) => current || selectedDate);
     }
   }, [selectedDate]);
+
+  useEffect(() => {
+    if (!isTrainer) return;
+    let active = true;
+    loadAthletes().then((athletes) => {
+      if (!active) return;
+      setAthleteOptions(athletes);
+      setAssignAthleteId((current) => current || athletes[0]?.uid || "");
+    });
+    return () => {
+      active = false;
+    };
+  }, [isTrainer]);
 
   async function createProgram(event) {
     event.preventDefault();
@@ -2236,6 +2256,15 @@ function ProgramsPage({ user, isTrainer, programs, workouts, logs, selectedDate,
     setOpenProgramMenu("");
   }
 
+  function openAssignProgram(program) {
+    setAssigningProgram(program);
+    setAssignStartDate(program.startDate || new Date().toISOString().slice(0, 10));
+    setAssignScheduleMode(program.scheduleMode || "fixed");
+    setAssignmentMessage("");
+    setAssignAthleteId((current) => current || athleteOptions[0]?.uid || "");
+    setOpenProgramMenu("");
+  }
+
   async function startProgram(event) {
     event.preventDefault();
     if (!startingProgram || !programStartDate) return;
@@ -2268,6 +2297,28 @@ function ProgramsPage({ user, isTrainer, programs, workouts, logs, selectedDate,
     setStartingProgram(null);
     setProgramStartDate(defaultSelectedDate);
     setProgramScheduleMode("fixed");
+    onProgramCreated();
+  }
+
+  async function assignProgram(event) {
+    event.preventDefault();
+    if (!assigningProgram || !assignAthleteId || !assignStartDate) return;
+
+    const programWorkouts = workouts
+      .filter((item) => (item.programId || "default") === assigningProgram.id && item.date)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const scheduled = assignScheduleMode !== flexibleScheduleMode;
+    await saveUserActiveProgram(assignAthleteId, {
+      id: assigningProgram.id,
+      startDate: assignStartDate,
+      scheduled,
+      currentWeek: 1,
+      nextWorkoutIndex: 0,
+      ...(scheduled ? { workoutDates: buildWorkoutDatesForProgram(programWorkouts, assignStartDate) } : {}),
+    });
+    const athlete = athleteOptions.find((item) => item.uid === assignAthleteId);
+    setAssignmentMessage(`${assigningProgram.name} assigned to ${athlete?.displayName || athlete?.email || "athlete"}.`);
+    setAssigningProgram(null);
     onProgramCreated();
   }
 
@@ -2318,9 +2369,11 @@ function ProgramsPage({ user, isTrainer, programs, workouts, logs, selectedDate,
                           <button type="button" role="menuitem" onClick={() => openStartProgram(program)}>
                             Start program
                           </button>
-                          <button type="button" role="menuitem" onClick={() => updateProgramStatus(program, "paused")}>
-                            Pause program
-                          </button>
+                          {isTrainer && (
+                            <button type="button" role="menuitem" onClick={() => openAssignProgram(program)}>
+                              Assign program
+                            </button>
+                          )}
                           <button type="button" role="menuitem" onClick={() => updateProgramStatus(program, "quit")}>
                             Quit program
                           </button>
@@ -2446,6 +2499,7 @@ function ProgramsPage({ user, isTrainer, programs, workouts, logs, selectedDate,
           </form>
         </div>
       </div>
+      {assignmentMessage && <p className="save-status">{assignmentMessage}</p>}
       {startingProgram && (
         <div className="modal-backdrop" role="presentation">
           <form className="modal-panel modal-form start-program-form" onSubmit={startProgram} role="dialog" aria-modal="true" aria-labelledby="start-program-title">
@@ -2480,6 +2534,48 @@ function ProgramsPage({ user, isTrainer, programs, workouts, logs, selectedDate,
               </button>
               <button className="primary" type="submit" disabled={!programStartDate}>
                 Start program
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+      {assigningProgram && (
+        <div className="modal-backdrop" role="presentation">
+          <form className="modal-panel modal-form start-program-form" onSubmit={assignProgram} role="dialog" aria-modal="true" aria-labelledby="assign-program-title">
+            <div>
+              <p className="eyebrow">Assign program</p>
+              <h2 id="assign-program-title">{assigningProgram.name}</h2>
+            </div>
+            <label>
+              Athlete
+              <select value={assignAthleteId} onChange={(event) => setAssignAthleteId(event.target.value)} required>
+                {athleteOptions.map((athlete) => (
+                  <option key={athlete.uid} value={athlete.uid}>
+                    {athlete.displayName || athlete.email || athlete.uid}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Start date
+              <input type="date" value={assignStartDate} onChange={(event) => setAssignStartDate(event.target.value)} required />
+            </label>
+            <div className="choice-list" role="radiogroup" aria-label="Program scheduling">
+              <button className={assignScheduleMode === "fixed" ? "choice-button active" : "choice-button"} type="button" onClick={() => setAssignScheduleMode("fixed")}>
+                <strong>Known workout days</strong>
+                <span>Keep workouts on the programmed calendar days.</span>
+              </button>
+              <button className={assignScheduleMode === flexibleScheduleMode ? "choice-button active" : "choice-button"} type="button" onClick={() => setAssignScheduleMode(flexibleScheduleMode)}>
+                <strong>Unknown workout days</strong>
+                <span>The athlete chooses workout days week to week.</span>
+              </button>
+            </div>
+            <div className="modal-action-row">
+              <button className="secondary" type="button" onClick={() => setAssigningProgram(null)}>
+                Cancel
+              </button>
+              <button className="primary" type="submit" disabled={!assignAthleteId || !assignStartDate}>
+                Assign program
               </button>
             </div>
           </form>

@@ -549,6 +549,22 @@ export async function loadPrograms() {
   return JSON.parse(localStorage.getItem(localKey("programs")) || "[]");
 }
 
+export async function loadAthletes() {
+  const devAthletes = [{ uid: "dev-athlete", email: "dev-athlete@primitive.local", displayName: "Dev Athlete", role: "athlete" }];
+  if (db) {
+    try {
+      const snapshot = await withTimeout(getDocs(collection(db, "users")), "Athletes request timed out.");
+      const athletes = snapshot.docs
+        .map((item) => ({ uid: item.id, ...item.data() }))
+        .filter((item) => item.role !== "coach" && item.role !== "trainer");
+      return athletes.length ? athletes : devAthletes;
+    } catch (error) {
+      console.warn("Falling back to local athletes.", error);
+    }
+  }
+  return devAthletes;
+}
+
 export async function loadProgramsForUser(user) {
   const programs = await loadPrograms();
   if (!user?.uid) return [];
