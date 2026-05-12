@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import {
   createUserWithEmailAndPassword,
+  fetchSignInMethodsForEmail,
   getAuth,
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -85,15 +86,22 @@ export function observeAuth(callback) {
 }
 
 export async function login(email, password, mode = "login") {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
   if (auth) {
+    if (mode === "signup") {
+      const existingMethods = await fetchSignInMethodsForEmail(auth, normalizedEmail);
+      if (existingMethods.length) {
+        throw new Error("An account already exists for this email. Log in instead.");
+      }
+    }
     const fn = mode === "signup" ? createUserWithEmailAndPassword : signInWithEmailAndPassword;
-    const result = await fn(auth, email, password);
+    const result = await fn(auth, normalizedEmail, password);
     if (mode === "signup") {
       await ensureUserDocument(result.user, { role: "athlete" });
     }
     return result.user;
   }
-  const user = { uid: email.toLowerCase(), email, role: "athlete" };
+  const user = { uid: normalizedEmail, email: normalizedEmail, role: "athlete" };
   localStorage.setItem(localKey("demoUser"), JSON.stringify(user));
   if (mode === "signup") {
     await ensureUserDocument(user, { role: "athlete" });
@@ -334,9 +342,11 @@ export async function ensureUserDocument(user, defaults = {}) {
   let rootData = {};
 
   if (db && !isDevUserId(user.uid)) {
+    const email = String(user.email || "").trim().toLowerCase();
     const payload = {
       uid: user.uid,
-      email: user.email || "",
+      email,
+      emailLower: email,
       displayName: user.displayName || "",
       role,
       updatedAt: new Date().toISOString(),
