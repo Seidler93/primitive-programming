@@ -733,18 +733,6 @@ export async function loadProgramsForUser(user) {
     .filter((programId) => !programIds.has(programId));
   await Promise.all(backfillProgramIds.map((programId) => grantUserProgramAccess(user.uid, programId)));
 
-  const activeBackfills = accessiblePrograms
-    .filter((program) => program.status === "active" && !activePrograms.has(program.id))
-    .map((program) => ({
-      id: program.id,
-      startDate: program.startDate || "",
-      scheduled: program.scheduleMode !== flexibleProgramScheduleMode,
-      currentWeek: 1,
-      nextWorkoutIndex: 0,
-    }));
-  await Promise.all(activeBackfills.map((program) => saveUserActiveProgram(user.uid, program)));
-  activeBackfills.forEach((program) => activePrograms.set(program.id, program));
-
   return accessiblePrograms.map((program) => {
     const activeProgram = activePrograms.get(program.id);
     if (!activeProgram) return program;

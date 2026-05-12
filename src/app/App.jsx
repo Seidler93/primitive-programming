@@ -211,16 +211,20 @@ function AppContent() {
   }, [isMobileViewport, view]);
 
   const hasDefaultProgramAccess = useMemo(() => programs.some((program) => program.id === "default"), [programs]);
+  const activeProgramIds = useMemo(() => new Set(programs
+    .filter((program) => program.activeProgram)
+    .map((program) => program.id)), [programs]);
+  const hasActiveDefaultProgram = activeProgramIds.has("default");
   const activeFlexibleProgramIds = useMemo(() => new Set(programs
-    .filter((program) => program.status === "active" && program.scheduleMode === flexibleScheduleMode)
+    .filter((program) => program.activeProgram && program.scheduleMode === flexibleScheduleMode)
     .map((program) => program.id)), [programs]);
   const starterProgramWorkouts = useMemo(() => (
-    !hasDefaultProgramAccess || activeFlexibleProgramIds.has("default")
+    !hasActiveDefaultProgram || activeFlexibleProgramIds.has("default")
       ? []
       : importedProgram.map((item) => (
         workoutScheduleOverrides[item.id] ? { ...item, date: workoutScheduleOverrides[item.id] } : item
       ))
-  ), [activeFlexibleProgramIds, hasDefaultProgramAccess, workoutScheduleOverrides]);
+  ), [activeFlexibleProgramIds, hasActiveDefaultProgram, workoutScheduleOverrides]);
   const savedWorkouts = useMemo(() => [...customWorkouts, ...programWorkouts], [customWorkouts, programWorkouts]);
   const allProgramSourceWorkouts = useMemo(() => [
     ...(hasDefaultProgramAccess ? importedProgram : []),
@@ -228,18 +232,22 @@ function AppContent() {
   ], [hasDefaultProgramAccess, savedWorkouts]);
   const scheduledWorkouts = useMemo(() => [
     ...starterProgramWorkouts,
-    ...savedWorkouts.filter((item) => !activeFlexibleProgramIds.has(item.programId || "default")),
-  ], [activeFlexibleProgramIds, savedWorkouts, starterProgramWorkouts]);
+    ...customWorkouts,
+    ...programWorkouts.filter((item) => {
+      const programId = item.programId || "default";
+      return activeProgramIds.has(programId) && !activeFlexibleProgramIds.has(programId);
+    }),
+  ], [activeFlexibleProgramIds, activeProgramIds, customWorkouts, programWorkouts, starterProgramWorkouts]);
   const flexibleWorkoutGroupsForSelectedDate = useMemo(() => (
     flexibleProgramWorkoutGroups(selectedDate, programs, allProgramSourceWorkouts, logs)
   ), [allProgramSourceWorkouts, logs, programs, selectedDate]);
   const workoutsByDate = useMemo(() => groupByDate(scheduledWorkouts), [scheduledWorkouts]);
   const programLedWorkoutDates = useMemo(() => (
-    [...starterProgramWorkouts, ...programWorkouts]
+    scheduledWorkouts
       .map((item) => item.date)
       .filter(Boolean)
       .sort()
-  ), [programWorkouts, starterProgramWorkouts]);
+  ), [scheduledWorkouts]);
   const calendarMonths = useMemo(() => calendarSections(programLedWorkoutDates, new Date(), visibleCalendarMonths), [programLedWorkoutDates, visibleCalendarMonths]);
   const dates = useMemo(() => calendarMonths.flatMap((section) => section.dates), [calendarMonths]);
   const selectedWorkoutGroups = useMemo(() => [
