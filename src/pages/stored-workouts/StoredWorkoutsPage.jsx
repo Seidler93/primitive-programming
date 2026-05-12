@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { CheckCircle2, ChevronRight, Dumbbell } from "lucide-react";
 import { importedProgramMeta } from "../../data/programData";
-import { formatDate, workoutLogKey } from "../../utils/appHelpers";
+import { formatDate, groupWorkouts, workoutLogKey } from "../../utils/appHelpers";
 
 export function StoredWorkoutsPage({ user, workouts, logs, programs, onOpenWorkout }) {
   const [activeTab, setActiveTab] = useState("upcoming");

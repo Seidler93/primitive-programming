@@ -1,19 +1,22 @@
 import React from "react";
 import { ArrowDown, ArrowUp, Dumbbell, Eye, EyeOff, GripVertical } from "lucide-react";
+import { useMenu } from "../../context/MenuContext";
 
-export function MenuPanel({
-  hiddenMenuButtonIds,
-  menuEditMode,
-  onHandleMenuButtonClick,
-  onHideMenu,
-  onMoveMenuButton,
-  onResetMenuButtons,
-  onSetMenuEditMode,
-  onStartMenuButtonPress,
-  onStopMenuButtonPress,
-  onToggleMenuButtonHidden,
-  orderedMenuButtons,
-}) {
+export function MenuPanel() {
+  const {
+    handleMenuButtonClick,
+    hiddenMenuButtonIds,
+    hideMenu,
+    menuEditMode,
+    moveMenuButton,
+    orderedMenuButtons,
+    resetMenuButtons,
+    setMenuEditMode,
+    startMenuButtonPress,
+    stopMenuButtonPress,
+    toggleMenuButtonHidden,
+  } = useMenu();
+
   return (
     <div
       className="nav-menu-backdrop"
@@ -21,7 +24,7 @@ export function MenuPanel({
       onPointerDown={(event) => event.stopPropagation()}
       onPointerUp={(event) => event.stopPropagation()}
       onPointerCancel={(event) => event.stopPropagation()}
-      onClick={onHideMenu}
+      onClick={hideMenu}
     >
       <div className="nav-menu-panel" role="dialog" aria-modal="true" aria-label="Main menu" onClick={(event) => event.stopPropagation()}>
         <div className="nav-menu-header">
@@ -29,8 +32,8 @@ export function MenuPanel({
           <strong>Primitive</strong>
           {menuEditMode && (
             <div className="nav-menu-edit-actions">
-              <button type="button" onClick={onResetMenuButtons}>Reset</button>
-              <button type="button" onClick={() => onSetMenuEditMode(false)}>Done</button>
+                  <button type="button" onClick={resetMenuButtons}>Reset</button>
+                  <button type="button" onClick={() => setMenuEditMode(false)}>Done</button>
             </div>
           )}
         </div>
@@ -44,11 +47,11 @@ export function MenuPanel({
               <button
                 className="menu-link"
                 type="button"
-                onClick={() => onHandleMenuButtonClick(item)}
-                onPointerDown={onStartMenuButtonPress}
-                onPointerUp={onStopMenuButtonPress}
-                onPointerCancel={onStopMenuButtonPress}
-                onPointerLeave={onStopMenuButtonPress}
+                onClick={() => handleMenuButtonClick(item)}
+                onPointerDown={startMenuButtonPress}
+                onPointerUp={stopMenuButtonPress}
+                onPointerCancel={stopMenuButtonPress}
+                onPointerLeave={stopMenuButtonPress}
                 aria-disabled={menuEditMode}
                 title={menuEditMode ? "Editing menu" : "Long press to edit menu"}
               >
@@ -58,13 +61,13 @@ export function MenuPanel({
               </button>
               {menuEditMode && (
                 <div className="menu-edit-controls" aria-label={`${item.label} menu controls`}>
-                  <button type="button" onClick={() => previousItem && onMoveMenuButton(item.id, previousItem.id)} disabled={!previousItem} aria-label={`Move ${item.label} up`}>
+                  <button type="button" onClick={() => previousItem && moveMenuButton(item.id, previousItem.id)} disabled={!previousItem} aria-label={`Move ${item.label} up`}>
                     <ArrowUp size={15} />
                   </button>
-                  <button type="button" onClick={() => nextItem && onMoveMenuButton(item.id, nextItem.id)} disabled={!nextItem} aria-label={`Move ${item.label} down`}>
+                  <button type="button" onClick={() => nextItem && moveMenuButton(item.id, nextItem.id)} disabled={!nextItem} aria-label={`Move ${item.label} down`}>
                     <ArrowDown size={15} />
                   </button>
-                  <button type="button" onClick={() => onToggleMenuButtonHidden(item.id)} aria-label={isHidden ? `Show ${item.label}` : `Hide ${item.label}`}>
+                  <button type="button" onClick={() => toggleMenuButtonHidden(item.id)} aria-label={isHidden ? `Show ${item.label}` : `Hide ${item.label}`}>
                     {isHidden ? <Eye size={15} /> : <EyeOff size={15} />}
                   </button>
                 </div>

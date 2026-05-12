@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, CheckCircle2, Dumbbell, Minus, PencilLine, Plus, Save } from "lucide-react";
 import { flexibleScheduleMode, warmupPresets } from "../../app/config";
+import { importedProgramMeta } from "../../data/programData";
 import { ExerciseAutocomplete, SimilarExerciseButtons } from "../exercise/ExerciseAutocomplete";
 import { saveUserWorkout } from "../../services/firebase";
 import {
@@ -12,6 +13,7 @@ import {
   prescribedPreview,
   saveWorkoutDraft,
   setRows,
+  shiftDate,
   workoutExerciseCount,
   workoutLogKey,
 } from "../../utils/appHelpers";

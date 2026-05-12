@@ -2,7 +2,15 @@ import React, { useState } from "react";
 import { PencilLine, Plus, Save, UserRound } from "lucide-react";
 import { maxFields } from "../../app/config";
 import { saveUserProfile, uploadUserProfileImage } from "../../services/firebase";
-import { dataUrlToBlob, imageFileToDataUrl, loadUserMaxes } from "../../utils/appHelpers";
+import {
+  dataUrlToBlob,
+  imageFileToDataUrl,
+  loadBodyMetrics,
+  loadUserMaxes,
+  loadUserWeightUnit,
+  saveBodyMetrics,
+  saveUserWeightUnit,
+} from "../../utils/appHelpers";
 
 export function ProfileAvatar({ user, iconSize = 34 }) {
   return (

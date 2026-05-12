@@ -6,6 +6,9 @@ import { LoginPage } from "../pages/login/LoginPage";
 import { ProfileSetupModal } from "../pages/profile/ProfilePage";
 import { defaultSelectedDate, flexibleScheduleMode } from "./config";
 import { menuButtonItemMap } from "./menuRoutes";
+import { AuthProvider } from "../context/AuthContext";
+import { MenuProvider } from "../context/MenuContext";
+import { TimerProvider } from "../context/TimerContext";
 import { ensureUserDocument, isTrainerUser, listenForForegroundMessages, loadCustomWorkouts, loadPrograms, loadProgramsForUser, loadUserMaxes as loadCloudUserMaxes, loadUserProfile, loadUserWorkouts, logout, observeAuth, saveCustomWorkout, saveUserActiveProgram, saveUserMaxes as saveCloudUserMaxes } from "../services/firebase";
 import { activateWaitingServiceWorker, registerAppServiceWorker } from "../services/pwa";
 import { appRouteUrl, applyActiveProgramDates, buildWorkoutDatesForProgram, calendarSections, flexibleProgramWorkoutGroups, formatTimer, groupByDate, groupWorkouts, isDevUser, loadMenuButtonPreferences, loadWorkoutScheduleOverrides, mergeUserProfile, moveWorkoutDraft, normalizeMenuButtonPreferences, readAppRoute, saveMenuButtonPreferences, saveUserMaxes, saveWorkoutScheduleOverrides, shiftDate, workoutDateMapKey } from "../utils/appHelpers";
@@ -128,17 +131,16 @@ export default function App() {
     setUser(profiledUser);
     setShowProfileSetup(profile.profileSetupCompleted !== true);
 
-    const [nextLogs, nextTrainer, nextCustomWorkouts] = await Promise.all([
+    const [nextLogs, nextTrainer] = await Promise.all([
       loadUserWorkouts(nextUser.uid),
       isTrainerUser(nextUser),
-      loadCustomWorkouts("default"),
     ]);
     const nextPrograms = nextTrainer || isDevUser(nextUser.uid) ? await loadPrograms() : await loadProgramsForUser(profiledUser);
 
     setLogs(nextLogs);
     setIsTrainer(nextTrainer);
     setAthleteProgressLogs(nextTrainer ? await loadUserWorkouts("dev-athlete") : nextLogs);
-    setCustomWorkouts(nextCustomWorkouts);
+    setCustomWorkouts([]);
     setWorkoutScheduleOverrides(loadWorkoutScheduleOverrides(nextUser.uid));
     const programWorkoutState = await loadProgramWorkoutState(nextUser, nextPrograms, nextTrainer);
     setPrograms(programWorkoutState.programs);
@@ -182,10 +184,8 @@ export default function App() {
   }
 
   async function refreshCustomWorkouts() {
-    const nextDefaultWorkouts = await loadCustomWorkouts("default");
     const nextPrograms = isTrainer || isDevUser(user?.uid) ? await loadPrograms() : user ? await loadProgramsForUser(user) : [];
     const programWorkoutState = await loadProgramWorkoutState(user, nextPrograms);
-    setCustomWorkouts(nextDefaultWorkouts);
     setPrograms(programWorkoutState.programs);
     setProgramWorkouts(programWorkoutState.workouts);
   }
@@ -645,98 +645,115 @@ export default function App() {
   if (checking) return <BootPage />;
   if (!user) return <LoginPage onAuthed={hydrateUser} />;
 
-  return (
-    <AppShell
-      view={view}
-      user={user}
-      onStartDaySwipe={startDaySwipe}
-      onFinishDaySwipe={finishDaySwipe}
-      onStopDaySwipe={() => setDaySwipeStart(null)}
-      showNavMenu={showNavMenu}
-      onShowMenu={() => setShowNavMenu(true)}
-      onHideMenu={() => {
-        setShowNavMenu(false);
-        setMenuEditMode(false);
-      }}
-      onBrandClick={() => setView("client")}
-      onProfileClick={() => setView("profile")}
-      timerRunning={timerRunning}
-      timerLabel={timerLabel}
-      onHandleTimerClick={handleTimerClick}
-      onStartTimerPress={startTimerPress}
-      onStopTimerPress={endTimerPress}
-      menuEditMode={menuEditMode}
-      onSetMenuEditMode={setMenuEditMode}
-      onResetMenuButtons={resetMenuButtons}
-      orderedMenuButtons={orderedMenuButtons}
-      hiddenMenuButtonIds={hiddenMenuButtonIds}
-      onHandleMenuButtonClick={handleMenuButtonClick}
-      onStartMenuButtonPress={startMenuButtonPress}
-      onStopMenuButtonPress={endMenuButtonPress}
-      onMoveMenuButton={moveMenuButton}
-      onToggleMenuButtonHidden={toggleMenuButtonHidden}
-      showTimerSettings={showTimerSettings}
-      timerMode={timerMode}
-      onTimerModeChange={changeTimerMode}
-      countdownMinutes={countdownMinutes}
-      countdownRemainderSeconds={countdownRemainderSeconds}
-      onUpdateCountdownPart={updateCountdownPart}
-      intervalWorkSeconds={intervalWorkSeconds}
-      onSetIntervalWorkSeconds={setIntervalWorkSeconds}
-      intervalRestSeconds={intervalRestSeconds}
-      onSetIntervalRestSeconds={setIntervalRestSeconds}
-      intervalEndless={intervalEndless}
-      onSetIntervalEndless={setIntervalEndless}
-      onSetIntervalCurrentRound={setIntervalCurrentRound}
-      onSetTimerStartedAt={setTimerStartedAt}
-      onSetTimerBankedSeconds={setTimerBankedSeconds}
-      intervalRounds={intervalRounds}
-      onSetIntervalRounds={setIntervalRounds}
-      onResetTimer={resetTimer}
-      onSetShowTimerSettings={setShowTimerSettings}
-      isOnline={isOnline}
-      saveMessage={saveMessage}
-      notificationMessage={notificationMessage}
-    >
-      {showProfileSetup && (
-        <ProfileSetupModal user={user} onComplete={handleProfileSetupComplete} />
-      )}
+  const authContextValue = {
+    handleLogout,
+    isTrainer,
+    setUser,
+    showProfileSetup,
+    user,
+  };
+  const menuContextValue = {
+    handleMenuButtonClick,
+    hiddenMenuButtonIds,
+    hideMenu: () => {
+      setShowNavMenu(false);
+      setMenuEditMode(false);
+    },
+    menuEditMode,
+    moveMenuButton,
+    orderedMenuButtons,
+    resetMenuButtons,
+    setMenuEditMode,
+    showMenu: () => setShowNavMenu(true),
+    showNavMenu,
+    startMenuButtonPress,
+    stopMenuButtonPress: endMenuButtonPress,
+    toggleMenuButtonHidden,
+  };
+  const timerContextValue = {
+    changeTimerMode,
+    countdownMinutes,
+    countdownRemainderSeconds,
+    handleTimerClick,
+    intervalEndless,
+    intervalRestSeconds,
+    intervalRounds,
+    intervalWorkSeconds,
+    resetTimer,
+    setIntervalCurrentRound,
+    setIntervalEndless,
+    setIntervalRestSeconds,
+    setIntervalRounds,
+    setIntervalWorkSeconds,
+    setShowTimerSettings,
+    setTimerBankedSeconds,
+    setTimerStartedAt,
+    showTimerSettings,
+    startTimerPress,
+    stopTimerPress: endTimerPress,
+    timerLabel,
+    timerMode,
+    timerRunning,
+    updateCountdownPart,
+  };
 
-      <AppRoutes
-        activeWorkoutKey={activeWorkoutKey}
-        allProgramSourceWorkouts={allProgramSourceWorkouts}
-        applyAppUpdate={applyAppUpdate}
-        athleteProgressLogs={athleteProgressLogs}
-        calendarMonths={calendarMonths}
-        handleProfileSaved={handleProfileSaved}
-        handleProgramWorkoutCreated={handleProgramWorkoutCreated}
-        handleWorkoutSaveStatus={handleWorkoutSaveStatus}
-        isTrainer={isTrainer}
-        logs={logs}
-        moveSelectedWorkout={moveSelectedWorkout}
-        openBlankWorkout={openBlankWorkout}
-        openStoredWorkout={openStoredWorkout}
-        openWorkout={openWorkout}
-        openWorkoutList={openWorkoutList}
-        programs={programs}
-        refreshCustomWorkouts={refreshCustomWorkouts}
-        scheduledWorkouts={scheduledWorkouts}
-        selectedDate={selectedDate}
-        selectedWorkout={selectedWorkout}
-        selectedWorkoutGroups={selectedWorkoutGroups}
-        serviceWorkerRegistration={serviceWorkerRegistration}
-        setLogs={setLogs}
-        setSelectedDate={setSelectedDate}
-        setView={setView}
-        setVisibleCalendarMonths={setVisibleCalendarMonths}
-        syncUserMaxes={syncUserMaxes}
-        todayTarget={todayTarget}
-        updateRegistration={updateRegistration}
-        user={user}
-        view={view}
-        workoutsByDate={workoutsByDate}
-        handleLogout={handleLogout}
-      />
-    </AppShell>
+  return (
+    <AuthProvider value={authContextValue}>
+      <MenuProvider value={menuContextValue}>
+        <TimerProvider value={timerContextValue}>
+          <AppShell
+            view={view}
+            onStartDaySwipe={startDaySwipe}
+            onFinishDaySwipe={finishDaySwipe}
+            onStopDaySwipe={() => setDaySwipeStart(null)}
+            onBrandClick={() => setView("client")}
+            onProfileClick={() => setView("profile")}
+            isOnline={isOnline}
+            saveMessage={saveMessage}
+            notificationMessage={notificationMessage}
+          >
+            {showProfileSetup && (
+              <ProfileSetupModal user={user} onComplete={handleProfileSetupComplete} />
+            )}
+
+            <AppRoutes
+              activeWorkoutKey={activeWorkoutKey}
+              allProgramSourceWorkouts={allProgramSourceWorkouts}
+              applyAppUpdate={applyAppUpdate}
+              athleteProgressLogs={athleteProgressLogs}
+              calendarMonths={calendarMonths}
+              handleProfileSaved={handleProfileSaved}
+              handleProgramWorkoutCreated={handleProgramWorkoutCreated}
+              handleWorkoutSaveStatus={handleWorkoutSaveStatus}
+              isTrainer={isTrainer}
+              logs={logs}
+              moveSelectedWorkout={moveSelectedWorkout}
+              openBlankWorkout={openBlankWorkout}
+              openStoredWorkout={openStoredWorkout}
+              openWorkout={openWorkout}
+              openWorkoutList={openWorkoutList}
+              programs={programs}
+              refreshCustomWorkouts={refreshCustomWorkouts}
+              scheduledWorkouts={scheduledWorkouts}
+              selectedDate={selectedDate}
+              selectedWorkout={selectedWorkout}
+              selectedWorkoutGroups={selectedWorkoutGroups}
+              serviceWorkerRegistration={serviceWorkerRegistration}
+              setLogs={setLogs}
+              setSelectedDate={setSelectedDate}
+              setView={setView}
+              setVisibleCalendarMonths={setVisibleCalendarMonths}
+              syncUserMaxes={syncUserMaxes}
+              todayTarget={todayTarget}
+              updateRegistration={updateRegistration}
+              user={user}
+              view={view}
+              workoutsByDate={workoutsByDate}
+              handleLogout={handleLogout}
+            />
+          </AppShell>
+        </TimerProvider>
+      </MenuProvider>
+    </AuthProvider>
   );
 }

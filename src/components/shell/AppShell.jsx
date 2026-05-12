@@ -2,57 +2,24 @@ import React from "react";
 import { MenuPanel } from "../menu/MenuPanel";
 import { NavBar } from "../nav/NavBar";
 import { TimerSettingsModal } from "../nav/TimerSettingsModal";
+import { useMenu } from "../../context/MenuContext";
+import { useTimer } from "../../context/TimerContext";
 
 export function AppShell({
   children,
-  hiddenMenuButtonIds,
-  intervalEndless,
-  intervalRestSeconds,
-  intervalRounds,
-  intervalWorkSeconds,
   isOnline,
-  menuEditMode,
   notificationMessage,
   onBrandClick,
   onFinishDaySwipe,
-  onHandleMenuButtonClick,
-  onHandleTimerClick,
-  onHideMenu,
-  onMoveMenuButton,
   onProfileClick,
-  onResetMenuButtons,
-  onResetTimer,
-  onSetIntervalCurrentRound,
-  onSetIntervalEndless,
-  onSetIntervalRestSeconds,
-  onSetIntervalRounds,
-  onSetIntervalWorkSeconds,
-  onSetMenuEditMode,
-  onSetShowTimerSettings,
-  onSetTimerBankedSeconds,
-  onSetTimerStartedAt,
-  onShowMenu,
   onStartDaySwipe,
-  onStartMenuButtonPress,
-  onStartTimerPress,
   onStopDaySwipe,
-  onStopMenuButtonPress,
-  onStopTimerPress,
-  onTimerModeChange,
-  onToggleMenuButtonHidden,
-  onUpdateCountdownPart,
-  orderedMenuButtons,
   saveMessage,
-  showNavMenu,
-  showTimerSettings,
-  timerLabel,
-  timerMode,
-  timerRunning,
-  user,
   view,
-  countdownMinutes,
-  countdownRemainderSeconds,
 }) {
+  const { showNavMenu } = useMenu();
+  const { showTimerSettings } = useTimer();
+
   return (
     <main
       className={view === "workout-list" ? "app-shell day-swipe-shell" : "app-shell"}
@@ -62,54 +29,12 @@ export function AppShell({
     >
       <NavBar
         onBrandClick={onBrandClick}
-        onHandleTimerClick={onHandleTimerClick}
         onProfileClick={onProfileClick}
-        onShowMenu={onShowMenu}
-        onStartTimerPress={onStartTimerPress}
-        onStopTimerPress={onStopTimerPress}
-        timerLabel={timerLabel}
-        timerRunning={timerRunning}
-        user={user}
       />
 
-      {showNavMenu && (
-        <MenuPanel
-          hiddenMenuButtonIds={hiddenMenuButtonIds}
-          menuEditMode={menuEditMode}
-          onHandleMenuButtonClick={onHandleMenuButtonClick}
-          onHideMenu={onHideMenu}
-          onMoveMenuButton={onMoveMenuButton}
-          onResetMenuButtons={onResetMenuButtons}
-          onSetMenuEditMode={onSetMenuEditMode}
-          onStartMenuButtonPress={onStartMenuButtonPress}
-          onStopMenuButtonPress={onStopMenuButtonPress}
-          onToggleMenuButtonHidden={onToggleMenuButtonHidden}
-          orderedMenuButtons={orderedMenuButtons}
-        />
-      )}
+      {showNavMenu && <MenuPanel />}
 
-      {showTimerSettings && (
-        <TimerSettingsModal
-          countdownMinutes={countdownMinutes}
-          countdownRemainderSeconds={countdownRemainderSeconds}
-          intervalEndless={intervalEndless}
-          intervalRestSeconds={intervalRestSeconds}
-          intervalRounds={intervalRounds}
-          intervalWorkSeconds={intervalWorkSeconds}
-          onResetTimer={onResetTimer}
-          onSetIntervalCurrentRound={onSetIntervalCurrentRound}
-          onSetIntervalEndless={onSetIntervalEndless}
-          onSetIntervalRestSeconds={onSetIntervalRestSeconds}
-          onSetIntervalRounds={onSetIntervalRounds}
-          onSetIntervalWorkSeconds={onSetIntervalWorkSeconds}
-          onSetShowTimerSettings={onSetShowTimerSettings}
-          onSetTimerBankedSeconds={onSetTimerBankedSeconds}
-          onSetTimerStartedAt={onSetTimerStartedAt}
-          onTimerModeChange={onTimerModeChange}
-          onUpdateCountdownPart={onUpdateCountdownPart}
-          timerMode={timerMode}
-        />
-      )}
+      {showTimerSettings && <TimerSettingsModal />}
 
       {children}
 
