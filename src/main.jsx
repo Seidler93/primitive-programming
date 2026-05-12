@@ -52,9 +52,9 @@ import {
   loadUserProfile,
   loadUserWorkouts,
   login,
-  loginDev,
   logout,
   observeAuth,
+  removeUserActiveProgram,
   saveProgram,
   saveCustomWorkout,
   ensureUserDocument,
@@ -974,12 +974,6 @@ function AuthCard({ onAuthed }) {
     }
   }
 
-  async function devLogin(role) {
-    setError("");
-    const user = await loginDev(role);
-    onAuthed(user);
-  }
-
   return (
     <main className="auth-shell">
       <section className="auth-panel">
@@ -1008,14 +1002,6 @@ function AuthCard({ onAuthed }) {
         <button className="text-button" type="button" onClick={() => setMode(mode === "login" ? "signup" : "login")}>
           {mode === "login" ? "Need an account?" : "Already have an account?"}
         </button>
-        <div className="dev-login-row" aria-label="Development login options">
-          <button className="secondary" type="button" onClick={() => devLogin("athlete")}>
-            Dev Athlete
-          </button>
-          <button className="secondary" type="button" onClick={() => devLogin("coach")}>
-            Dev Coach
-          </button>
-        </div>
         {!hasFirebaseConfig && <p className="demo-note">Demo mode is active until Firebase env vars are added.</p>}
       </section>
     </main>
@@ -3013,6 +2999,13 @@ function StoredProgramsPage({ user, programs, workouts, logs, onProgramStarted }
     await onProgramStarted?.();
   }
 
+  async function quitProgram(program) {
+    if (!user?.uid || !program?.id) return;
+    await removeUserActiveProgram(user.uid, program.id);
+    setExpandedProgramId("");
+    await onProgramStarted?.();
+  }
+
   if (viewingProgram) {
     return (
       <ProgramWorkoutViewer
@@ -3036,6 +3029,7 @@ function StoredProgramsPage({ user, programs, workouts, logs, onProgramStarted }
           {programOptions.map((program) => {
           const programWorkouts = workouts.filter((item) => (item.programId || "default") === program.id);
           const summary = progressSummary(programWorkouts, logs);
+          const isActiveProgram = Boolean(program.activeProgram);
           const expanded = expandedProgramId === program.id;
           return (
             <article className={`program-card ${expanded ? "expanded" : ""}`} key={program.id}>
@@ -3071,10 +3065,17 @@ function StoredProgramsPage({ user, programs, workouts, logs, onProgramStarted }
                     <Eye size={17} />
                     View workout
                   </button>
-                  <button className="secondary" type="button" onClick={() => openStartProgram(program)}>
-                    <CalendarDays size={17} />
-                    Start program
-                  </button>
+                  {isActiveProgram ? (
+                    <button className="secondary danger-text-button" type="button" onClick={() => quitProgram(program)}>
+                      <Minus size={17} />
+                      Quit program
+                    </button>
+                  ) : (
+                    <button className="secondary" type="button" onClick={() => openStartProgram(program)}>
+                      <CalendarDays size={17} />
+                      Start program
+                    </button>
+                  )}
                 </div>
               )}
             </article>

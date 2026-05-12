@@ -66,14 +66,6 @@ function withTimeout(promise, message) {
   ]);
 }
 
-function devUser(role) {
-  return {
-    uid: `dev-${role}`,
-    email: `dev-${role}@primitive.local`,
-    displayName: role === "coach" ? "Dev Coach" : "Dev Athlete",
-  };
-}
-
 async function messagingClient() {
   if (!app || !hasFirebaseConfig) return null;
   const supported = await isMessagingSupported();
@@ -85,21 +77,11 @@ function tokenId(token) {
 }
 
 export function observeAuth(callback) {
-  const storedDevUser = JSON.parse(localStorage.getItem(localKey("devUser")) || "null");
-  if (storedDevUser) {
-    callback(storedDevUser);
-    return () => {};
-  }
+  localStorage.removeItem(localKey("devUser"));
   if (auth) return onAuthStateChanged(auth, callback);
   const stored = JSON.parse(localStorage.getItem(localKey("demoUser")) || "null");
   callback(stored);
   return () => {};
-}
-
-export async function loginDev(role) {
-  const user = devUser(role);
-  localStorage.setItem(localKey("devUser"), JSON.stringify(user));
-  return user;
 }
 
 export async function login(email, password, mode = "login") {
@@ -562,6 +544,28 @@ export async function saveUserActiveProgram(userId, activeProgram) {
   return { synced: false, local: true };
 }
 
+export async function removeUserActiveProgram(userId, programId) {
+  if (!userId || !programId) return { synced: false };
+  const current = await loadUserActivePrograms(userId);
+  const next = normalizeActivePrograms(current.filter((program) => program.id !== programId));
+  localStorage.setItem(userActiveProgramsLocalKey(userId), JSON.stringify(next));
+
+  if (db && !isDevUserId(userId)) {
+    try {
+      await setDoc(doc(db, "users", userId), {
+        activePrograms: next,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+      return { synced: true };
+    } catch (error) {
+      console.warn("Removed active program locally; cloud sync failed.", error);
+      return { synced: false, local: true };
+    }
+  }
+
+  return { synced: false, local: true };
+}
+
 export async function uploadUserProfileImage(userId, file, fallbackDataUrl) {
   if (!file) throw new Error("No profile image selected.");
 
@@ -692,19 +696,17 @@ export async function loadPrograms() {
 }
 
 export async function loadAthletes() {
-  const devAthletes = [{ uid: "dev-athlete", email: "dev-athlete@primitive.local", displayName: "Dev Athlete", role: "athlete" }];
   if (db) {
     try {
       const snapshot = await withTimeout(getDocs(collection(db, "users")), "Athletes request timed out.");
-      const athletes = snapshot.docs
+      return snapshot.docs
         .map((item) => ({ uid: item.id, ...item.data() }))
         .filter((item) => item.role !== "coach" && item.role !== "trainer");
-      return athletes.length ? athletes : devAthletes;
     } catch (error) {
       console.warn("Falling back to local athletes.", error);
     }
   }
-  return devAthletes;
+  return [];
 }
 
 export async function loadProgramsForUser(user) {
