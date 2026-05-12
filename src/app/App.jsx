@@ -8,7 +8,7 @@ import { defaultSelectedDate, flexibleScheduleMode } from "./config";
 import { menuButtonItemMap } from "./menuRoutes";
 import { ensureUserDocument, isTrainerUser, listenForForegroundMessages, loadCustomWorkouts, loadPrograms, loadProgramsForUser, loadUserMaxes as loadCloudUserMaxes, loadUserProfile, loadUserWorkouts, logout, observeAuth, saveCustomWorkout, saveUserActiveProgram, saveUserMaxes as saveCloudUserMaxes } from "../services/firebase";
 import { activateWaitingServiceWorker, registerAppServiceWorker } from "../services/pwa";
-import { appRouteUrl, applyActiveProgramDates, buildWorkoutDatesForProgram, calendarSections, flexibleProgramWorkoutGroups, formatTimer, groupByDate, groupWorkouts, isDevUser, loadMenuButtonPreferences, loadWorkoutScheduleOverrides, mergeUserProfile, moveWorkoutDraft, readAppRoute, saveMenuButtonPreferences, saveUserMaxes, saveWorkoutScheduleOverrides, shiftDate, workoutDateMapKey } from "../utils/appHelpers";
+import { appRouteUrl, applyActiveProgramDates, buildWorkoutDatesForProgram, calendarSections, flexibleProgramWorkoutGroups, formatTimer, groupByDate, groupWorkouts, isDevUser, loadMenuButtonPreferences, loadWorkoutScheduleOverrides, mergeUserProfile, moveWorkoutDraft, normalizeMenuButtonPreferences, readAppRoute, saveMenuButtonPreferences, saveUserMaxes, saveWorkoutScheduleOverrides, shiftDate, workoutDateMapKey } from "../utils/appHelpers";
 
 async function syncUserMaxes(userId, maxes) {
   saveUserMaxes(userId, maxes);
