@@ -2976,10 +2976,42 @@ function WarmupCooldownPage() {
   );
 }
 
-function StoredProgramsPage({ programs, workouts, logs }) {
+function StoredProgramsPage({ user, programs, workouts, logs, onProgramStarted }) {
   const [expandedProgramId, setExpandedProgramId] = useState("");
   const [viewingProgram, setViewingProgram] = useState(null);
+  const [startingProgram, setStartingProgram] = useState(null);
+  const [programStartDate, setProgramStartDate] = useState(defaultSelectedDate);
+  const [programScheduleMode, setProgramScheduleMode] = useState("fixed");
   const programOptions = [{ id: "default", name: "Default Program", goal: "Nine-week Olympic lifting meet prep" }, ...programs.filter((program) => program.id !== "default")];
+
+  function openStartProgram(program) {
+    setStartingProgram(program);
+    setProgramStartDate(program.startDate || new Date().toISOString().slice(0, 10));
+    setProgramScheduleMode(program.scheduleMode || "fixed");
+    setExpandedProgramId("");
+  }
+
+  async function startProgram(event) {
+    event.preventDefault();
+    if (!user?.uid || !startingProgram || !programStartDate) return;
+
+    const programWorkouts = workouts
+      .filter((item) => (item.programId || "default") === startingProgram.id && item.date)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const scheduled = programScheduleMode !== flexibleScheduleMode;
+    await saveUserActiveProgram(user.uid, {
+      id: startingProgram.id,
+      startDate: programStartDate,
+      scheduled,
+      currentWeek: 1,
+      nextWorkoutIndex: 0,
+      ...(scheduled ? { workoutDates: buildWorkoutDatesForProgram(programWorkouts, programStartDate) } : {}),
+    });
+    setStartingProgram(null);
+    setProgramStartDate(defaultSelectedDate);
+    setProgramScheduleMode("fixed");
+    await onProgramStarted?.();
+  }
 
   if (viewingProgram) {
     return (
@@ -3039,6 +3071,10 @@ function StoredProgramsPage({ programs, workouts, logs }) {
                     <Eye size={17} />
                     View workout
                   </button>
+                  <button className="secondary" type="button" onClick={() => openStartProgram(program)}>
+                    <CalendarDays size={17} />
+                    Start program
+                  </button>
                 </div>
               )}
             </article>
@@ -3047,6 +3083,43 @@ function StoredProgramsPage({ programs, workouts, logs }) {
         </div>
       ) : (
         <p className="empty-list-copy">No saved programs yet.</p>
+      )}
+      {startingProgram && (
+        <div className="modal-backdrop" role="presentation">
+          <form className="modal-panel modal-form start-program-form" onSubmit={startProgram} role="dialog" aria-modal="true" aria-labelledby="stored-start-program-title">
+            <div>
+              <p className="eyebrow">Start program</p>
+              <h2 id="stored-start-program-title">{startingProgram.name}</h2>
+            </div>
+            <label>
+              Start date
+              <input type="date" value={programStartDate} onChange={(event) => setProgramStartDate(event.target.value)} required />
+            </label>
+            <div className="choice-list" role="radiogroup" aria-label="Program scheduling">
+              <button className={programScheduleMode === "fixed" ? "choice-button active" : "choice-button"} type="button" onClick={() => setProgramScheduleMode("fixed")}>
+                <strong>Known workout days</strong>
+                <span>Keep workouts on the programmed calendar days.</span>
+              </button>
+              <button className={programScheduleMode === flexibleScheduleMode ? "choice-button active" : "choice-button"} type="button" onClick={() => setProgramScheduleMode(flexibleScheduleMode)}>
+                <strong>Unknown workout days</strong>
+                <span>Pick training days week to week and show the next program day.</span>
+              </button>
+            </div>
+            <p className="modal-helper-copy">
+              {programScheduleMode === flexibleScheduleMode
+                ? "Each calendar week advances by completed program days, so your next selected day shows the next workout."
+                : "Program workouts will move so the first scheduled workout starts on this date."}
+            </p>
+            <div className="modal-action-row">
+              <button className="secondary" type="button" onClick={() => setStartingProgram(null)}>
+                Cancel
+              </button>
+              <button className="primary" type="submit" disabled={!programStartDate || !user?.uid}>
+                Confirm start
+              </button>
+            </div>
+          </form>
+        </div>
       )}
     </section>
   );
@@ -4977,7 +5050,7 @@ function App() {
       ) : view === "warmup-cooldown" ? (
         <WarmupCooldownPage />
       ) : view === "stored-programs" ? (
-        <StoredProgramsPage programs={programs} workouts={allProgramSourceWorkouts} logs={logs} />
+        <StoredProgramsPage user={user} programs={programs} workouts={allProgramSourceWorkouts} logs={logs} onProgramStarted={refreshCustomWorkouts} />
       ) : view === "stored-workouts" ? (
         <StoredWorkoutsPage user={user} programs={programs} workouts={scheduledWorkouts} logs={logs} onOpenWorkout={openStoredWorkout} />
       ) : view === "programs" ? (
