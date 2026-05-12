@@ -1,10 +1,5 @@
-import {
-  defaultBodyMetricSettings,
-  defaultMenuButtonOrder,
-  defaultSelectedDate,
-  flexibleScheduleMode,
-  routeViews,
-} from "../app/config";
+import { defaultBodyMetricSettings, defaultSelectedDate, flexibleScheduleMode, routeViews } from "../app/config";
+import { defaultMenuButtonOrder } from "../app/menuRoutes";
 
 export function formatTimer(totalSeconds) {
   const safeSeconds = Math.max(0, totalSeconds);
@@ -763,4 +758,3 @@ export function needsMaxes(workout) {
     return needs && key ? [key] : [];
   }))];
 }
-
