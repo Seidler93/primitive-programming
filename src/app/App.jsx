@@ -1,0 +1,3743 @@
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowDown,
+  Bell,
+  CalendarDays,
+  ChevronRight,
+  CheckCircle2,
+  ClipboardList,
+  Clock,
+  Dumbbell,
+  ArrowLeft,
+  ArrowUp,
+  Eye,
+  EyeOff,
+  Flame,
+  GripVertical,
+  LogOut,
+  Menu,
+  Minus,
+  PencilLine,
+  Plus,
+  Save,
+  Settings,
+  TrendingUp,
+  UserRound,
+  UsersRound,
+} from "lucide-react";
+import "../styles.css";
+import { importedProgram, importedProgramMeta } from "../data/programData";
+import { AuthCard } from "../components/auth/AuthCard";
+import { ExerciseAutocomplete, SimilarExerciseButtons } from "../components/exercise/ExerciseAutocomplete";
+import {
+  FoodLogPage,
+  MessagesPage,
+  NewsPage,
+  StorePage,
+  StretchesPage,
+  WarmupCooldownPage,
+} from "../pages/SimplePages";
+import { CommunityPage } from "../pages/CommunityPage";
+import { GoalsPage, MaxesPage } from "../pages/TrackingPages";
+import {
+  appVersion,
+  bodyMetricFields,
+  defaultBodyMetricSettings,
+  defaultSelectedDate,
+  flexibleScheduleMode,
+  maxFields,
+  menuButtonItemMap,
+  settingsSections,
+  warmupPresets,
+} from "./config";
+import {
+  isTrainerUser,
+  loadAthletes,
+  loadCustomWorkouts,
+  loadPrograms,
+  loadProgramsForUser,
+  loadUserActivePrograms,
+  loadUserMaxes as loadCloudUserMaxes,
+  loadUserProfile,
+  loadUserWorkouts,
+  logout,
+  observeAuth,
+  removeUserActiveProgram,
+  saveProgram,
+  saveCustomWorkout,
+  ensureUserDocument,
+  saveUserActiveProgram,
+  saveUserMaxes as saveCloudUserMaxes,
+  saveUserWorkout,
+  saveUserProfile,
+  requestNotificationAccess,
+  listenForForegroundMessages,
+  uploadUserProfileImage,
+} from "../services/firebase";
+import { activateWaitingServiceWorker, registerAppServiceWorker } from "../services/pwa";
+import {
+  appRouteUrl,
+  applyActiveProgramDates,
+  bodyMetricUnit,
+  buildWorkoutDatesForProgram,
+  calendarSections,
+  completedWorkoutsLast30Days,
+  dataUrlToBlob,
+  flexibleProgramWorkoutGroups,
+  formatDate,
+  formatShortDate,
+  formatTimer,
+  goalProgress,
+  groupByDate,
+  groupWorkouts,
+  imageFileToDataUrl,
+  isDevUser,
+  loadBodyMetricSettings,
+  loadBodyMetrics,
+  loadMenuButtonPreferences,
+  loadUserGoals,
+  loadUserMaxes,
+  loadUserWeightUnit,
+  loadUserDistanceUnit,
+  loadWorkoutDraft,
+  loadWorkoutScheduleOverrides,
+  mergeUserProfile,
+  metricGoalProgress,
+  metricLatest,
+  metricLineChart,
+  metricTrendPoints,
+  moveWorkoutDraft,
+  needsMaxes,
+  numericMax,
+  prescribedPreview,
+  programDayGroups,
+  programSlug,
+  programTimelineSummary,
+  progressSummary,
+  readAppRoute,
+  saveBodyMetricSettings,
+  saveBodyMetrics,
+  saveMenuButtonPreferences,
+  saveUserGoals,
+  saveUserMaxes,
+  saveUserWeightUnit,
+  saveUserDistanceUnit,
+  saveWorkoutDraft,
+  saveWorkoutScheduleOverrides,
+  setRows,
+  shiftDate,
+  workoutExerciseCount,
+  workoutLogKey,
+  workoutDateMapKey,
+  weeklyWorkoutStreak,
+} from "../utils/appHelpers";
+
+async function syncUserMaxes(userId, maxes) {
+  saveUserMaxes(userId, maxes);
+  return saveCloudUserMaxes(userId, maxes);
+}
+
+function CalendarStrip({ sections, selectedDate, onSelectDate, logs, workoutsByDate, onShowMoreMonths }) {
+  return (
+    <section className="calendar-band" aria-label="Workout calendar">
+      <div className="month-stack">
+        {sections.map((section) => (
+          <div className="calendar-month" key={section.key}>
+            <h3>{section.label}</h3>
+            <div className="date-grid">
+              {section.dates.map((date) => {
+                const isOutsideMonth = new Date(`${date}T12:00:00`).getMonth() !== section.month;
+                return (
+                  <button
+                    className={`date-tile ${workoutsByDate[date] ? "" : "empty"} ${logs[date]?.completed ? "completed" : ""} ${isOutsideMonth ? "outside-month" : ""} ${selectedDate === date && !isOutsideMonth ? "selected" : ""}`}
+                    key={`${section.key}-${date}`}
+                    onClick={() => onSelectDate(date)}
+                    type="button"
+                  >
+                    <span>{formatDate(date).slice(0, 3)}</span>
+                    <strong>{new Date(`${date}T12:00:00`).getDate()}</strong>
+                    {logs[date]?.completed && <CheckCircle2 className="complete-day-icon" size={16} />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      <button className="secondary calendar-more-button" type="button" onClick={onShowMoreMonths}>
+        Show more months
+      </button>
+    </section>
+  );
+}
+
+function WorkoutListView({ date, workoutGroups, logs, programs, onOpenWorkout, onAddWorkout, onChangeDate }) {
+  const [showAddWorkoutOptions, setShowAddWorkoutOptions] = useState(false);
+  const [selectedAddMode, setSelectedAddMode] = useState("new");
+  const [isSchedulingWorkout, setIsSchedulingWorkout] = useState(false);
+  const hasPlannedWorkout = workoutGroups.length > 0;
+  const today = new Date().toISOString().slice(0, 10);
+  const isFutureDate = date > today;
+  const workoutActionLabel = isFutureDate ? "Schedule workout" : "Create workout";
+  const workoutActionCopy = isFutureDate ? "Schedule a new workout for this day" : "New, stored, or AI-generated workout";
+  const programName = (programId) => {
+    if (!programId || programId === "default") return importedProgramMeta.name;
+    return programs.find((program) => program.id === programId)?.name || "Program";
+  };
+  const goToPreviousDay = () => onChangeDate(shiftDate(date, -1));
+  const goToNextDay = () => onChangeDate(shiftDate(date, 1));
+
+  return (
+    <section className="workout-list-panel">
+      <div className="section-heading workout-list-heading">
+        <button className="icon-button" type="button" onClick={goToPreviousDay} aria-label="Previous day" title="Previous day">
+          <ArrowLeft size={18} />
+        </button>
+        <div>
+          <p className="eyebrow">Swipe for nearby days</p>
+          <h2>{formatDate(date)}</h2>
+        </div>
+        <button className="icon-button next-day-button" type="button" onClick={goToNextDay} aria-label="Next day" title="Next day">
+          <ArrowLeft size={18} />
+        </button>
+      </div>
+      <button className="add-workout-button" type="button" onClick={() => setShowAddWorkoutOptions(true)}>
+        <Plus size={20} />
+        <div>
+          <h3>{workoutActionLabel}</h3>
+          <span>{workoutActionCopy}</span>
+        </div>
+      </button>
+      {hasPlannedWorkout ? (
+        <div className="workout-card-list">
+          {workoutGroups.map((group) => {
+            const exerciseCount = workoutExerciseCount(group, logs);
+            return (
+              <button className="workout-card-button" type="button" key={group.key} onClick={() => onOpenWorkout(group.key)}>
+                <div>
+                  <p className="eyebrow">{programName(group.programId)}</p>
+                  <h3>{group.title}</h3>
+                  <span>{group.week ? `Week ${group.week}` : group.phase} | {exerciseCount} exercise{exerciseCount === 1 ? "" : "s"}</span>
+                </div>
+                {logs[date]?.completed ? <CheckCircle2 size={20} /> : <Dumbbell size={20} />}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="empty-list-copy">No workouts are scheduled for this day.</p>
+      )}
+      {showAddWorkoutOptions && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="add-workout-title">
+            <div>
+              <p className="eyebrow">{formatDate(date)}</p>
+              <h2 id="add-workout-title">Add workout</h2>
+            </div>
+            <div className="choice-list" role="tablist" aria-label="Workout add options">
+              <button className={selectedAddMode === "new" ? "choice-button active" : "choice-button"} type="button" onClick={() => setSelectedAddMode("new")}>
+                <strong>New workout</strong>
+                <span>Start blank and add exercises yourself.</span>
+              </button>
+              <button className={selectedAddMode === "stored" ? "choice-button active" : "choice-button"} type="button" onClick={() => setSelectedAddMode("stored")}>
+                <strong>Stored workout</strong>
+                <span>Reuse saved templates once the library is ready.</span>
+              </button>
+              <button className={selectedAddMode === "ai" ? "choice-button active" : "choice-button"} type="button" onClick={() => setSelectedAddMode("ai")}>
+                <strong>Generate workout</strong>
+                <span>AI with guard rails for readiness, volume, and maxes.</span>
+              </button>
+            </div>
+            {selectedAddMode === "new" ? (
+              <div className="option-panel">
+                <p>{isFutureDate ? "Schedule a blank workout for this day. You can add warm-ups, lifts, accessories, and cardio next." : "Create a blank workout for this day. You can add warm-ups, lifts, accessories, and cardio next."}</p>
+                <button className="primary" type="button" disabled={isSchedulingWorkout} onClick={async () => {
+                  try {
+                    setIsSchedulingWorkout(true);
+                    setShowAddWorkoutOptions(false);
+                    await onAddWorkout();
+                  } finally {
+                    setIsSchedulingWorkout(false);
+                  }
+                }}>
+                  <Plus size={18} />
+                  {isFutureDate ? "Schedule blank workout" : "Start blank workout"}
+                </button>
+              </div>
+            ) : selectedAddMode === "stored" ? (
+              <div className="option-panel">
+                <p>Stored workout templates will live here. For now, this is the place-holder path for saved workouts.</p>
+                <button className="secondary" type="button" disabled>
+                  Stored workouts coming soon
+                </button>
+              </div>
+            ) : (
+              <div className="option-panel">
+                <p>Generation will use guard rails like available maxes, recent completed volume, movement balance, and coach limits before inserting anything.</p>
+                <textarea rows={3} placeholder="Example: light lower body day, 45 minutes, no maxing" />
+                <button className="secondary" type="button" disabled>
+                  Generate workout coming soon
+                </button>
+              </div>
+            )}
+            <button className="text-button" type="button" onClick={() => setShowAddWorkoutOptions(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, onSaveStatus, onMoveWorkout }) {
+  const logKey = workoutLogKey(date, workoutKey);
+  const existing = logs[logKey] || {};
+  const initialDraft = loadWorkoutDraft(user.uid, date, workoutKey);
+  const savedMaxes = loadUserMaxes(user.uid);
+  const [hydratedDraftFor, setHydratedDraftFor] = useState(`${user.uid}:${date}:${workoutKey}`);
+  const isBlankWorkout = workout.length === 0;
+  const [started, setStarted] = useState(initialDraft.started || isBlankWorkout);
+  const [maxes, setMaxes] = useState(initialDraft.maxes || existing.maxes || savedMaxes);
+  const [loads, setLoads] = useState(initialDraft.loads || existing.loads || {});
+  const [notes, setNotes] = useState(initialDraft.notes ?? existing.notes ?? "");
+  const [warmupSetCounts, setWarmupSetCounts] = useState(initialDraft.warmupSetCounts || existing.warmupSetCounts || {});
+  const [programmedSetCounts, setProgrammedSetCounts] = useState(initialDraft.programmedSetCounts || existing.programmedSetCounts || {});
+  const [exerciseOverrides, setExerciseOverrides] = useState(initialDraft.exerciseOverrides || existing.exerciseOverrides || {});
+  const [customExercises, setCustomExercises] = useState(initialDraft.customExercises || existing.customExercises || []);
+  const [showAddExercise, setShowAddExercise] = useState(false);
+  const [showAddCardio, setShowAddCardio] = useState(false);
+  const [newCardioName, setNewCardioName] = useState("");
+  const [newCardioTracksWeight, setNewCardioTracksWeight] = useState(false);
+  const [showAddWarmup, setShowAddWarmup] = useState(false);
+  const [newWarmupName, setNewWarmupName] = useState("");
+  const [newWarmupTracksWeight, setNewWarmupTracksWeight] = useState(false);
+  const [newExerciseName, setNewExerciseName] = useState("");
+  const [newExerciseTracksWeight, setNewExerciseTracksWeight] = useState(true);
+  const [openExerciseMenu, setOpenExerciseMenu] = useState("");
+  const [collapsedExercises, setCollapsedExercises] = useState({});
+  const [showMoveWorkout, setShowMoveWorkout] = useState(false);
+  const [moveWorkoutDate, setMoveWorkoutDate] = useState(date);
+  const requiredMaxes = useMemo(() => needsMaxes(workout), [workout]);
+  const weightUnit = loadUserWeightUnit(user.uid);
+  const maxValue = (key) => maxes[key]?.value ?? maxes[key] ?? "";
+  const missingMaxes = requiredMaxes.filter((key) => !Number(maxValue(key)));
+  const workoutPhase = workout[0]?.phase || "Custom workout";
+  const workoutTitle = workout[0] ? `${workout[0].focus} - Week ${workout[0].week}` : workoutKey === "blank" ? "Create workout" : "Scheduled Workout";
+  const canMoveWorkout = workoutKey !== "blank" && workout[0]?.scheduleMode !== flexibleScheduleMode;
+  const isFutureWorkout = date > new Date().toISOString().slice(0, 10);
+  const finishButtonLabel = isFutureWorkout ? "Save workout" : "Complete workout";
+
+  useEffect(() => {
+    const draft = loadWorkoutDraft(user.uid, date, workoutKey);
+    setStarted(draft.started || workout.length === 0);
+    setMaxes(draft.maxes || existing.maxes || loadUserMaxes(user.uid));
+    setLoads(draft.loads || existing.loads || {});
+    setNotes(draft.notes ?? existing.notes ?? "");
+    setWarmupSetCounts(draft.warmupSetCounts || existing.warmupSetCounts || {});
+    setProgrammedSetCounts(draft.programmedSetCounts || existing.programmedSetCounts || {});
+    setExerciseOverrides(draft.exerciseOverrides || existing.exerciseOverrides || {});
+    setCustomExercises(draft.customExercises || existing.customExercises || []);
+    setShowAddExercise(false);
+    setShowAddCardio(false);
+    setNewCardioName("");
+    setNewCardioTracksWeight(false);
+    setShowAddWarmup(false);
+    setNewWarmupName("");
+    setNewWarmupTracksWeight(false);
+    setNewExerciseName("");
+    setNewExerciseTracksWeight(true);
+    setOpenExerciseMenu("");
+    setCollapsedExercises({});
+    setShowMoveWorkout(false);
+    setMoveWorkoutDate(date);
+    setHydratedDraftFor(`${user.uid}:${date}:${workoutKey}`);
+  }, [date, user.uid, workout.length, workoutKey]);
+
+  useEffect(() => {
+    if (hydratedDraftFor !== `${user.uid}:${date}:${workoutKey}`) return;
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises });
+  }, [customExercises, date, exerciseOverrides, hydratedDraftFor, loads, maxes, notes, programmedSetCounts, started, user.uid, warmupSetCounts, workoutKey]);
+
+  useEffect(() => {
+    if (hydratedDraftFor !== `${user.uid}:${date}:${workoutKey}` || !requiredMaxes.length) return;
+    const nextSavedMaxes = loadUserMaxes(user.uid);
+    let changed = false;
+    requiredMaxes.forEach((key) => {
+      const value = maxValue(key);
+      if (!Number(value)) return;
+      const previousValue = nextSavedMaxes[key]?.value ?? nextSavedMaxes[key] ?? "";
+      if (String(previousValue) === String(value) && nextSavedMaxes[key]?.unit === weightUnit) return;
+      nextSavedMaxes[key] = { value, unit: weightUnit };
+      changed = true;
+    });
+    if (changed) {
+      void syncUserMaxes(user.uid, nextSavedMaxes);
+    }
+  }, [date, hydratedDraftFor, maxes, requiredMaxes, user.uid, weightUnit, workoutKey]);
+
+  async function persist(payload = {}, stateOverrides = {}) {
+    const workoutMeta = workout[0] ? {
+      date,
+      programId: workout[0].programId || "default",
+      programWeek: workout[0].week,
+      workoutFocus: workout[0].focus,
+      sourceDate: workout[0].sourceDate || workout[0].date,
+      scheduleMode: workout[0].scheduleMode,
+    } : { date };
+    const nextState = {
+      maxes,
+      loads,
+      notes,
+      warmupSetCounts,
+      programmedSetCounts,
+      exerciseOverrides,
+      customExercises,
+      ...stateOverrides,
+    };
+    const next = { ...existing, ...workoutMeta, ...nextState, ...payload, updatedAt: new Date().toISOString() };
+    setLogs({ ...logs, [logKey]: next });
+    const result = await saveUserWorkout(user.uid, logKey, next);
+    onSaveStatus?.(result);
+  }
+
+  async function finishWorkout(payload = {}) {
+    await persist(payload);
+    onDone();
+  }
+
+  function addCustomExercise(event) {
+    event.preventDefault();
+    const name = newExerciseName.trim();
+    if (!name) return;
+    const nextExercises = [
+      ...customExercises,
+      {
+        id: `session-${Date.now()}`,
+        name,
+        trackWeights: newExerciseTracksWeight,
+        sets: [{ id: `${Date.now()}-1`, reps: "", weight: "", done: false }],
+      },
+    ];
+    setCustomExercises(nextExercises);
+    setNewExerciseName("");
+    setNewExerciseTracksWeight(true);
+    setShowAddExercise(false);
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises: nextExercises });
+    void persist({}, { customExercises: nextExercises });
+  }
+
+  function addCardioExercise(event) {
+    event.preventDefault();
+    const name = newCardioName.trim();
+    if (!name) return;
+    const nextExercises = [
+      ...customExercises,
+      customExercisePayload({ name, trackWeights: newCardioTracksWeight, section: "cardio", reps: "Time" }),
+    ];
+    setCustomExercises(nextExercises);
+    setNewCardioName("");
+    setNewCardioTracksWeight(false);
+    setShowAddCardio(false);
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises: nextExercises });
+    void persist({}, { customExercises: nextExercises });
+  }
+
+  function customExercisePayload({ name, trackWeights = true, section = "accessory", reps = "" }) {
+    const createdAt = Date.now();
+    return {
+      id: `session-${createdAt}-${Math.random().toString(16).slice(2)}`,
+      name,
+      section,
+      trackWeights,
+      sets: [{ id: `${createdAt}-1`, reps, weight: "", done: false }],
+    };
+  }
+
+  function addWarmupExercise(event) {
+    event.preventDefault();
+    const name = newWarmupName.trim();
+    if (!name) return;
+    const nextExercises = [
+      ...customExercises,
+      customExercisePayload({ name, trackWeights: newWarmupTracksWeight, section: "warmup", reps: "Prep" }),
+    ];
+    setCustomExercises(nextExercises);
+    setNewWarmupName("");
+    setNewWarmupTracksWeight(false);
+    setShowAddWarmup(false);
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises: nextExercises });
+    void persist({}, { customExercises: nextExercises });
+  }
+
+  function addWarmupPreset(preset) {
+    const nextExercises = [
+      ...customExercises,
+      ...preset.exercises.map((name) => customExercisePayload({ name, trackWeights: false, section: "warmup", reps: "Prep" })),
+    ];
+    setCustomExercises(nextExercises);
+    setShowAddWarmup(false);
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises: nextExercises });
+    void persist({}, { customExercises: nextExercises });
+  }
+
+  function updateCustomExercise(exerciseId, updater) {
+    const nextExercises = customExercises.map((exercise) => (
+      exercise.id === exerciseId ? updater(exercise) : exercise
+    ));
+    setCustomExercises(nextExercises);
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises: nextExercises });
+  }
+
+  function updateCustomSet(exerciseId, setId, patch) {
+    updateCustomExercise(exerciseId, (exercise) => ({
+      ...exercise,
+      sets: exercise.sets.map((set) => (set.id === setId ? { ...set, ...patch } : set)),
+    }));
+  }
+
+  function exerciseMenuId(type, id) {
+    return `${type}:${id}`;
+  }
+
+  function exerciseCollapseId(type, id) {
+    return `${type}:${id}`;
+  }
+
+  function toggleExerciseCollapse(id) {
+    setCollapsedExercises((current) => ({ ...current, [id]: !current[id] }));
+  }
+
+  function programmedSetSummary(item) {
+    const reps = programmedRows(item).map((set) => loads[`${set.key}:reps`] ?? set.reps);
+    return reps.length ? reps.join(", ") : "No sets";
+  }
+
+  function customSetSummary(exercise) {
+    const reps = exercise.sets.map((set) => set.reps || "set");
+    return reps.length ? reps.join(", ") : "No sets";
+  }
+
+  function isProgrammedExerciseComplete(item) {
+    const programmedComplete = programmedRows(item).every((set) => Boolean(loads[`${set.key}:done`]));
+    const warmups = warmupRows(item);
+    const warmupsComplete = warmups.length === 0 || warmups.every((set) => Boolean(loads[`${set.key}:done`]));
+    return programmedRows(item).length > 0 && programmedComplete && warmupsComplete;
+  }
+
+  function isCustomExerciseComplete(exercise) {
+    return exercise.sets.length > 0 && exercise.sets.every((set) => Boolean(set.done));
+  }
+
+  function programmedExercise(item) {
+    return {
+      ...item,
+      ...(exerciseOverrides[item.id] || {}),
+    };
+  }
+
+  function persistExerciseOverrides(nextOverrides) {
+    setExerciseOverrides(nextOverrides);
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides: nextOverrides, customExercises });
+    void persist({}, { exerciseOverrides: nextOverrides });
+  }
+
+  function updateProgrammedExercise(item, patch) {
+    const current = exerciseOverrides[item.id] || {};
+    const nextOverrides = {
+      ...exerciseOverrides,
+      [item.id]: { ...current, ...patch },
+    };
+    persistExerciseOverrides(nextOverrides);
+  }
+
+  function updateCustomExerciseField(exerciseId, patch) {
+    const nextExercises = customExercises.map((exercise) => (
+      exercise.id === exerciseId ? { ...exercise, ...patch } : exercise
+    ));
+    setCustomExercises(nextExercises);
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises: nextExercises });
+    void persist({}, { customExercises: nextExercises });
+  }
+
+  function removeCustomExercise(exerciseId) {
+    const nextExercises = customExercises.filter((exercise) => exercise.id !== exerciseId);
+    setCustomExercises(nextExercises);
+    setOpenExerciseMenu("");
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises: nextExercises });
+    void persist({}, { customExercises: nextExercises });
+  }
+
+  function addCustomSet(exerciseId) {
+    updateCustomExercise(exerciseId, (exercise) => ({
+      ...exercise,
+      sets: [
+        ...exercise.sets,
+        { id: `${Date.now()}-${exercise.sets.length + 1}`, reps: exercise.sets.at(-1)?.reps || "", weight: "", done: false },
+      ],
+    }));
+  }
+
+  function removeCustomSet(exerciseId) {
+    updateCustomExercise(exerciseId, (exercise) => ({
+      ...exercise,
+      sets: exercise.sets.length > 1 ? exercise.sets.slice(0, -1) : exercise.sets,
+    }));
+  }
+
+  function programmedRows(item) {
+    const rows = setRows(item);
+    const count = Math.max(rows.length, programmedSetCounts[item.id] || rows.length);
+    const lastReps = rows.at(-1)?.reps || item.prescription;
+    return Array.from({ length: count }, (_, index) => rows[index] || {
+      key: `${item.id}:${index + 1}`,
+      reps: lastReps,
+    });
+  }
+
+  function warmupRows(item) {
+    const count = warmupSetCounts[item.id] || 0;
+    return Array.from({ length: count }, (_, index) => ({
+      key: `${item.id}:warmup:${index + 1}`,
+      repsKey: `${item.id}:warmup:${index + 1}:reps`,
+      label: `Warm-up ${index + 1}`,
+    }));
+  }
+
+  function addWarmupSet(item) {
+    const nextCounts = {
+      ...warmupSetCounts,
+      [item.id]: (warmupSetCounts[item.id] || 0) + 1,
+    };
+    setWarmupSetCounts(nextCounts);
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts: nextCounts, programmedSetCounts, customExercises });
+    void persist({}, { warmupSetCounts: nextCounts });
+  }
+
+  function removeWarmupSet(item) {
+    const currentCount = warmupSetCounts[item.id] || 0;
+    if (currentCount <= 0) return;
+    const nextCounts = { ...warmupSetCounts, [item.id]: currentCount - 1 };
+    if (nextCounts[item.id] <= 0) delete nextCounts[item.id];
+    const removedSetKey = `${item.id}:warmup:${currentCount}`;
+    const nextLoads = { ...loads };
+    delete nextLoads[removedSetKey];
+    delete nextLoads[`${removedSetKey}:done`];
+    delete nextLoads[`${removedSetKey}:reps`];
+    setWarmupSetCounts(nextCounts);
+    setLoads(nextLoads);
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads: nextLoads, notes, warmupSetCounts: nextCounts, programmedSetCounts, customExercises });
+    void persist({}, { loads: nextLoads, warmupSetCounts: nextCounts });
+  }
+
+  function addProgrammedSet(item) {
+    const nextCounts = {
+      ...programmedSetCounts,
+      [item.id]: programmedRows(item).length + 1,
+    };
+    setProgrammedSetCounts(nextCounts);
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, programmedSetCounts: nextCounts, customExercises });
+    void persist({}, { programmedSetCounts: nextCounts });
+  }
+
+  function removeProgrammedSet(item) {
+    const baseCount = setRows(item).length;
+    const currentCount = programmedRows(item).length;
+    if (currentCount <= baseCount) return;
+    const nextCounts = { ...programmedSetCounts, [item.id]: currentCount - 1 };
+    if (nextCounts[item.id] <= baseCount) delete nextCounts[item.id];
+    setProgrammedSetCounts(nextCounts);
+    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, programmedSetCounts: nextCounts, customExercises });
+    void persist({}, { programmedSetCounts: nextCounts });
+  }
+
+  async function moveWorkout(event) {
+    event.preventDefault();
+    if (!moveWorkoutDate || moveWorkoutDate === date) {
+      setShowMoveWorkout(false);
+      return;
+    }
+    await onMoveWorkout?.(moveWorkoutDate);
+    setShowMoveWorkout(false);
+  }
+
+  const moveWorkoutButton = (
+    <button className="icon-button" type="button" onClick={() => setShowMoveWorkout(true)} aria-label="Change workout day" title="Change workout day">
+      <PencilLine size={18} />
+    </button>
+  );
+
+  return (
+    <section className="workout-panel">
+      {!started ? (
+        <div className="start-panel">
+          <div className="workout-title-row">
+            <div>
+              <p className="eyebrow">{formatDate(date)} | {workoutPhase}</p>
+              <h2>{workoutTitle}</h2>
+            </div>
+            {canMoveWorkout && moveWorkoutButton}
+          </div>
+          {requiredMaxes.length > 0 && (
+            <div className="max-grid">
+              {requiredMaxes.map((key) => {
+                const field = maxFields.find((item) => item.key === key);
+                return (
+                  <label key={key}>
+                    {field.label} max
+                    <span className="max-input-row">
+                      <input
+                        value={maxValue(key)}
+                        onChange={(event) => setMaxes({ ...maxes, [key]: { value: event.target.value, unit: weightUnit } })}
+                        inputMode="decimal"
+                        placeholder={`Max (${weightUnit})`}
+                      />
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+          <button
+            className="primary"
+            type="button"
+            disabled={missingMaxes.length > 0}
+            onClick={() => {
+              setStarted(true);
+              saveWorkoutDraft(user.uid, date, workoutKey, { started: true, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises });
+            }}
+          >
+            <Dumbbell size={18} />
+            Start workout
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="workout-title-row">
+            <div>
+              <p className="eyebrow">{formatDate(date)} | {workoutPhase}</p>
+              <h2>{workoutTitle}</h2>
+            </div>
+            <div className="workout-title-actions">
+              {canMoveWorkout && moveWorkoutButton}
+              <button className="icon-button" type="button" onClick={() => finishWorkout({ completed: true })} aria-label="Mark complete" title="Mark complete">
+                <CheckCircle2 size={20} />
+              </button>
+            </div>
+          </div>
+          <div className="exercise-table">
+            <div className="table-head">
+              <span>Exercise</span>
+              <span>Sets</span>
+            </div>
+            <div className="workout-warmup-row">
+              <button className="secondary" type="button" onClick={() => setShowAddWarmup(true)}>
+                <Plus size={18} />
+                Add warm-up
+              </button>
+            </div>
+            {isBlankWorkout && customExercises.length === 0 && (
+              <p className="empty-list-copy">No exercises yet. Add the first exercise below.</p>
+            )}
+            {customExercises.filter((exercise) => exercise.section === "warmup").map((exercise) => (
+              <div className={`exercise-row custom-exercise-row warmup-exercise-row ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] ? "collapsed" : ""} ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] && isCustomExerciseComplete(exercise) ? "exercise-complete" : ""}`} key={exercise.id}>
+                <div className="exercise-info" onClick={() => toggleExerciseCollapse(exerciseCollapseId("custom", exercise.id))} role="button" tabIndex={0}>
+                  <div>
+                    <strong>{exercise.name}</strong>
+                    <small>{exercise.trackWeights ? "Warm-up | Track weights" : "Warm-up | Completion only"}</small>
+                    <span className="collapsed-set-summary">{customSetSummary(exercise)}</span>
+                  </div>
+                  <div className="exercise-edit-wrap">
+                    <button className="icon-button exercise-edit-button" type="button" onClick={(event) => {
+                      event.stopPropagation();
+                      setOpenExerciseMenu(openExerciseMenu === exerciseMenuId("custom", exercise.id) ? "" : exerciseMenuId("custom", exercise.id));
+                    }} aria-label={`Edit ${exercise.name}`} title="Edit exercise">
+                      <PencilLine size={16} />
+                    </button>
+                    {openExerciseMenu === exerciseMenuId("custom", exercise.id) && (
+                      <div className="exercise-edit-menu">
+                        <div className="exercise-edit-menu-header">
+                          <strong>Change exercise</strong>
+                          <span>Replaces this warm-up for this session.</span>
+                        </div>
+                        <label>
+                          New exercise
+                          <ExerciseAutocomplete value={exercise.name} onChange={(value) => updateCustomExerciseField(exercise.id, { name: value })} id={`exercise-edit-${exercise.id}`} placeholder="Type RDL, squat, clean..." />
+                        </label>
+                        <SimilarExerciseButtons exerciseName={exercise.name} onSelect={(value) => updateCustomExerciseField(exercise.id, { name: value })} />
+                        <label className="checkbox-field">
+                          <input
+                            checked={exercise.trackWeights}
+                            onChange={(event) => updateCustomExerciseField(exercise.id, { trackWeights: event.target.checked })}
+                            type="checkbox"
+                          />
+                          Track weights used
+                        </label>
+                        <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomExercise(exercise.id)}>
+                          Remove warm-up
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {!collapsedExercises[exerciseCollapseId("custom", exercise.id)] && <div className="set-list">
+                  {exercise.sets.map((set) => (
+                    <label className={`set-row ${exercise.trackWeights ? "tracked-set-row" : "check-set-row"}`} key={set.id}>
+                      <input
+                        value={set.reps}
+                        onChange={(event) => updateCustomSet(exercise.id, set.id, { reps: event.target.value })}
+                        onBlur={() => persist()}
+                        placeholder="Reps"
+                      />
+                      {exercise.trackWeights && (
+                        <input
+                          value={set.weight}
+                          onChange={(event) => updateCustomSet(exercise.id, set.id, { weight: event.target.value })}
+                          onBlur={() => persist()}
+                          placeholder="Weight"
+                        />
+                      )}
+                      <input
+                        checked={set.done}
+                        onChange={(event) => updateCustomSet(exercise.id, set.id, { done: event.target.checked })}
+                        onBlur={() => persist()}
+                        type="checkbox"
+                      />
+                    </label>
+                  ))}
+                  <div className="set-action-row">
+                    <div className="set-action-group">
+                      <button className="quiet-button" type="button" onClick={() => addCustomSet(exercise.id)}>
+                        <Plus size={16} />
+                        Add set
+                      </button>
+                      <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomSet(exercise.id)} disabled={exercise.sets.length <= 1}>
+                        <Minus size={16} />
+                        Remove set
+                      </button>
+                    </div>
+                  </div>
+                </div>}
+              </div>
+            ))}
+            {workout.map((item) => {
+              const displayItem = programmedExercise(item);
+              const menuId = exerciseMenuId("programmed", item.id);
+              const collapseId = exerciseCollapseId("programmed", item.id);
+              return (
+              <div className={`exercise-row ${collapsedExercises[collapseId] ? "collapsed" : ""} ${collapsedExercises[collapseId] && isProgrammedExerciseComplete(item) ? "exercise-complete" : ""}`} key={item.id}>
+                <div className="exercise-info" onClick={() => toggleExerciseCollapse(collapseId)} role="button" tabIndex={0}>
+                  <div>
+                    <strong>{displayItem.exercise}</strong>
+                    <small>{displayItem.intensity || "No intensity"} | {displayItem.notes || "No notes"}</small>
+                    <span className="collapsed-set-summary">{programmedSetSummary(item)}</span>
+                  </div>
+                  <div className="exercise-edit-wrap">
+                    <button className="icon-button exercise-edit-button" type="button" onClick={(event) => {
+                      event.stopPropagation();
+                      setOpenExerciseMenu(openExerciseMenu === menuId ? "" : menuId);
+                    }} aria-label={`Edit ${displayItem.exercise}`} title="Edit exercise">
+                      <PencilLine size={16} />
+                    </button>
+                    {openExerciseMenu === menuId && (
+                      <div className="exercise-edit-menu">
+                        <div className="exercise-edit-menu-header">
+                          <strong>Change exercise</strong>
+                          <span>Replaces this programmed lift for this session.</span>
+                        </div>
+                        <label>
+                          New exercise
+                          <ExerciseAutocomplete value={displayItem.exercise} onChange={(value) => updateProgrammedExercise(item, { exercise: value })} id={`exercise-sub-${item.id}`} placeholder="Type RDL, squat, clean..." />
+                        </label>
+                        <SimilarExerciseButtons exerciseName={displayItem.exercise} onSelect={(value) => updateProgrammedExercise(item, { exercise: value })} />
+                        <label>
+                          Prescription
+                          <input value={displayItem.prescription} onChange={(event) => updateProgrammedExercise(item, { prescription: event.target.value })} />
+                        </label>
+                        <label>
+                          Intensity
+                          <input value={displayItem.intensity || ""} onChange={(event) => updateProgrammedExercise(item, { intensity: event.target.value })} />
+                        </label>
+                        <label className="checkbox-field">
+                          <input
+                            checked={displayItem.trackWeights !== false}
+                            onChange={(event) => updateProgrammedExercise(item, { trackWeights: event.target.checked })}
+                            type="checkbox"
+                          />
+                          Track weights used
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {!collapsedExercises[collapseId] && <div className="set-list">
+                  <p>{displayItem.prescription}</p>
+                  <div className="warmup-control-row">
+                    <span>Warm-up sets</span>
+                    <div className="set-action-group">
+                      <button className="quiet-button" type="button" onClick={() => addWarmupSet(item)}>
+                        <Plus size={16} />
+                        Add
+                      </button>
+                      <button className="quiet-button danger-text-button" type="button" onClick={() => removeWarmupSet(item)} disabled={(warmupSetCounts[item.id] || 0) <= 0}>
+                        <Minus size={16} />
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                  {warmupRows(item).map((set) => (
+                    <label className="set-row warmup-set-row tracked-set-row" key={set.key}>
+                      <input
+                        value={loads[set.repsKey] || ""}
+                        onChange={(event) => setLoads({ ...loads, [set.repsKey]: event.target.value })}
+                        onBlur={() => persist()}
+                        placeholder={set.label}
+                      />
+                      <input
+                        value={loads[set.key] || ""}
+                        onChange={(event) => setLoads({ ...loads, [set.key]: event.target.value })}
+                        onBlur={() => persist()}
+                        placeholder="Weight"
+                      />
+                      <input
+                        checked={Boolean(loads[`${set.key}:done`])}
+                        onChange={(event) => setLoads({ ...loads, [`${set.key}:done`]: event.target.checked })}
+                        onBlur={() => persist()}
+                        type="checkbox"
+                      />
+                    </label>
+                  ))}
+                  {programmedRows(item).map((set) => (
+                    <label className={displayItem.trackWeights === false ? "set-row check-set-row" : "set-row tracked-set-row"} key={set.key}>
+                      <input
+                        value={loads[`${set.key}:reps`] ?? set.reps}
+                        onChange={(event) => setLoads({ ...loads, [`${set.key}:reps`]: event.target.value })}
+                        onBlur={() => persist()}
+                        placeholder="Reps"
+                      />
+                      {displayItem.trackWeights !== false && (
+                        <input
+                          value={loads[set.key] ?? (set.key.endsWith(":1") ? loads[item.id] || "" : "")}
+                          onChange={(event) => setLoads({ ...loads, [set.key]: event.target.value })}
+                          onBlur={() => persist()}
+                          placeholder={prescribedPreview(displayItem, maxes, weightUnit) || "Actual"}
+                        />
+                      )}
+                      <input
+                        checked={Boolean(loads[`${set.key}:done`])}
+                        onChange={(event) => setLoads({ ...loads, [`${set.key}:done`]: event.target.checked })}
+                        onBlur={() => persist()}
+                        type="checkbox"
+                      />
+                    </label>
+                  ))}
+                  <div className="set-action-row">
+                    <div className="set-action-group">
+                      <button className="quiet-button" type="button" onClick={() => addProgrammedSet(item)}>
+                        <Plus size={16} />
+                        Add set
+                      </button>
+                      <button className="quiet-button danger-text-button" type="button" onClick={() => removeProgrammedSet(item)} disabled={programmedRows(item).length <= setRows(item).length}>
+                        <Minus size={16} />
+                        Remove set
+                      </button>
+                    </div>
+                  </div>
+                </div>}
+              </div>
+              );
+            })}
+            {customExercises.filter((exercise) => exercise.section !== "warmup" && exercise.section !== "cardio").map((exercise) => (
+              <div className={`exercise-row custom-exercise-row ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] ? "collapsed" : ""} ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] && isCustomExerciseComplete(exercise) ? "exercise-complete" : ""}`} key={exercise.id}>
+                <div className="exercise-info" onClick={() => toggleExerciseCollapse(exerciseCollapseId("custom", exercise.id))} role="button" tabIndex={0}>
+                  <div>
+                    <strong>{exercise.name}</strong>
+                    <small>{exercise.trackWeights ? "Session exercise | Track weights" : "Session exercise | Completion only"}</small>
+                    <span className="collapsed-set-summary">{customSetSummary(exercise)}</span>
+                  </div>
+                  <div className="exercise-edit-wrap">
+                    <button className="icon-button exercise-edit-button" type="button" onClick={(event) => {
+                      event.stopPropagation();
+                      setOpenExerciseMenu(openExerciseMenu === exerciseMenuId("custom", exercise.id) ? "" : exerciseMenuId("custom", exercise.id));
+                    }} aria-label={`Edit ${exercise.name}`} title="Edit exercise">
+                      <PencilLine size={16} />
+                    </button>
+                    {openExerciseMenu === exerciseMenuId("custom", exercise.id) && (
+                      <div className="exercise-edit-menu">
+                        <div className="exercise-edit-menu-header">
+                          <strong>Change exercise</strong>
+                          <span>Replaces this added exercise for this session.</span>
+                        </div>
+                        <label>
+                          New exercise
+                          <ExerciseAutocomplete value={exercise.name} onChange={(value) => updateCustomExerciseField(exercise.id, { name: value })} id={`exercise-sub-${exercise.id}`} placeholder="Type RDL, squat, clean..." />
+                        </label>
+                        <SimilarExerciseButtons exerciseName={exercise.name} onSelect={(value) => updateCustomExerciseField(exercise.id, { name: value })} />
+                        <label className="checkbox-field">
+                          <input
+                            checked={exercise.trackWeights}
+                            onChange={(event) => updateCustomExerciseField(exercise.id, { trackWeights: event.target.checked })}
+                            type="checkbox"
+                          />
+                          Track weights used
+                        </label>
+                        <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomExercise(exercise.id)}>
+                          Remove exercise
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {!collapsedExercises[exerciseCollapseId("custom", exercise.id)] && <div className="set-list">
+                  {exercise.sets.map((set) => (
+                    <label className={`set-row ${exercise.trackWeights ? "tracked-set-row" : "check-set-row"}`} key={set.id}>
+                      <input
+                        value={set.reps}
+                        onChange={(event) => updateCustomSet(exercise.id, set.id, { reps: event.target.value })}
+                        onBlur={() => persist()}
+                        placeholder="Reps"
+                      />
+                      {exercise.trackWeights && (
+                        <input
+                          value={set.weight}
+                          onChange={(event) => updateCustomSet(exercise.id, set.id, { weight: event.target.value })}
+                          onBlur={() => persist()}
+                          placeholder="Weight"
+                        />
+                      )}
+                      <input
+                        checked={set.done}
+                        onChange={(event) => updateCustomSet(exercise.id, set.id, { done: event.target.checked })}
+                        onBlur={() => persist()}
+                        type="checkbox"
+                      />
+                    </label>
+                  ))}
+                  <div className="set-action-row">
+                    <div className="set-action-group">
+                      <button className="quiet-button" type="button" onClick={() => addCustomSet(exercise.id)}>
+                        <Plus size={16} />
+                        Add set
+                      </button>
+                      <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomSet(exercise.id)} disabled={exercise.sets.length <= 1}>
+                        <Minus size={16} />
+                        Remove set
+                      </button>
+                    </div>
+                  </div>
+                </div>}
+              </div>
+            ))}
+            <div className="add-exercise-row">
+              <button className="secondary" type="button" onClick={() => setShowAddExercise(true)}>
+                <Plus size={18} />
+                Add exercise
+              </button>
+            </div>
+            {customExercises.filter((exercise) => exercise.section === "cardio").map((exercise) => (
+              <div className={`exercise-row custom-exercise-row cardio-exercise-row ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] ? "collapsed" : ""} ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] && isCustomExerciseComplete(exercise) ? "exercise-complete" : ""}`} key={exercise.id}>
+                <div className="exercise-info" onClick={() => toggleExerciseCollapse(exerciseCollapseId("custom", exercise.id))} role="button" tabIndex={0}>
+                  <div>
+                    <strong>{exercise.name}</strong>
+                    <small>{exercise.trackWeights ? "Cardio | Track numbers" : "Cardio | Completion only"}</small>
+                    <span className="collapsed-set-summary">{customSetSummary(exercise)}</span>
+                  </div>
+                  <div className="exercise-edit-wrap">
+                    <button className="icon-button exercise-edit-button" type="button" onClick={(event) => {
+                      event.stopPropagation();
+                      setOpenExerciseMenu(openExerciseMenu === exerciseMenuId("custom", exercise.id) ? "" : exerciseMenuId("custom", exercise.id));
+                    }} aria-label={`Edit ${exercise.name}`} title="Edit cardio">
+                      <PencilLine size={16} />
+                    </button>
+                    {openExerciseMenu === exerciseMenuId("custom", exercise.id) && (
+                      <div className="exercise-edit-menu">
+                        <div className="exercise-edit-menu-header">
+                          <strong>Change cardio</strong>
+                          <span>Replaces this cardio piece for this session.</span>
+                        </div>
+                        <label>
+                          New cardio
+                          <ExerciseAutocomplete value={exercise.name} onChange={(value) => updateCustomExerciseField(exercise.id, { name: value })} id={`exercise-cardio-${exercise.id}`} />
+                        </label>
+                        <SimilarExerciseButtons exerciseName={exercise.name} onSelect={(value) => updateCustomExerciseField(exercise.id, { name: value })} />
+                        <label className="checkbox-field">
+                          <input
+                            checked={exercise.trackWeights}
+                            onChange={(event) => updateCustomExerciseField(exercise.id, { trackWeights: event.target.checked })}
+                            type="checkbox"
+                          />
+                          Track numbers
+                        </label>
+                        <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomExercise(exercise.id)}>
+                          Remove cardio
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {!collapsedExercises[exerciseCollapseId("custom", exercise.id)] && <div className="set-list">
+                  {exercise.sets.map((set) => (
+                    <label className={`set-row ${exercise.trackWeights ? "tracked-set-row" : "check-set-row"}`} key={set.id}>
+                      <input
+                        value={set.reps}
+                        onChange={(event) => updateCustomSet(exercise.id, set.id, { reps: event.target.value })}
+                        onBlur={() => persist()}
+                        placeholder="Time / distance / rounds"
+                      />
+                      {exercise.trackWeights && (
+                        <input
+                          value={set.weight}
+                          onChange={(event) => updateCustomSet(exercise.id, set.id, { weight: event.target.value })}
+                          onBlur={() => persist()}
+                          placeholder="Score"
+                        />
+                      )}
+                      <input
+                        checked={set.done}
+                        onChange={(event) => updateCustomSet(exercise.id, set.id, { done: event.target.checked })}
+                        onBlur={() => persist()}
+                        type="checkbox"
+                      />
+                    </label>
+                  ))}
+                  <div className="set-action-row">
+                    <div className="set-action-group">
+                      <button className="quiet-button" type="button" onClick={() => addCustomSet(exercise.id)}>
+                        <Plus size={16} />
+                        Add set
+                      </button>
+                      <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomSet(exercise.id)} disabled={exercise.sets.length <= 1}>
+                        <Minus size={16} />
+                        Remove set
+                      </button>
+                    </div>
+                  </div>
+                </div>}
+              </div>
+            ))}
+            <div className="add-exercise-row cardio-add-row">
+              <button className="secondary" type="button" onClick={() => setShowAddCardio(true)}>
+                <Plus size={18} />
+                Add cardio
+              </button>
+            </div>
+          </div>
+          <label className="notes-field">
+            Session notes
+            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} onBlur={() => persist()} rows={3} />
+          </label>
+          <button className="secondary" type="button" onClick={() => finishWorkout(isFutureWorkout ? {} : { completed: true })}>
+            {isFutureWorkout ? <Save size={18} /> : <CheckCircle2 size={18} />}
+            {finishButtonLabel}
+          </button>
+          {showAddExercise && (
+            <div className="modal-backdrop" role="presentation">
+              <div className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="add-exercise-title">
+                <div>
+                  <p className="eyebrow">Session exercise</p>
+                  <h2 id="add-exercise-title">Add exercise</h2>
+                </div>
+                <form className="modal-form" onSubmit={addCustomExercise}>
+                  <label>
+                    Exercise name
+                    <ExerciseAutocomplete value={newExerciseName} onChange={setNewExerciseName} id="new-exercise-name" placeholder="Accessory, abs, RDL, extra pulls" />
+                  </label>
+                  <label className="checkbox-field">
+                    <input
+                      checked={newExerciseTracksWeight}
+                      onChange={(event) => setNewExerciseTracksWeight(event.target.checked)}
+                      type="checkbox"
+                    />
+                    Track weights used
+                  </label>
+                  <button className="primary" type="submit">
+                    <Plus size={18} />
+                    Add exercise
+                  </button>
+                  <button className="text-button" type="button" onClick={() => setShowAddExercise(false)}>
+                    Cancel
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+          {showAddCardio && (
+            <div className="modal-backdrop" role="presentation">
+              <div className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="add-cardio-title">
+                <div>
+                  <p className="eyebrow">Workout cardio</p>
+                  <h2 id="add-cardio-title">Add cardio</h2>
+                </div>
+                <form className="modal-form" onSubmit={addCardioExercise}>
+                  <label>
+                    Cardio name
+                    <ExerciseAutocomplete value={newCardioName} onChange={setNewCardioName} id="new-cardio-name" placeholder="Bike finisher, easy jog, metcon placeholder" />
+                  </label>
+                  <label className="checkbox-field">
+                    <input
+                      checked={newCardioTracksWeight}
+                      onChange={(event) => setNewCardioTracksWeight(event.target.checked)}
+                      type="checkbox"
+                    />
+                    Track score / distance
+                  </label>
+                  <button className="primary" type="submit">
+                    <Plus size={18} />
+                    Add cardio
+                  </button>
+                  <button className="text-button" type="button" onClick={() => setShowAddCardio(false)}>
+                    Cancel
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+          {showAddWarmup && (
+            <div className="modal-backdrop" role="presentation">
+              <div className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="add-warmup-title">
+                <div>
+                  <p className="eyebrow">Workout warm-up</p>
+                  <h2 id="add-warmup-title">Add warm-up</h2>
+                </div>
+                <div className="preset-grid">
+                  {warmupPresets.map((preset) => (
+                    <button className="preset-button" type="button" key={preset.id} onClick={() => addWarmupPreset(preset)}>
+                      <strong>{preset.title}</strong>
+                      <span>{preset.exercises.join(" | ")}</span>
+                    </button>
+                  ))}
+                </div>
+                <form className="modal-form" onSubmit={addWarmupExercise}>
+                  <label>
+                    Custom warm-up exercise
+                    <ExerciseAutocomplete value={newWarmupName} onChange={setNewWarmupName} id="new-warmup-name" placeholder="Banded shoulder prep, hip flow, empty bar work" />
+                  </label>
+                  <label className="checkbox-field">
+                    <input
+                      checked={newWarmupTracksWeight}
+                      onChange={(event) => setNewWarmupTracksWeight(event.target.checked)}
+                      type="checkbox"
+                    />
+                    Track weights used
+                  </label>
+                  <button className="primary" type="submit">
+                    <Plus size={18} />
+                    Add custom warm-up
+                  </button>
+                  <button className="text-button" type="button" onClick={() => setShowAddWarmup(false)}>
+                    Cancel
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+      {showMoveWorkout && (
+        <div className="modal-backdrop" role="presentation">
+          <form className="modal-panel move-workout-form" role="dialog" aria-modal="true" aria-labelledby="move-workout-title" onSubmit={moveWorkout}>
+            <div>
+              <p className="eyebrow">{formatDate(date)}</p>
+              <h2 id="move-workout-title">Change workout day</h2>
+            </div>
+            <label>
+              New date
+              <input type="date" value={moveWorkoutDate} onChange={(event) => setMoveWorkoutDate(event.target.value)} />
+            </label>
+            <div className="modal-action-row">
+              <button className="secondary" type="button" onClick={() => setShowMoveWorkout(false)}>
+                Cancel
+              </button>
+              <button className="primary" type="submit" disabled={!moveWorkoutDate || moveWorkoutDate === date}>
+                Move workout
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ProgramsPage({ user, isTrainer, programs, workouts, logs, selectedDate, onProgramCreated, onWorkoutCreated }) {
+  const [programName, setProgramName] = useState("");
+  const [athleteEmail, setAthleteEmail] = useState("dev-athlete@primitive.local");
+  const [startDate, setStartDate] = useState(selectedDate || defaultSelectedDate);
+  const [programGoal, setProgramGoal] = useState("");
+  const [programNotes, setProgramNotes] = useState("");
+  const [workoutProgramId, setWorkoutProgramId] = useState("default");
+  const [date, setDate] = useState(selectedDate || defaultSelectedDate);
+  const [focus, setFocus] = useState("");
+  const [exercise, setExercise] = useState("");
+  const [prescription, setPrescription] = useState("");
+  const [intensity, setIntensity] = useState("");
+  const [notes, setNotes] = useState("");
+  const [expandedProgramId, setExpandedProgramId] = useState("");
+  const [viewingProgram, setViewingProgram] = useState(null);
+  const [startingProgram, setStartingProgram] = useState(null);
+  const [assigningProgram, setAssigningProgram] = useState(null);
+  const [athleteOptions, setAthleteOptions] = useState([]);
+  const [assignAthleteId, setAssignAthleteId] = useState("");
+  const [assignStartDate, setAssignStartDate] = useState(defaultSelectedDate);
+  const [assignScheduleMode, setAssignScheduleMode] = useState("fixed");
+  const [assignmentMessage, setAssignmentMessage] = useState("");
+  const [programStartDate, setProgramStartDate] = useState(defaultSelectedDate);
+  const [programScheduleMode, setProgramScheduleMode] = useState("fixed");
+  const [ownActivePrograms, setOwnActivePrograms] = useState([]);
+  const savedDefaultProgram = programs.find((program) => program.id === "default");
+  const defaultProgram = {
+    ...importedProgramMeta,
+    athleteEmail: "dev-athlete@primitive.local",
+    ...savedDefaultProgram,
+  };
+  const programOptions = [defaultProgram, ...programs.filter((program) => program.id !== "default")];
+  const createdProgramIds = new Set(programs.map((program) => program.id));
+  const visiblePrograms = programOptions.filter((program) => program.id === "default" || createdProgramIds.has(program.id));
+  const currentWorkoutProgram = programOptions.find((program) => program.id === workoutProgramId) || defaultProgram;
+
+  useEffect(() => {
+    if (selectedDate) {
+      setDate(selectedDate);
+      setStartDate((current) => current || selectedDate);
+    }
+  }, [selectedDate]);
+
+  useEffect(() => {
+    if (!isTrainer) return;
+    let active = true;
+    loadAthletes().then((athletes) => {
+      if (!active) return;
+      setAthleteOptions(athletes);
+      setAssignAthleteId((current) => current || athletes[0]?.uid || "");
+    });
+    return () => {
+      active = false;
+    };
+  }, [isTrainer]);
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setOwnActivePrograms([]);
+      return undefined;
+    }
+    let active = true;
+    loadUserActivePrograms(user.uid).then((activePrograms) => {
+      if (active) setOwnActivePrograms(activePrograms);
+    });
+    return () => {
+      active = false;
+    };
+  }, [user?.uid, programs]);
+
+  async function createProgram(event) {
+    event.preventDefault();
+    const program = {
+      id: programSlug(programName),
+      name: programName,
+      athleteEmail,
+      startDate,
+      goal: programGoal,
+      notes: programNotes,
+      createdAt: new Date().toISOString(),
+    };
+    const savedProgram = await saveProgram(program);
+    setWorkoutProgramId(savedProgram.id);
+    setProgramName("");
+    setProgramGoal("");
+    setProgramNotes("");
+    onProgramCreated();
+  }
+
+  async function createWorkout(event) {
+    event.preventDefault();
+    const scheduledDate = date || selectedDate || defaultSelectedDate;
+    const workout = {
+      date: scheduledDate,
+      focus,
+      exercise,
+      prescription,
+      intensity,
+      notes,
+      programId: workoutProgramId || "default",
+      day: new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date(`${scheduledDate}T12:00:00`)),
+      phase: currentWorkoutProgram.name,
+      week: "Custom",
+    };
+    await saveCustomWorkout(workoutProgramId || "default", workout);
+    setExercise("");
+    setPrescription("");
+    setIntensity("");
+    setNotes("");
+    await onWorkoutCreated(scheduledDate);
+  }
+
+  async function updateProgramStatus(program, status) {
+    const savedProgram = {
+      ...program,
+      status,
+      statusUpdatedAt: new Date().toISOString(),
+    };
+    await saveProgram(savedProgram);
+    setExpandedProgramId("");
+    onProgramCreated();
+  }
+
+  function openStartProgram(program) {
+    setStartingProgram(program);
+    setProgramStartDate(program.startDate || new Date().toISOString().slice(0, 10));
+    setProgramScheduleMode(program.scheduleMode || "fixed");
+    setExpandedProgramId("");
+  }
+
+  function openAssignProgram(program) {
+    setAssigningProgram(program);
+    setAssignStartDate(program.startDate || new Date().toISOString().slice(0, 10));
+    setAssignScheduleMode(program.scheduleMode || "fixed");
+    setAssignmentMessage("");
+    setAssignAthleteId((current) => current || athleteOptions[0]?.uid || "");
+    setExpandedProgramId("");
+  }
+
+  async function startProgram(event) {
+    event.preventDefault();
+    if (!startingProgram || !programStartDate) return;
+
+    const savedProgram = {
+      ...startingProgram,
+      startDate: programStartDate,
+      scheduleMode: programScheduleMode,
+      status: "active",
+      statusUpdatedAt: new Date().toISOString(),
+    };
+    const programWorkouts = workouts
+      .filter((item) => (item.programId || "default") === startingProgram.id && item.date)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const scheduled = programScheduleMode !== flexibleScheduleMode;
+    const activeProgram = {
+      id: startingProgram.id,
+      startDate: programStartDate,
+      scheduled,
+      currentWeek: 1,
+      nextWorkoutIndex: 0,
+      ...(scheduled ? { workoutDates: buildWorkoutDatesForProgram(programWorkouts, programStartDate) } : {}),
+    };
+
+    await saveProgram(savedProgram);
+    if (user?.uid) {
+      await saveUserActiveProgram(user.uid, activeProgram);
+      setOwnActivePrograms((current) => [
+        ...current.filter((item) => item.id !== activeProgram.id),
+        activeProgram,
+      ]);
+    }
+
+    setStartingProgram(null);
+    setProgramStartDate(defaultSelectedDate);
+    setProgramScheduleMode("fixed");
+    onProgramCreated();
+  }
+
+  async function assignProgram(event) {
+    event.preventDefault();
+    if (!assigningProgram || !assignAthleteId || !assignStartDate) return;
+
+    const programWorkouts = workouts
+      .filter((item) => (item.programId || "default") === assigningProgram.id && item.date)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const scheduled = assignScheduleMode !== flexibleScheduleMode;
+    await saveUserActiveProgram(assignAthleteId, {
+      id: assigningProgram.id,
+      startDate: assignStartDate,
+      scheduled,
+      currentWeek: 1,
+      nextWorkoutIndex: 0,
+      ...(scheduled ? { workoutDates: buildWorkoutDatesForProgram(programWorkouts, assignStartDate) } : {}),
+    });
+    const athlete = athleteOptions.find((item) => item.uid === assignAthleteId);
+    setAssignmentMessage(`${assigningProgram.name} assigned to ${athlete?.displayName || athlete?.email || "athlete"}.`);
+    setAssigningProgram(null);
+    onProgramCreated();
+  }
+
+  function programStatusLabel(status) {
+    if (status === "active") return "Started";
+    if (status === "paused") return "Paused";
+    if (status === "quit") return "Quit";
+    return "Not started";
+  }
+
+  if (viewingProgram) {
+    return (
+      <ProgramWorkoutViewer
+        program={viewingProgram}
+        workouts={workouts.filter((item) => (item.programId || "default") === viewingProgram.id)}
+        logs={logs}
+        onBack={() => setViewingProgram(null)}
+      />
+    );
+  }
+
+  return (
+    <section className="programs-panel">
+      <div className="section-heading">
+        <ClipboardList size={20} />
+        <h2>Programs</h2>
+      </div>
+
+      <div className="programs-layout">
+        <div className="program-section">
+          <div className="program-section-title">
+            <h3>Created Programs</h3>
+            <span>{visiblePrograms.length}</span>
+          </div>
+          <div className="program-card-grid">
+            {visiblePrograms.map((program) => {
+              const programWorkouts = workouts.filter((item) => (item.programId || "default") === program.id);
+              const summary = progressSummary(programWorkouts, logs);
+              const ownActiveProgram = ownActivePrograms.find((item) => item.id === program.id) || program.activeProgram;
+              const ownProgressWorkouts = ownActiveProgram?.scheduled
+                ? applyActiveProgramDates(programWorkouts, [{ ...program, activeProgram: ownActiveProgram }])
+                : programWorkouts;
+              const ownSummary = ownActiveProgram ? progressSummary(ownProgressWorkouts, logs) : null;
+              const expanded = expandedProgramId === program.id;
+              return (
+                <article className={`program-card ${expanded ? "expanded" : ""}`} key={program.id}>
+                  <button
+                    className="program-card-toggle"
+                    type="button"
+                    onClick={() => setExpandedProgramId(expanded ? "" : program.id)}
+                    aria-expanded={expanded}
+                  >
+                    <div>
+                      <p className="eyebrow">{program.athleteEmail || "No athlete assigned"}</p>
+                      <h4>{program.name}</h4>
+                    </div>
+                    <ChevronRight className="program-expand-icon" size={18} aria-hidden="true" />
+                  </button>
+                  <p className={`program-status program-status-${program.status || "idle"}`}>{programStatusLabel(program.status)}</p>
+                  <div className="progress-meter" aria-label={`${summary.percent}% complete`}>
+                    <span style={{ width: `${summary.percent}%` }} />
+                  </div>
+                  <dl className="program-stats">
+                    <div>
+                      <dt>Complete</dt>
+                      <dd>{summary.completed}/{summary.total}</dd>
+                    </div>
+                    <div>
+                      <dt>Next</dt>
+                      <dd>{summary.nextDate ? formatDate(summary.nextDate) : "All caught up"}</dd>
+                    </div>
+                  </dl>
+                  {ownSummary && (
+                    <div className="program-own-progress" aria-label={`Your progress is ${ownSummary.percent}% complete`}>
+                      <div>
+                        <span>Your progress</span>
+                        <strong>{ownSummary.completed}/{ownSummary.total} workouts</strong>
+                      </div>
+                      <div className="progress-meter">
+                        <span style={{ width: `${ownSummary.percent}%` }} />
+                      </div>
+                    </div>
+                  )}
+                  {program.goal && <p className="program-note">{program.goal}</p>}
+                  {expanded && (
+                    <div className="program-expanded-actions">
+                      <button className="secondary" type="button" onClick={() => setViewingProgram(program)}>
+                        <Eye size={17} />
+                        View workout
+                      </button>
+                      <button className="secondary" type="button" onClick={() => openStartProgram(program)}>
+                        <CalendarDays size={17} />
+                        Start program
+                      </button>
+                      {isTrainer && (
+                        <button className="secondary" type="button" onClick={() => openAssignProgram(program)}>
+                          <UsersRound size={17} />
+                          Assign program
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="program-section">
+          <div className="program-section-title">
+            <h3>Athlete Progress</h3>
+          </div>
+          <div className="progress-list">
+            {visiblePrograms.map((program) => {
+              const programWorkouts = workouts.filter((item) => (item.programId || "default") === program.id);
+              const summary = progressSummary(programWorkouts, logs);
+              return (
+                <div className="progress-row" key={program.id}>
+                  <div>
+                    <strong>{program.athleteEmail || "Unassigned athlete"}</strong>
+                    <span>{program.name}</span>
+                  </div>
+                  <b>{summary.percent}%</b>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="program-section">
+          <div className="program-section-title">
+            <h3>Create Program</h3>
+          </div>
+          <form onSubmit={createProgram} className="creator-form">
+            <label>
+              Program name
+              <input value={programName} onChange={(event) => setProgramName(event.target.value)} placeholder="Summer Strength Block" required />
+            </label>
+            <label>
+              Athlete email
+              <input value={athleteEmail} onChange={(event) => setAthleteEmail(event.target.value)} type="email" />
+            </label>
+            <label>
+              Start date
+              <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+            </label>
+            <label>
+              Goal
+              <input value={programGoal} onChange={(event) => setProgramGoal(event.target.value)} placeholder="Build volume before max-out week" />
+            </label>
+            <label className="wide">
+              Coach notes
+              <textarea value={programNotes} onChange={(event) => setProgramNotes(event.target.value)} rows={3} />
+            </label>
+            <button className="primary" type="submit">
+              <Plus size={18} />
+              Create program
+            </button>
+          </form>
+        </div>
+
+        <div className="program-section">
+          <div className="program-section-title">
+            <h3>Create Workout</h3>
+          </div>
+          <form onSubmit={createWorkout} className="creator-form">
+            <label>
+              Program
+              <select value={workoutProgramId} onChange={(event) => setWorkoutProgramId(event.target.value)}>
+                {programOptions.map((program) => (
+                  <option key={program.id} value={program.id}>{program.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Date
+              <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+            </label>
+            <label>
+              Workout name
+              <input value={focus} onChange={(event) => setFocus(event.target.value)} placeholder="Heavy Snatch + Back Squat" required />
+            </label>
+            <label>
+              Exercise
+              <input value={exercise} onChange={(event) => setExercise(event.target.value)} placeholder="Snatch" required />
+            </label>
+            <label>
+              Reps / prescription
+              <input value={prescription} onChange={(event) => setPrescription(event.target.value)} placeholder="4 x 2 @ 80%" required />
+            </label>
+            <label>
+              Intensity
+              <input value={intensity} onChange={(event) => setIntensity(event.target.value)} placeholder="75-85%" />
+            </label>
+            <label className="wide">
+              Coach notes
+              <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} />
+            </label>
+            <button className="primary" type="submit">
+              <Plus size={18} />
+              Add workout exercise
+            </button>
+          </form>
+        </div>
+      </div>
+      {assignmentMessage && <p className="save-status">{assignmentMessage}</p>}
+      {startingProgram && (
+        <div className="modal-backdrop" role="presentation">
+          <form className="modal-panel modal-form start-program-form" onSubmit={startProgram} role="dialog" aria-modal="true" aria-labelledby="start-program-title">
+            <div>
+              <p className="eyebrow">Start program</p>
+              <h2 id="start-program-title">{startingProgram.name}</h2>
+            </div>
+            <label>
+              Start date
+              <input type="date" value={programStartDate} onChange={(event) => setProgramStartDate(event.target.value)} required />
+            </label>
+            <div className="choice-list" role="radiogroup" aria-label="Program scheduling">
+              <button className={programScheduleMode === "fixed" ? "choice-button active" : "choice-button"} type="button" onClick={() => setProgramScheduleMode("fixed")}>
+                <strong>Known workout days</strong>
+                <span>Keep workouts on the programmed calendar days.</span>
+              </button>
+              <button className={programScheduleMode === flexibleScheduleMode ? "choice-button active" : "choice-button"} type="button" onClick={() => setProgramScheduleMode(flexibleScheduleMode)}>
+                <strong>Unknown workout days</strong>
+                <span>When you pick a day, show the next program day for that week.</span>
+              </button>
+            </div>
+            <p className="modal-helper-copy">
+              {programScheduleMode === flexibleScheduleMode
+                ? "Each calendar week advances by completed program days, so the next selected day shows the next workout."
+                : startingProgram.id === "default"
+                ? "The program status will use this date."
+                : "Program workouts will move so the first scheduled workout starts on this date."}
+            </p>
+            <div className="modal-action-row">
+              <button className="secondary" type="button" onClick={() => setStartingProgram(null)}>
+                Cancel
+              </button>
+              <button className="primary" type="submit" disabled={!programStartDate}>
+                Confirm start
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+      {assigningProgram && (
+        <div className="modal-backdrop" role="presentation">
+          <form className="modal-panel modal-form start-program-form" onSubmit={assignProgram} role="dialog" aria-modal="true" aria-labelledby="assign-program-title">
+            <div>
+              <p className="eyebrow">Assign program</p>
+              <h2 id="assign-program-title">{assigningProgram.name}</h2>
+            </div>
+            <label>
+              Athlete
+              <select value={assignAthleteId} onChange={(event) => setAssignAthleteId(event.target.value)} required>
+                {athleteOptions.map((athlete) => (
+                  <option key={athlete.uid} value={athlete.uid}>
+                    {athlete.displayName || athlete.email || athlete.uid}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Start date
+              <input type="date" value={assignStartDate} onChange={(event) => setAssignStartDate(event.target.value)} required />
+            </label>
+            <div className="choice-list" role="radiogroup" aria-label="Program scheduling">
+              <button className={assignScheduleMode === "fixed" ? "choice-button active" : "choice-button"} type="button" onClick={() => setAssignScheduleMode("fixed")}>
+                <strong>Known workout days</strong>
+                <span>Keep workouts on the programmed calendar days.</span>
+              </button>
+              <button className={assignScheduleMode === flexibleScheduleMode ? "choice-button active" : "choice-button"} type="button" onClick={() => setAssignScheduleMode(flexibleScheduleMode)}>
+                <strong>Unknown workout days</strong>
+                <span>The athlete chooses workout days week to week.</span>
+              </button>
+            </div>
+            <div className="modal-action-row">
+              <button className="secondary" type="button" onClick={() => setAssigningProgram(null)}>
+                Cancel
+              </button>
+              <button className="primary" type="submit" disabled={!assignAthleteId || !assignStartDate}>
+                Assign program
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ProgramWorkoutViewer({ program, workouts, logs, onBack }) {
+  const workoutGroups = groupWorkouts(
+    [...workouts]
+      .filter((item) => item.date)
+      .sort((a, b) => a.date.localeCompare(b.date) || String(a.focus || "").localeCompare(String(b.focus || ""))),
+  );
+  const summary = progressSummary(workouts, logs);
+
+  return (
+    <section className="programs-panel program-workout-view">
+      <div className="section-heading program-workout-heading">
+        <button className="icon-button" type="button" onClick={onBack} aria-label="Back to programs" title="Back to programs">
+          <ArrowLeft size={20} />
+        </button>
+        <div>
+          <p className="eyebrow">Program workouts</p>
+          <h2>{program.name}</h2>
+        </div>
+      </div>
+
+      <div className="program-workout-summary">
+        <div>
+          <span>Workouts</span>
+          <strong>{summary.total}</strong>
+        </div>
+        <div>
+          <span>Complete</span>
+          <strong>{summary.completed}</strong>
+        </div>
+        <div>
+          <span>Next</span>
+          <strong>{summary.nextDate ? formatDate(summary.nextDate) : "All caught up"}</strong>
+        </div>
+      </div>
+
+      {workoutGroups.length ? (
+        <div className="program-workout-list">
+          {workoutGroups.map((group, index) => {
+            const completed = Boolean(logs[group.date]?.completed);
+            return (
+              <article className={`program-workout-card ${completed ? "completed" : ""}`} key={group.key}>
+                <div className="program-workout-card-header">
+                  <div>
+                    <p className="eyebrow">Workout {index + 1} | {formatDate(group.date)}</p>
+                    <h3>{group.title}</h3>
+                  </div>
+                  {completed && <CheckCircle2 size={20} aria-label="Completed" />}
+                </div>
+                <div className="program-workout-exercises">
+                  {group.items.map((item, itemIndex) => (
+                    <div className="program-workout-exercise" key={item.id || `${group.key}-${itemIndex}`}>
+                      <strong>{item.exercise || "Exercise"}</strong>
+                      <span>{[item.prescription, item.intensity].filter(Boolean).join(" | ") || "No prescription yet"}</span>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="empty-list-copy">No workouts have been added to this program yet.</p>
+      )}
+    </section>
+  );
+}
+
+function StoredProgramsPage({ user, programs, workouts, logs, onProgramStarted }) {
+  const [expandedProgramId, setExpandedProgramId] = useState("");
+  const [viewingProgram, setViewingProgram] = useState(null);
+  const [startingProgram, setStartingProgram] = useState(null);
+  const [programStartDate, setProgramStartDate] = useState(defaultSelectedDate);
+  const [programScheduleMode, setProgramScheduleMode] = useState("fixed");
+  const programOptions = programs;
+
+  function openStartProgram(program) {
+    setStartingProgram(program);
+    setProgramStartDate(program.startDate || new Date().toISOString().slice(0, 10));
+    setProgramScheduleMode(program.scheduleMode || "fixed");
+    setExpandedProgramId("");
+  }
+
+  async function startProgram(event) {
+    event.preventDefault();
+    if (!user?.uid || !startingProgram || !programStartDate) return;
+
+    const programWorkouts = workouts
+      .filter((item) => (item.programId || "default") === startingProgram.id && item.date)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const scheduled = programScheduleMode !== flexibleScheduleMode;
+    await saveUserActiveProgram(user.uid, {
+      id: startingProgram.id,
+      startDate: programStartDate,
+      scheduled,
+      currentWeek: 1,
+      nextWorkoutIndex: 0,
+      ...(scheduled ? { workoutDates: buildWorkoutDatesForProgram(programWorkouts, programStartDate) } : {}),
+    });
+    setStartingProgram(null);
+    setProgramStartDate(defaultSelectedDate);
+    setProgramScheduleMode("fixed");
+    await onProgramStarted?.();
+  }
+
+  async function quitProgram(program) {
+    if (!user?.uid || !program?.id) return;
+    await removeUserActiveProgram(user.uid, program.id);
+    setExpandedProgramId("");
+    await onProgramStarted?.();
+  }
+
+  if (viewingProgram) {
+    return (
+      <ProgramWorkoutViewer
+        program={viewingProgram}
+        workouts={workouts.filter((item) => (item.programId || "default") === viewingProgram.id)}
+        logs={logs}
+        onBack={() => setViewingProgram(null)}
+      />
+    );
+  }
+
+  return (
+    <section className="programs-panel">
+      <div className="section-heading">
+        <ClipboardList size={20} />
+        <h2>Programs</h2>
+      </div>
+
+      {programOptions.length ? (
+        <div className="program-card-grid">
+          {programOptions.map((program) => {
+          const programWorkouts = workouts.filter((item) => (item.programId || "default") === program.id);
+          const summary = progressSummary(programWorkouts, logs);
+          const isActiveProgram = Boolean(program.activeProgram);
+          const expanded = expandedProgramId === program.id;
+          return (
+            <article className={`program-card ${expanded ? "expanded" : ""}`} key={program.id}>
+              <button
+                className="program-card-toggle"
+                type="button"
+                onClick={() => setExpandedProgramId(expanded ? "" : program.id)}
+                aria-expanded={expanded}
+              >
+                <div>
+                  <p className="eyebrow">{programWorkouts.length} saved workout{programWorkouts.length === 1 ? "" : "s"}</p>
+                  <h4>{program.name}</h4>
+                </div>
+                <ChevronRight className="program-expand-icon" size={18} aria-hidden="true" />
+              </button>
+              <div className="progress-meter" aria-label={`${summary.percent}% complete`}>
+                <span style={{ width: `${summary.percent}%` }} />
+              </div>
+              <dl className="program-stats">
+                <div>
+                  <dt>Complete</dt>
+                  <dd>{summary.completed}/{summary.total}</dd>
+                </div>
+                <div>
+                  <dt>Next</dt>
+                  <dd>{summary.nextDate ? formatDate(summary.nextDate) : "All caught up"}</dd>
+                </div>
+              </dl>
+              {program.goal && <p className="program-note">{program.goal}</p>}
+              {expanded && (
+                <div className="program-expanded-actions">
+                  <button className="secondary" type="button" onClick={() => setViewingProgram(program)}>
+                    <Eye size={17} />
+                    View workout
+                  </button>
+                  {isActiveProgram ? (
+                    <button className="secondary danger-text-button" type="button" onClick={() => quitProgram(program)}>
+                      <Minus size={17} />
+                      Quit program
+                    </button>
+                  ) : (
+                    <button className="secondary" type="button" onClick={() => openStartProgram(program)}>
+                      <CalendarDays size={17} />
+                      Start program
+                    </button>
+                  )}
+                </div>
+              )}
+            </article>
+          );
+          })}
+        </div>
+      ) : (
+        <p className="empty-list-copy">No saved programs yet.</p>
+      )}
+      {startingProgram && (
+        <div className="modal-backdrop" role="presentation">
+          <form className="modal-panel modal-form start-program-form" onSubmit={startProgram} role="dialog" aria-modal="true" aria-labelledby="stored-start-program-title">
+            <div>
+              <p className="eyebrow">Start program</p>
+              <h2 id="stored-start-program-title">{startingProgram.name}</h2>
+            </div>
+            <label>
+              Start date
+              <input type="date" value={programStartDate} onChange={(event) => setProgramStartDate(event.target.value)} required />
+            </label>
+            <div className="choice-list" role="radiogroup" aria-label="Program scheduling">
+              <button className={programScheduleMode === "fixed" ? "choice-button active" : "choice-button"} type="button" onClick={() => setProgramScheduleMode("fixed")}>
+                <strong>Known workout days</strong>
+                <span>Keep workouts on the programmed calendar days.</span>
+              </button>
+              <button className={programScheduleMode === flexibleScheduleMode ? "choice-button active" : "choice-button"} type="button" onClick={() => setProgramScheduleMode(flexibleScheduleMode)}>
+                <strong>Unknown workout days</strong>
+                <span>Pick training days week to week and show the next program day.</span>
+              </button>
+            </div>
+            <p className="modal-helper-copy">
+              {programScheduleMode === flexibleScheduleMode
+                ? "Each calendar week advances by completed program days, so your next selected day shows the next workout."
+                : "Program workouts will move so the first scheduled workout starts on this date."}
+            </p>
+            <div className="modal-action-row">
+              <button className="secondary" type="button" onClick={() => setStartingProgram(null)}>
+                Cancel
+              </button>
+              <button className="primary" type="submit" disabled={!programStartDate || !user?.uid}>
+                Confirm start
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function StoredWorkoutsPage({ user, workouts, logs, programs, onOpenWorkout }) {
+  const [activeTab, setActiveTab] = useState("upcoming");
+  const [visibleHistoryCount, setVisibleHistoryCount] = useState(10);
+  const programOptions = [{ ...importedProgramMeta }, ...programs.filter((program) => program.id !== "default")];
+  const today = new Date().toISOString().slice(0, 10);
+  const upcomingWorkouts = groupWorkouts(workouts)
+    .filter((workout) => workout.date && workout.date >= today)
+    .sort((a, b) => `${a.date || ""}`.localeCompare(`${b.date || ""}`));
+  const savedWorkouts = Array.isArray(user?.workoutTemplates) ? user.workoutTemplates.slice(0, 10) : [];
+  const historyWorkouts = Object.entries(logs)
+    .filter(([, workout]) => workout?.completed || workout?.status === "completed")
+    .map(([id, workout]) => ({ id, ...workout }))
+    .sort((a, b) => `${b.completedAt || b.updatedAt || b.date || ""}`.localeCompare(`${a.completedAt || a.updatedAt || a.date || ""}`));
+  const visibleHistory = historyWorkouts.slice(0, visibleHistoryCount);
+  const tabs = [
+    { id: "upcoming", label: "Upcoming", count: upcomingWorkouts.length },
+    { id: "saved", label: "Saved", count: savedWorkouts.length },
+    { id: "history", label: "History", count: historyWorkouts.length },
+  ];
+
+  return (
+    <section className="programs-panel">
+      <div className="section-heading">
+        <Dumbbell size={20} />
+        <h2>Workouts</h2>
+      </div>
+
+      <div className="workout-tabs" role="tablist" aria-label="Workout views">
+        {tabs.map((tab) => (
+          <button
+            className={activeTab === tab.id ? "workout-tab active" : "workout-tab"}
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            role="tab"
+            type="button"
+            aria-selected={activeTab === tab.id}
+          >
+            {tab.label}
+            <span>{tab.count}</span>
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "upcoming" && (upcomingWorkouts.length ? (
+        <div className="stored-workout-list">
+          {upcomingWorkouts.map((workout) => {
+            const programName = programOptions.find((program) => program.id === (workout.programId || "default"))?.name || importedProgramMeta.name;
+            const logKey = workoutLogKey(workout.date, workout.key);
+            const completed = Boolean(logs[logKey]?.completed || logs[workout.date]?.completed);
+            return (
+              <button className="stored-workout-card" key={workout.key} type="button" onClick={() => workout.date && onOpenWorkout(workout.date, workout.key)}>
+                <div>
+                  <p className="eyebrow">{workout.date ? formatDate(workout.date) : "Unscheduled"} | {programName}</p>
+                  <h3>{workout.title}</h3>
+                  <span>{workout.items.length} exercise{workout.items.length === 1 ? "" : "s"} | {workout.week ? `Week ${workout.week}` : workout.phase}</span>
+                </div>
+                {completed ? <CheckCircle2 size={20} /> : <ChevronRight size={20} />}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="empty-list-copy">No upcoming workouts yet.</p>
+      ))}
+
+      {activeTab === "saved" && (savedWorkouts.length ? (
+        <div className="stored-workout-list">
+          {savedWorkouts.map((workout) => (
+            <article className="stored-workout-card" key={workout.id}>
+              <div>
+                <p className="eyebrow">Saved workout</p>
+                <h3>{workout.name || workout.title || "Saved workout"}</h3>
+                <span>{workout.exercises?.length || 0} exercise{workout.exercises?.length === 1 ? "" : "s"}</span>
+              </div>
+              <Dumbbell size={20} />
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="empty-list-copy">No saved workouts yet.</p>
+      ))}
+
+      {activeTab === "history" && (visibleHistory.length ? (
+        <>
+          <div className="stored-workout-list">
+            {visibleHistory.map((workout) => (
+              <button className="stored-workout-card" key={workout.id} type="button" onClick={() => workout.date && onOpenWorkout(workout.date, workout.id)}>
+                <div>
+                  <p className="eyebrow">{workout.date ? formatDate(workout.date) : "Completed"} | Completed</p>
+                  <h3>{workout.workoutFocus || workout.title || "Completed workout"}</h3>
+                  <span>{workout.notes || "Workout record"}</span>
+                </div>
+                <CheckCircle2 size={20} />
+              </button>
+            ))}
+          </div>
+          {visibleHistory.length < historyWorkouts.length && (
+            <button className="secondary load-more-button" type="button" onClick={() => setVisibleHistoryCount((count) => count + 10)}>
+              Load more
+            </button>
+          )}
+        </>
+      ) : (
+        <p className="empty-list-copy">No completed workouts yet.</p>
+      ))}
+    </section>
+  );
+}
+
+function AthletesPage({ programs, workouts, logs }) {
+  const defaultProgram = { ...importedProgramMeta, athleteEmail: "dev-athlete@primitive.local" };
+  const programOptions = [defaultProgram, ...programs.filter((program) => program.id !== "default")];
+  const athletes = Array.from(
+    programOptions.reduce((map, program) => {
+      const email = program.athleteEmail || "Unassigned athlete";
+      const current = map.get(email) || { email, programs: [], workouts: [] };
+      const programWorkouts = workouts.filter((item) => (item.programId || "default") === program.id);
+      current.programs.push(program);
+      current.workouts.push(...programWorkouts);
+      map.set(email, current);
+      return map;
+    }, new Map()).values(),
+  ).sort((a, b) => a.email.localeCompare(b.email));
+
+  return (
+    <section className="programs-panel">
+      <div className="section-heading">
+        <UsersRound size={20} />
+        <h2>Athletes</h2>
+      </div>
+
+      {athletes.length ? (
+        <div className="program-card-grid">
+          {athletes.map((athlete) => {
+            const summary = progressSummary(athlete.workouts, logs);
+            return (
+              <article className="program-card" key={athlete.email}>
+                <div>
+                  <p className="eyebrow">{athlete.programs.length} program{athlete.programs.length === 1 ? "" : "s"}</p>
+                  <h4>{athlete.email}</h4>
+                </div>
+                <div className="progress-meter" aria-label={`${summary.percent}% complete`}>
+                  <span style={{ width: `${summary.percent}%` }} />
+                </div>
+                <dl className="program-stats">
+                  <div>
+                    <dt>Complete</dt>
+                    <dd>{summary.completed}/{summary.total}</dd>
+                  </div>
+                  <div>
+                    <dt>Next</dt>
+                    <dd>{summary.nextDate ? formatDate(summary.nextDate) : "All caught up"}</dd>
+                  </div>
+                </dl>
+                <p className="program-note">{athlete.programs.map((program) => program.name).join(", ")}</p>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="empty-list-copy">No athletes assigned yet.</p>
+      )}
+    </section>
+  );
+}
+
+function ProfileAvatar({ user, iconSize = 34 }) {
+  return (
+    <span className="profile-avatar">
+      {user.photoURL ? <img src={user.photoURL} alt="" /> : <UserRound size={iconSize} />}
+    </span>
+  );
+}
+
+function ProfilePage({ user, isTrainer, logs, onOpenEdit }) {
+  const maxes = loadUserMaxes(user.uid);
+  const completedCount = Object.values(logs).filter((log) => log.completed).length;
+  const lastUpdated = Object.values(logs)
+    .map((log) => log.updatedAt)
+    .filter(Boolean)
+    .sort()
+    .at(-1);
+
+  return (
+    <section className="profile-panel">
+      <div className="profile-header">
+        <ProfileAvatar user={user} />
+        <div>
+          <p className="eyebrow">{isTrainer ? "Coach profile" : "Athlete profile"}</p>
+          <h2>{user.displayName || user.email || "Profile"}</h2>
+        </div>
+      </div>
+
+      <div className="profile-grid">
+        <div className="profile-block">
+          <h3>Account</h3>
+          <dl className="profile-list">
+            <div>
+              <dt>Email</dt>
+              <dd>{user.email || "No email on file"}</dd>
+            </div>
+            <div>
+              <dt>Role</dt>
+              <dd>{isTrainer ? "Coach" : "Athlete"}</dd>
+            </div>
+            <div>
+              <dt>User ID</dt>
+              <dd>{user.uid}</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div className="profile-block">
+          <h3>Training</h3>
+          <dl className="profile-list">
+            <div>
+              <dt>Completed workouts</dt>
+              <dd>{completedCount}</dd>
+            </div>
+            <div>
+              <dt>Workout records</dt>
+              <dd>{Object.keys(logs).length}</dd>
+            </div>
+            <div>
+              <dt>Last updated</dt>
+              <dd>{lastUpdated ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(lastUpdated)) : "No workouts yet"}</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+
+      <div className="profile-block">
+        <h3>Saved Maxes</h3>
+        <div className="profile-max-grid">
+          {maxFields.map((field) => {
+            const max = maxes[field.key];
+            const value = max?.value ?? max ?? "";
+            const unit = max?.unit || "";
+            return (
+              <div className="profile-max" key={field.key}>
+                <span>{field.label}</span>
+                <strong>{value ? `${value}${unit}` : "-"}</strong>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="profile-actions profile-actions-bottom">
+        <button className="primary" type="button" onClick={onOpenEdit}>
+          <PencilLine size={18} />
+          Edit
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function ProfileEditPage({ user, onProfileSaved }) {
+  const [displayName, setDisplayName] = useState(user.displayName || "");
+  const [email, setEmail] = useState(user.email || "");
+  const [profileImage, setProfileImage] = useState(user.photoURL || "");
+  const [profileMessage, setProfileMessage] = useState("");
+  const [imageMessage, setImageMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [profileError, setProfileError] = useState("");
+  const [imageError, setImageError] = useState("");
+
+  async function handlePictureUpload(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImageError("");
+    setImageMessage("");
+    setUploadingImage(true);
+    try {
+      const fallbackDataUrl = await imageFileToDataUrl(file);
+      setProfileImage(fallbackDataUrl);
+      const uploadFile = dataUrlToBlob(fallbackDataUrl);
+      const uploadedUrl = await uploadUserProfileImage(user.uid, uploadFile, fallbackDataUrl);
+      const savedProfile = await saveUserProfile(user.uid, { photoURL: uploadedUrl });
+      setProfileImage(uploadedUrl);
+      onProfileSaved(savedProfile);
+      setImageMessage("Profile picture saved.");
+    } catch {
+      setImageError("Could not upload that picture.");
+    } finally {
+      setUploadingImage(false);
+      event.target.value = "";
+    }
+  }
+
+  async function persistProfile(event) {
+    event.preventDefault();
+    setSaving(true);
+    setProfileMessage("Profile saved. Syncing...");
+    setProfileError("");
+    const profile = {
+      displayName: displayName.trim(),
+      email: email.trim(),
+    };
+    onProfileSaved(profile);
+    try {
+      const savedProfile = await saveUserProfile(user.uid, profile);
+      onProfileSaved(savedProfile);
+      setProfileMessage("Profile saved.");
+    } catch {
+      setProfileError("Profile saved on this device. Cloud sync will need another try.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="profile-panel settings-panel">
+      <div className="profile-header">
+        <ProfileAvatar user={{ ...user, photoURL: profileImage }} />
+        <div>
+          <p className="eyebrow">Profile details</p>
+          <h2>Edit profile</h2>
+        </div>
+      </div>
+
+      <form className="profile-edit-form" onSubmit={persistProfile}>
+        <label>
+          Name
+          <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Your name" />
+        </label>
+        <label>
+          Email
+          <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder="you@example.com" />
+        </label>
+        <div className="wide profile-upload-field">
+          <span>Profile picture</span>
+          <label className={uploadingImage || saving ? "upload-picture-button disabled" : "upload-picture-button"}>
+            <Plus size={18} />
+            {uploadingImage ? "Uploading..." : profileImage ? "Change photo" : "Upload photo"}
+            <input type="file" accept="image/*" onChange={handlePictureUpload} disabled={uploadingImage || saving} />
+          </label>
+        </div>
+        <button className="primary" type="submit" disabled={saving || uploadingImage}>
+          <Save size={18} />
+          {uploadingImage ? "Uploading..." : saving ? "Saving..." : "Save profile"}
+        </button>
+        {profileMessage && <p className="save-status">{profileMessage}</p>}
+        {imageMessage && <p className="save-status">{imageMessage}</p>}
+        {profileError && <p className="form-error">{profileError}</p>}
+        {imageError && <p className="form-error">{imageError}</p>}
+      </form>
+    </section>
+  );
+}
+
+function ProfileSetupModal({ user, onComplete }) {
+  const initialUnit = loadUserWeightUnit(user.uid);
+  const initialHeight = String(user.height || "");
+  const initialHeightInches = user.heightUnit === "in" ? Number(initialHeight) || 0 : 0;
+  const [measurementSystem, setMeasurementSystem] = useState(initialUnit === "lb" ? "imperial" : "metric");
+  const [gender, setGender] = useState(user.gender || "");
+  const [heightCm, setHeightCm] = useState(user.heightUnit === "cm" ? initialHeight : "");
+  const [heightFeet, setHeightFeet] = useState(user.heightFeet || (initialHeightInches ? String(Math.floor(initialHeightInches / 12)) : ""));
+  const [heightInches, setHeightInches] = useState(user.heightInches || (initialHeightInches ? String(initialHeightInches % 12) : ""));
+  const [weight, setWeight] = useState(user.bodyweight || "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const heightUnit = measurementSystem === "imperial" ? "in" : "cm";
+  const weightUnit = measurementSystem === "imperial" ? "lb" : "kg";
+
+  async function finishSetup(event) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    const imperialHeightEntered = heightFeet.trim() || heightInches.trim();
+    const heightValue = measurementSystem === "imperial"
+      ? imperialHeightEntered
+        ? String((Number(heightFeet) || 0) * 12 + (Number(heightInches) || 0))
+        : ""
+      : heightCm.trim();
+    const profile = {
+      profileSetupCompleted: true,
+      profileSetupCompletedAt: new Date().toISOString(),
+      measurementSystem,
+      gender,
+      height: heightValue,
+      heightUnit,
+      heightFeet: measurementSystem === "imperial" ? heightFeet.trim() : "",
+      heightInches: measurementSystem === "imperial" ? heightInches.trim() : "",
+      bodyweight: weight.trim(),
+      bodyweightUnit: weightUnit,
+    };
+    try {
+      saveUserWeightUnit(user.uid, weightUnit);
+      if (weight.trim()) {
+        const entries = loadBodyMetrics(user.uid);
+        saveBodyMetrics(user.uid, [
+          ...entries,
+          {
+            id: `setup-${Date.now()}`,
+            date: new Date().toISOString(),
+            bodyweight: Number(weight) || "",
+            bodyFat: "",
+            muscleMass: "",
+          },
+        ]);
+      }
+      const savedProfile = await saveUserProfile(user.uid, profile);
+      onComplete(savedProfile);
+    } catch {
+      setError("Could not save setup details.");
+      setSaving(false);
+    }
+  }
+
+  async function skipSetup() {
+    setSaving(true);
+    setError("");
+    try {
+      const savedProfile = await saveUserProfile(user.uid, {
+        profileSetupCompleted: true,
+        profileSetupSkippedAt: new Date().toISOString(),
+      });
+      onComplete(savedProfile);
+    } catch {
+      setError("Could not skip setup right now.");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <div className="modal-panel setup-modal-panel" role="dialog" aria-modal="true" aria-labelledby="profile-setup-title">
+        <div>
+          <p className="eyebrow">Profile setup</p>
+          <h2 id="profile-setup-title">Finish setting up your profile</h2>
+        </div>
+        <form className="modal-form setup-form" onSubmit={finishSetup}>
+          <label>
+            Metric preference
+            <select value={measurementSystem} onChange={(event) => setMeasurementSystem(event.target.value)}>
+              <option value="metric">Metric (kg, cm)</option>
+              <option value="imperial">Imperial (lb, in)</option>
+            </select>
+          </label>
+          <label>
+            Gender
+            <select value={gender} onChange={(event) => setGender(event.target.value)}>
+              <option value="">Prefer not to say</option>
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+              <option value="nonbinary">Non-binary</option>
+              <option value="self-described">Self-described</option>
+            </select>
+          </label>
+          <label>
+            Height
+            {measurementSystem === "imperial" ? (
+              <div className="height-imperial-inputs">
+                <span className="unit-input">
+                  <input value={heightFeet} onChange={(event) => setHeightFeet(event.target.value)} inputMode="numeric" placeholder="5" aria-label="Height feet" />
+                  <small>ft</small>
+                </span>
+                <span className="unit-input">
+                  <input value={heightInches} onChange={(event) => setHeightInches(event.target.value)} inputMode="decimal" placeholder="10" aria-label="Height inches" />
+                  <small>in</small>
+                </span>
+              </div>
+            ) : (
+              <input value={heightCm} onChange={(event) => setHeightCm(event.target.value)} inputMode="decimal" placeholder={heightUnit} />
+            )}
+          </label>
+          <label>
+            Weight
+            <input value={weight} onChange={(event) => setWeight(event.target.value)} inputMode="decimal" placeholder={weightUnit} />
+          </label>
+          <button className="primary" type="submit" disabled={saving}>
+            {saving ? "Saving..." : "Save preferences"}
+          </button>
+          <button className="text-button setup-skip-button" type="button" onClick={skipSetup} disabled={saving}>
+            Skip for now
+          </button>
+          {error && <p className="form-error">{error}</p>}
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function SettingsPage({ onOpenSection }) {
+  const [showRedeemCode, setShowRedeemCode] = useState(false);
+  const [redeemCode, setRedeemCode] = useState("");
+  const [redeemMessage, setRedeemMessage] = useState("");
+
+  function redeemAccessCode(event) {
+    event.preventDefault();
+    const code = redeemCode.trim();
+    if (!code) return;
+    setRedeemMessage("Code redemption will be available soon.");
+  }
+
+  return (
+    <section className="profile-panel settings-panel">
+      <div className="profile-header">
+        <span className="profile-avatar">
+          <Settings size={34} />
+        </span>
+        <div>
+          <p className="eyebrow">Profile settings</p>
+          <h2>Settings</h2>
+        </div>
+      </div>
+
+      <div className="settings-option-list" aria-label="Settings options">
+        {settingsSections.map((section) => {
+          const SectionIcon = section.icon;
+          return (
+            <button className="settings-option" type="button" key={section.id} onClick={() => onOpenSection(section.id)}>
+              <span className="settings-option-icon">
+                <SectionIcon size={19} />
+              </span>
+              <span>
+                <strong>{section.title}</strong>
+                <small>{section.eyebrow}</small>
+              </span>
+              <ChevronRight size={18} />
+            </button>
+          );
+        })}
+      </div>
+
+      <button className="secondary redeem-code-button" type="button" onClick={() => {
+        setRedeemMessage("");
+        setShowRedeemCode(true);
+      }}>
+        <Plus size={18} />
+        Redeem code
+      </button>
+
+      <p className="app-version">Version {appVersion}</p>
+
+      {showRedeemCode && (
+        <div className="modal-backdrop" role="presentation">
+          <form className="modal-panel modal-form" role="dialog" aria-modal="true" aria-labelledby="redeem-code-title" onSubmit={redeemAccessCode}>
+            <div>
+              <p className="eyebrow">Program access</p>
+              <h2 id="redeem-code-title">Redeem code</h2>
+            </div>
+            <label>
+              Access code
+              <input value={redeemCode} onChange={(event) => {
+                setRedeemCode(event.target.value.toUpperCase());
+                setRedeemMessage("");
+              }} placeholder="ENTER CODE" autoCapitalize="characters" />
+            </label>
+            <div className="modal-action-row">
+              <button className="secondary" type="button" onClick={() => setShowRedeemCode(false)}>
+                Cancel
+              </button>
+              <button className="primary" type="submit" disabled={!redeemCode.trim()}>
+                Redeem
+              </button>
+            </div>
+            {redeemMessage && <p className="save-status">{redeemMessage}</p>}
+          </form>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SettingsSectionPage({ section, user, serviceWorkerRegistration, updateRegistration, onApplyUpdate, onLogout, onBack, onProfileSaved }) {
+  const [bodyMetricSettings, setBodyMetricSettings] = useState(() => loadBodyMetricSettings(user.uid));
+  const [weightUnit, setWeightUnit] = useState(() => loadUserWeightUnit(user.uid));
+  const [distanceUnit, setDistanceUnit] = useState(() => loadUserDistanceUnit(user.uid));
+  const [measurementSystem, setMeasurementSystem] = useState(user.measurementSystem || (loadUserWeightUnit(user.uid) === "lb" ? "imperial" : "metric"));
+  const initialHeight = String(user.height || "");
+  const initialHeightInches = user.heightUnit === "in" ? Number(initialHeight) || 0 : 0;
+  const [heightCm, setHeightCm] = useState(user.heightUnit === "cm" ? initialHeight : "");
+  const [heightFeet, setHeightFeet] = useState(user.heightFeet || (initialHeightInches ? String(Math.floor(initialHeightInches / 12)) : ""));
+  const [heightInches, setHeightInches] = useState(user.heightInches || (initialHeightInches ? String(initialHeightInches % 12) : ""));
+  const [bodyweight, setBodyweight] = useState(user.bodyweight || "");
+  const [gender, setGender] = useState(user.gender || "");
+  const [profileSaved, setProfileSaved] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState("");
+  const [notificationState, setNotificationState] = useState(() => {
+    if (!("Notification" in window)) return { status: "unsupported", message: "This browser does not support notifications." };
+    return { status: Notification.permission, message: Notification.permission === "granted" ? "Notifications are allowed on this device." : "Notifications are off on this device." };
+  });
+  const [savingNotifications, setSavingNotifications] = useState(false);
+  const releaseNotes = [
+    {
+      title: "PWA install and updates",
+      body: "Added the app manifest, icon, service worker registration, offline shell caching, and an update prompt when a new version is ready.",
+    },
+    {
+      title: "Push notification foundation",
+      body: "Added Firebase Cloud Messaging setup for foreground messages, background notifications, locked-phone delivery, notification click handling, and device token saving.",
+    },
+    {
+      title: "Settings improvements",
+      body: "Added notification controls, program history, app version visibility, and this release breakdown in one place.",
+    },
+    {
+      title: "Coach and workout flow",
+      body: "Kept the recent coach program tools, athlete progress views, profile updates, and workout logging refinements in the live build.",
+    },
+  ];
+
+  async function enableNotifications() {
+    setSavingNotifications(true);
+    try {
+      const result = await requestNotificationAccess(user.uid, serviceWorkerRegistration);
+      setNotificationState(result);
+    } catch (error) {
+      setNotificationState({ status: "error", message: error.message || "Could not enable notifications." });
+    } finally {
+      setSavingNotifications(false);
+    }
+  }
+
+  function updateBodyMetricSetting(key, patch) {
+    const nextSettings = {
+      ...bodyMetricSettings,
+      [key]: { ...bodyMetricSettings[key], ...patch },
+    };
+    setBodyMetricSettings(nextSettings);
+    saveBodyMetricSettings(user.uid, nextSettings);
+  }
+
+  function updateWeightUnit(unit) {
+    setWeightUnit(unit);
+    saveUserWeightUnit(user.uid, unit);
+  }
+
+  function updateDistanceUnit(unit) {
+    setDistanceUnit(unit);
+    saveUserDistanceUnit(user.uid, unit);
+  }
+
+  async function savePhysicalProfile(event) {
+    event.preventDefault();
+    setProfileSaving(true);
+    setProfileSaved(false);
+    setProfileError("");
+    const nextWeightUnit = measurementSystem === "imperial" ? "lb" : "kg";
+    const nextHeightUnit = measurementSystem === "imperial" ? "in" : "cm";
+    const imperialHeightEntered = heightFeet.trim() || heightInches.trim();
+    const heightValue = measurementSystem === "imperial"
+      ? imperialHeightEntered
+        ? String((Number(heightFeet) || 0) * 12 + (Number(heightInches) || 0))
+        : ""
+      : heightCm.trim();
+    const profile = {
+      profileSetupCompleted: true,
+      measurementSystem,
+      gender,
+      height: heightValue,
+      heightUnit: nextHeightUnit,
+      heightFeet: measurementSystem === "imperial" ? heightFeet.trim() : "",
+      heightInches: measurementSystem === "imperial" ? heightInches.trim() : "",
+      bodyweight: bodyweight.trim(),
+      bodyweightUnit: nextWeightUnit,
+    };
+    try {
+      saveUserWeightUnit(user.uid, nextWeightUnit);
+      setWeightUnit(nextWeightUnit);
+      if (bodyweight.trim()) {
+        const entries = loadBodyMetrics(user.uid);
+        saveBodyMetrics(user.uid, [
+          ...entries,
+          {
+            id: `profile-${Date.now()}`,
+            date: new Date().toISOString(),
+            bodyweight: Number(bodyweight) || "",
+            bodyFat: "",
+            muscleMass: "",
+          },
+        ]);
+      }
+      const savedProfile = await saveUserProfile(user.uid, profile);
+      onProfileSaved?.(savedProfile);
+      setProfileSaved(true);
+    } catch {
+      setProfileError("Could not save profile settings.");
+    } finally {
+      setProfileSaving(false);
+    }
+  }
+
+  const sectionConfig = settingsSections.find((item) => item.id === section) || settingsSections[0];
+  const SectionIcon = sectionConfig.icon;
+
+  return (
+    <section className="profile-panel settings-panel">
+      <div className="profile-header">
+        <span className="profile-avatar">
+          <SectionIcon size={34} />
+        </span>
+        <div>
+          <p className="eyebrow">Settings</p>
+          <h2>{sectionConfig.title}</h2>
+        </div>
+      </div>
+
+      <button className="text-button settings-section-back" type="button" onClick={onBack}>
+        <ArrowLeft size={17} />
+        Settings
+      </button>
+
+      {section === "preferences" ? (
+        <div className="settings-preferences">
+          <div className="settings-block preference-settings-row">
+            <div>
+              <p className="eyebrow">Device</p>
+              <h3>Notifications</h3>
+              <p>{notificationState.message}</p>
+            </div>
+            <button className="secondary" type="button" onClick={enableNotifications} disabled={savingNotifications || notificationState.status === "granted"}>
+              <Bell size={18} />
+              {savingNotifications ? "Enabling..." : notificationState.status === "granted" ? "Enabled" : "Enable notifications"}
+            </button>
+          </div>
+          <div className="settings-block preference-settings-row">
+            <div>
+              <p className="eyebrow">Weight unit</p>
+              <h3>Training weights</h3>
+              <p>Used for maxes, goals, workout loads, and bodyweight metrics.</p>
+            </div>
+            <select value={weightUnit} onChange={(event) => updateWeightUnit(event.target.value)} aria-label="Weight unit">
+              <option value="kg">kg</option>
+              <option value="lb">lb</option>
+            </select>
+          </div>
+          <div className="settings-block preference-settings-row">
+            <div>
+              <p className="eyebrow">Distance unit</p>
+              <h3>Running and conditioning</h3>
+              <p>Used anywhere distance-based work is shown or logged.</p>
+            </div>
+            <select value={distanceUnit} onChange={(event) => updateDistanceUnit(event.target.value)} aria-label="Distance unit">
+              <option value="km">km</option>
+              <option value="mi">mi</option>
+            </select>
+          </div>
+        </div>
+      ) : section === "metrics" ? (
+        <div className="settings-metrics">
+          {bodyMetricFields.map((field) => {
+            const setting = bodyMetricSettings[field.key] || defaultBodyMetricSettings[field.key];
+            return (
+              <div className="settings-block metric-settings-row" key={field.key}>
+                <label className="checkbox-field">
+                  <input
+                    checked={setting.enabled}
+                    onChange={(event) => updateBodyMetricSetting(field.key, { enabled: event.target.checked })}
+                    type="checkbox"
+                  />
+                  {field.label}
+                </label>
+                <select
+                  value={setting.mode}
+                  onChange={(event) => updateBodyMetricSetting(field.key, { mode: event.target.value })}
+                  aria-label={`${field.label} display mode`}
+                  disabled={!setting.enabled}
+                >
+                  <option value="static">Static value</option>
+                  <option value="goal">Compare to goal</option>
+                </select>
+              </div>
+            );
+          })}
+        </div>
+      ) : section === "updates" ? (
+        <div className="settings-updates">
+          <div className="whats-new-card">
+            <div>
+              <p className="eyebrow">Version {appVersion}</p>
+              <h3>What's new</h3>
+            </div>
+            <div className="release-note-list">
+              {releaseNotes.map((note) => (
+                <article className="release-note" key={note.title}>
+                  <strong>{note.title}</strong>
+                  <p>{note.body}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="settings-actions">
+          <form className="profile-settings-form" onSubmit={savePhysicalProfile}>
+            <div className="settings-block-heading">
+              <p className="eyebrow">Profile</p>
+              <h3>Body details</h3>
+              <p>Metric preference, height, and weight used for goals and body metrics.</p>
+            </div>
+            <label>
+              Metric preference
+              <select value={measurementSystem} onChange={(event) => setMeasurementSystem(event.target.value)}>
+                <option value="metric">Metric (kg, cm)</option>
+                <option value="imperial">Imperial (lb, in)</option>
+              </select>
+            </label>
+            <label>
+              Gender
+              <select value={gender} onChange={(event) => setGender(event.target.value)}>
+                <option value="">Prefer not to say</option>
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+                <option value="nonbinary">Non-binary</option>
+                <option value="self-described">Self-described</option>
+              </select>
+            </label>
+            <label>
+              Height
+              {measurementSystem === "imperial" ? (
+                <div className="height-imperial-inputs">
+                  <span className="unit-input">
+                    <input value={heightFeet} onChange={(event) => setHeightFeet(event.target.value)} inputMode="numeric" placeholder="5" aria-label="Height feet" />
+                    <small>ft</small>
+                  </span>
+                  <span className="unit-input">
+                    <input value={heightInches} onChange={(event) => setHeightInches(event.target.value)} inputMode="decimal" placeholder="10" aria-label="Height inches" />
+                    <small>in</small>
+                  </span>
+                </div>
+              ) : (
+                <input value={heightCm} onChange={(event) => setHeightCm(event.target.value)} inputMode="decimal" placeholder="cm" />
+              )}
+            </label>
+            <label>
+              Weight
+              <input value={bodyweight} onChange={(event) => setBodyweight(event.target.value)} inputMode="decimal" placeholder={measurementSystem === "imperial" ? "lb" : "kg"} />
+            </label>
+            <button className="primary" type="submit" disabled={profileSaving}>
+              <Save size={18} />
+              {profileSaving ? "Saving..." : "Save preferences"}
+            </button>
+            {profileSaved && <p className="save-status">Profile settings saved.</p>}
+            {profileError && <p className="form-error">{profileError}</p>}
+          </form>
+          {updateRegistration && (
+            <div className="settings-block">
+              <div>
+                <p className="eyebrow">App update</p>
+                <h3>New version ready</h3>
+                <p>Restart the app to load the newest installed version.</p>
+              </div>
+              <button className="primary" type="button" onClick={onApplyUpdate}>
+                Update now
+              </button>
+            </div>
+          )}
+          <button className="secondary" type="button" onClick={onLogout}>
+            <LogOut size={18} />
+            Log out
+          </button>
+        </div>
+      )}
+
+      <p className="app-version">Version {appVersion}</p>
+    </section>
+  );
+}
+
+export default function App() {
+  const initialRoute = useMemo(() => readAppRoute(), []);
+  const [user, setUser] = useState(null);
+  const [checking, setChecking] = useState(true);
+  const [isTrainer, setIsTrainer] = useState(false);
+  const [logs, setLogs] = useState({});
+  const [athleteProgressLogs, setAthleteProgressLogs] = useState({});
+  const [customWorkouts, setCustomWorkouts] = useState([]);
+  const [programs, setPrograms] = useState([]);
+  const [programWorkouts, setProgramWorkouts] = useState([]);
+  const [workoutScheduleOverrides, setWorkoutScheduleOverrides] = useState({});
+  const [selectedDate, setSelectedDate] = useState(initialRoute.selectedDate);
+  const [selectedWorkoutKey, setSelectedWorkoutKey] = useState(initialRoute.selectedWorkoutKey);
+  const [view, setView] = useState(initialRoute.view);
+  const [daySwipeStart, setDaySwipeStart] = useState(null);
+  const [serviceWorkerRegistration, setServiceWorkerRegistration] = useState(null);
+  const [updateRegistration, setUpdateRegistration] = useState(null);
+  const [notificationMessage, setNotificationMessage] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
+  const [isOnline, setIsOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
+  const [isMobileViewport, setIsMobileViewport] = useState(() => (
+    typeof window === "undefined" ? false : window.matchMedia("(max-width: 760px)").matches
+  ));
+  const [showNavMenu, setShowNavMenu] = useState(false);
+  const [menuEditMode, setMenuEditMode] = useState(false);
+  const [menuPressHandled, setMenuPressHandled] = useState(false);
+  const [menuButtonPreferences, setMenuButtonPreferences] = useState(loadMenuButtonPreferences);
+  const [showProfileSetup, setShowProfileSetup] = useState(false);
+  const [visibleCalendarMonths, setVisibleCalendarMonths] = useState(3);
+  const [timerMode, setTimerMode] = useState("countup");
+  const [countdownSeconds, setCountdownSeconds] = useState(180);
+  const [intervalWorkSeconds, setIntervalWorkSeconds] = useState(60);
+  const [intervalRestSeconds, setIntervalRestSeconds] = useState(30);
+  const [intervalPhase, setIntervalPhase] = useState("work");
+  const [intervalRounds, setIntervalRounds] = useState(5);
+  const [intervalCurrentRound, setIntervalCurrentRound] = useState(1);
+  const [intervalEndless, setIntervalEndless] = useState(true);
+  const [showTimerSettings, setShowTimerSettings] = useState(false);
+  const [longPressTimer, setLongPressTimer] = useState(null);
+  const [timerPressHandled, setTimerPressHandled] = useState(false);
+  const [lastTimerTap, setLastTimerTap] = useState(0);
+  const [timerStartedAt, setTimerStartedAt] = useState(null);
+  const [timerBankedSeconds, setTimerBankedSeconds] = useState(0);
+  const [timerNow, setTimerNow] = useState(Date.now());
+  const routeWritePending = useRef(false);
+  const menuLongPressTimer = useRef(null);
+  const timerRunning = Boolean(timerStartedAt);
+  const timerElapsedSeconds = timerBankedSeconds + (timerRunning ? Math.floor((timerNow - timerStartedAt) / 1000) : 0);
+  const activeIntervalSeconds = intervalPhase === "work" ? intervalWorkSeconds : intervalRestSeconds;
+  const timerSeconds = timerMode === "countup" ? timerElapsedSeconds : Math.max(0, (timerMode === "countdown" ? countdownSeconds : activeIntervalSeconds) - timerElapsedSeconds);
+  const timerLabel = timerMode === "interval" ? `${intervalPhase === "work" ? "W" : "R"}${intervalEndless ? "" : intervalCurrentRound} ${formatTimer(timerSeconds)}` : formatTimer(timerSeconds);
+  const countdownMinutes = Math.floor(countdownSeconds / 60);
+  const countdownRemainderSeconds = countdownSeconds % 60;
+
+  useEffect(() => {
+    if (!showNavMenu || typeof document === "undefined" || typeof window === "undefined") return undefined;
+
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const previousStyles = {
+      overflow: body.style.overflow,
+      position: body.style.position,
+      top: body.style.top,
+      width: body.style.width,
+    };
+
+    body.style.overflow = "hidden";
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.width = "100%";
+
+    return () => {
+      body.style.overflow = previousStyles.overflow;
+      body.style.position = previousStyles.position;
+      body.style.top = previousStyles.top;
+      body.style.width = previousStyles.width;
+      window.scrollTo(0, scrollY);
+    };
+  }, [showNavMenu]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const mobileQuery = window.matchMedia("(max-width: 760px)");
+    const syncMobileViewport = () => setIsMobileViewport(mobileQuery.matches);
+    syncMobileViewport();
+    mobileQuery.addEventListener("change", syncMobileViewport);
+    return () => mobileQuery.removeEventListener("change", syncMobileViewport);
+  }, []);
+
+  async function hydrateUser(nextUser) {
+    if (!nextUser) {
+      setUser(null);
+      setShowProfileSetup(false);
+      setLogs({});
+      setAthleteProgressLogs({});
+      setIsTrainer(false);
+      setCustomWorkouts([]);
+      setPrograms([]);
+      setProgramWorkouts([]);
+      setWorkoutScheduleOverrides({});
+      return;
+    }
+
+    const [profile, cloudMaxes, rootUser] = await Promise.all([
+      loadUserProfile(nextUser.uid),
+      loadCloudUserMaxes(nextUser.uid),
+      ensureUserDocument(nextUser),
+    ]);
+    saveUserMaxes(nextUser.uid, cloudMaxes);
+    const profiledUser = mergeUserProfile(nextUser, { ...rootUser, ...profile });
+    setUser(profiledUser);
+    setShowProfileSetup(profile.profileSetupCompleted !== true);
+
+    const [nextLogs, nextTrainer, nextCustomWorkouts] = await Promise.all([
+      loadUserWorkouts(nextUser.uid),
+      isTrainerUser(nextUser),
+      loadCustomWorkouts("default"),
+    ]);
+    const nextPrograms = nextTrainer || isDevUser(nextUser.uid) ? await loadPrograms() : await loadProgramsForUser(profiledUser);
+
+    setLogs(nextLogs);
+    setIsTrainer(nextTrainer);
+    setAthleteProgressLogs(nextTrainer ? await loadUserWorkouts("dev-athlete") : nextLogs);
+    setCustomWorkouts(nextCustomWorkouts);
+    setWorkoutScheduleOverrides(loadWorkoutScheduleOverrides(nextUser.uid));
+    const programWorkoutState = await loadProgramWorkoutState(nextUser, nextPrograms, nextTrainer);
+    setPrograms(programWorkoutState.programs);
+    setProgramWorkouts(programWorkoutState.workouts);
+  }
+
+  async function loadProgramWorkoutState(currentUser, nextPrograms, userIsTrainer = isTrainer) {
+    const programWorkoutLists = await Promise.all(nextPrograms.map(async (program) => (
+      (await loadCustomWorkouts(program.id)).map((workout) => ({
+        ...workout,
+        programId: workout.programId || program.id,
+      }))
+    )));
+    const rawWorkouts = programWorkoutLists.flat();
+    if (userIsTrainer || isDevUser(currentUser?.uid)) {
+      return { programs: nextPrograms, workouts: rawWorkouts };
+    }
+
+    const programsWithSchedules = await Promise.all(nextPrograms.map(async (program) => {
+      const activeProgram = program.activeProgram;
+      if (!activeProgram?.scheduled) return program;
+      const programItems = rawWorkouts.filter((workout) => (workout.programId || "default") === program.id);
+      const expectedDates = buildWorkoutDatesForProgram(programItems, activeProgram.startDate || program.startDate);
+      const missingDates = Object.keys(expectedDates).some((key) => !activeProgram.workoutDates?.[key]);
+      if (!missingDates) return program;
+      const nextActiveProgram = {
+        ...activeProgram,
+        workoutDates: {
+          ...expectedDates,
+          ...(activeProgram.workoutDates || {}),
+        },
+      };
+      await saveUserActiveProgram(currentUser.uid, nextActiveProgram);
+      return { ...program, activeProgram: nextActiveProgram };
+    }));
+
+    return {
+      programs: programsWithSchedules,
+      workouts: applyActiveProgramDates(rawWorkouts, programsWithSchedules),
+    };
+  }
+
+  async function refreshCustomWorkouts() {
+    const nextDefaultWorkouts = await loadCustomWorkouts("default");
+    const nextPrograms = isTrainer || isDevUser(user?.uid) ? await loadPrograms() : user ? await loadProgramsForUser(user) : [];
+    const programWorkoutState = await loadProgramWorkoutState(user, nextPrograms);
+    setCustomWorkouts(nextDefaultWorkouts);
+    setPrograms(programWorkoutState.programs);
+    setProgramWorkouts(programWorkoutState.workouts);
+  }
+
+  async function handleProgramWorkoutCreated(workoutDate) {
+    await refreshCustomWorkouts();
+    if (workoutDate) {
+      openWorkoutList(workoutDate);
+    }
+  }
+
+  useEffect(() => {
+    return observeAuth((nextUser) => {
+      setUser(mergeUserProfile(nextUser));
+      setChecking(false);
+      hydrateUser(nextUser);
+    });
+  }, []);
+
+  useEffect(() => {
+    function applyBrowserRoute() {
+      const nextRoute = readAppRoute();
+      routeWritePending.current = true;
+      setSelectedDate(nextRoute.selectedDate);
+      setSelectedWorkoutKey(nextRoute.selectedWorkoutKey);
+      setView(nextRoute.view);
+      setShowNavMenu(false);
+    }
+
+    window.addEventListener("popstate", applyBrowserRoute);
+    return () => window.removeEventListener("popstate", applyBrowserRoute);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (routeWritePending.current) {
+      routeWritePending.current = false;
+      return;
+    }
+    const nextUrl = appRouteUrl({ view, selectedDate, selectedWorkoutKey });
+    const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (nextUrl !== currentUrl) {
+      window.history.pushState({}, "", nextUrl);
+    }
+  }, [selectedDate, selectedWorkoutKey, view]);
+
+  useEffect(() => {
+    registerAppServiceWorker(setUpdateRegistration)
+      .then(setServiceWorkerRegistration)
+      .catch((error) => console.warn("Service worker registration failed.", error));
+  }, []);
+
+  useEffect(() => {
+    function updateOnlineStatus() {
+      setIsOnline(navigator.onLine);
+    }
+
+    window.addEventListener("online", updateOnlineStatus);
+    window.addEventListener("offline", updateOnlineStatus);
+    return () => {
+      window.removeEventListener("online", updateOnlineStatus);
+      window.removeEventListener("offline", updateOnlineStatus);
+    };
+  }, []);
+
+  useEffect(() => {
+    saveMenuButtonPreferences(menuButtonPreferences);
+  }, [menuButtonPreferences]);
+
+  useEffect(() => () => {
+    if (menuLongPressTimer.current) window.clearTimeout(menuLongPressTimer.current);
+  }, []);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    let unsubscribe = () => {};
+    let active = true;
+
+    listenForForegroundMessages((payload = {}) => {
+      const notification = payload?.notification || {};
+      const data = payload?.data || {};
+      const title = notification.title || data.title || "Primitive Programming";
+      const body = notification.body || data.body || "New training update received.";
+      setNotificationMessage(`${title}: ${body}`);
+      window.setTimeout(() => setNotificationMessage(""), 5000);
+    }).then((nextUnsubscribe) => {
+      if (active) unsubscribe = nextUnsubscribe;
+    });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!timerRunning) return undefined;
+    const intervalId = window.setInterval(() => setTimerNow(Date.now()), 500);
+    return () => window.clearInterval(intervalId);
+  }, [timerRunning]);
+
+  useEffect(() => {
+    if (!timerRunning || timerMode === "countup") return;
+    const targetSeconds = timerMode === "countdown" ? countdownSeconds : activeIntervalSeconds;
+    if (timerElapsedSeconds < targetSeconds) return;
+
+    if (timerMode === "interval") {
+      if (intervalPhase === "work") {
+        setIntervalPhase("rest");
+      } else {
+        const nextRound = intervalCurrentRound + 1;
+        if (!intervalEndless && nextRound > intervalRounds) {
+          setIntervalPhase("work");
+          setIntervalCurrentRound(1);
+        } else {
+          setIntervalPhase("work");
+          setIntervalCurrentRound(nextRound);
+        }
+      }
+    }
+    setTimerStartedAt(null);
+    setTimerBankedSeconds(0);
+  }, [activeIntervalSeconds, countdownSeconds, intervalCurrentRound, intervalEndless, intervalPhase, intervalRounds, timerElapsedSeconds, timerMode, timerRunning]);
+
+  useEffect(() => {
+    if (isMobileViewport && view === "programs") {
+      setView("client");
+    }
+  }, [isMobileViewport, view]);
+
+  const hasDefaultProgramAccess = useMemo(() => programs.some((program) => program.id === "default"), [programs]);
+  const activeFlexibleProgramIds = useMemo(() => new Set(programs
+    .filter((program) => program.status === "active" && program.scheduleMode === flexibleScheduleMode)
+    .map((program) => program.id)), [programs]);
+  const starterProgramWorkouts = useMemo(() => (
+    !hasDefaultProgramAccess || activeFlexibleProgramIds.has("default")
+      ? []
+      : importedProgram.map((item) => (
+        workoutScheduleOverrides[item.id] ? { ...item, date: workoutScheduleOverrides[item.id] } : item
+      ))
+  ), [activeFlexibleProgramIds, hasDefaultProgramAccess, workoutScheduleOverrides]);
+  const savedWorkouts = useMemo(() => [...customWorkouts, ...programWorkouts], [customWorkouts, programWorkouts]);
+  const allProgramSourceWorkouts = useMemo(() => [
+    ...(hasDefaultProgramAccess ? importedProgram : []),
+    ...savedWorkouts,
+  ], [hasDefaultProgramAccess, savedWorkouts]);
+  const scheduledWorkouts = useMemo(() => [
+    ...starterProgramWorkouts,
+    ...savedWorkouts.filter((item) => !activeFlexibleProgramIds.has(item.programId || "default")),
+  ], [activeFlexibleProgramIds, savedWorkouts, starterProgramWorkouts]);
+  const flexibleWorkoutGroupsForSelectedDate = useMemo(() => (
+    flexibleProgramWorkoutGroups(selectedDate, programs, allProgramSourceWorkouts, logs)
+  ), [allProgramSourceWorkouts, logs, programs, selectedDate]);
+  const workoutsByDate = useMemo(() => groupByDate(scheduledWorkouts), [scheduledWorkouts]);
+  const programLedWorkoutDates = useMemo(() => (
+    [...starterProgramWorkouts, ...programWorkouts]
+      .map((item) => item.date)
+      .filter(Boolean)
+      .sort()
+  ), [programWorkouts, starterProgramWorkouts]);
+  const calendarMonths = useMemo(() => calendarSections(programLedWorkoutDates, new Date(), visibleCalendarMonths), [programLedWorkoutDates, visibleCalendarMonths]);
+  const dates = useMemo(() => calendarMonths.flatMap((section) => section.dates), [calendarMonths]);
+  const selectedWorkoutGroups = useMemo(() => [
+    ...groupWorkouts(workoutsByDate[selectedDate] || []),
+    ...flexibleWorkoutGroupsForSelectedDate,
+  ], [flexibleWorkoutGroupsForSelectedDate, selectedDate, workoutsByDate]);
+  const selectedWorkout = selectedWorkoutKey === "blank"
+    ? []
+    : (selectedWorkoutGroups.find((group) => group.key === selectedWorkoutKey)?.items || selectedWorkoutGroups[0]?.items || [])
+      .filter((item) => !item.scheduledPlaceholder);
+  const activeWorkoutKey = selectedWorkoutKey || selectedWorkoutGroups[0]?.key || "blank";
+  const activeWorkoutGroup = selectedWorkoutKey === "blank"
+    ? null
+    : selectedWorkoutGroups.find((group) => group.key === activeWorkoutKey) || selectedWorkoutGroups[0] || null;
+  const today = new Date().toISOString().slice(0, 10);
+  const todayTarget = workoutsByDate[today] ? today : dates.find((date) => date >= today) || dates[0] || today;
+  const orderedMenuButtons = useMemo(() => {
+    const normalized = normalizeMenuButtonPreferences(menuButtonPreferences);
+    const hiddenIds = new Set(normalized.hidden);
+    const applicableItems = normalized.order
+      .map((id) => menuButtonItemMap[id])
+      .filter(Boolean)
+      .filter((item) => {
+        if (item.trainerOnly && !isTrainer) return false;
+        if (item.hideForTrainer && isTrainer) return false;
+        if (item.hideOnMobile && isMobileViewport) return false;
+        return true;
+      });
+    const visibleItems = applicableItems.filter((item) => !hiddenIds.has(item.id));
+    if (!menuEditMode) return visibleItems.length ? visibleItems : [menuButtonItemMap.settings];
+    return applicableItems;
+  }, [isMobileViewport, isTrainer, menuButtonPreferences, menuEditMode]);
+  const hiddenMenuButtonIds = useMemo(() => new Set(normalizeMenuButtonPreferences(menuButtonPreferences).hidden), [menuButtonPreferences]);
+
+  function openWorkoutList(date) {
+    setSelectedDate(date);
+    setSelectedWorkoutKey("");
+    setView("workout-list");
+  }
+
+  function startDaySwipe(event) {
+    if (view !== "workout-list" || event.pointerType === "mouse") return;
+    if (event.target.closest(".top-nav, .modal-backdrop, .modal-panel")) return;
+    setDaySwipeStart({ x: event.clientX, y: event.clientY });
+  }
+
+  function finishDaySwipe(event) {
+    if (view !== "workout-list" || !daySwipeStart || event.pointerType === "mouse") return;
+    const deltaX = event.clientX - daySwipeStart.x;
+    const deltaY = event.clientY - daySwipeStart.y;
+    setDaySwipeStart(null);
+    if (Math.abs(deltaX) < 54 || Math.abs(deltaX) < Math.abs(deltaY) * 1.25) return;
+    openWorkoutList(shiftDate(selectedDate, deltaX < 0 ? 1 : -1));
+  }
+
+  function openWorkout(key) {
+    setSelectedWorkoutKey(key);
+    setView("workout");
+  }
+
+  function openStoredWorkout(date, key) {
+    setSelectedDate(date);
+    setSelectedWorkoutKey(key);
+    setView("workout");
+  }
+
+  async function openBlankWorkout() {
+    const scheduledWorkout = {
+      id: `scheduled-${selectedDate}-${Date.now()}`,
+      date: selectedDate,
+      focus: "Scheduled Workout",
+      exercise: "",
+      prescription: "",
+      intensity: "",
+      notes: "",
+      programId: "default",
+      day: new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date(`${selectedDate}T12:00:00`)),
+      phase: "Scheduled Workout",
+      week: "Custom",
+      scheduledPlaceholder: true,
+      createdAt: new Date().toISOString(),
+    };
+    const nextWorkoutKey = workoutGroupKey(scheduledWorkout);
+    setCustomWorkouts((current) => [...current.filter((item) => item.id !== scheduledWorkout.id), scheduledWorkout]);
+    setSelectedWorkoutKey(nextWorkoutKey);
+    setView("workout");
+    await saveCustomWorkout("default", scheduledWorkout);
+    await refreshCustomWorkouts();
+    setSelectedWorkoutKey(nextWorkoutKey);
+  }
+
+  function handleProfileSaved(profile) {
+    setUser((currentUser) => ({ ...currentUser, ...profile }));
+  }
+
+  function handleProfileSetupComplete(profile) {
+    setUser((currentUser) => ({ ...currentUser, ...profile }));
+    setShowProfileSetup(false);
+  }
+
+  async function handleLogout() {
+    await logout();
+    setView("client");
+    setUser(null);
+    setShowProfileSetup(false);
+    setLogs({});
+    setAthleteProgressLogs({});
+    setIsTrainer(false);
+    setCustomWorkouts([]);
+    setPrograms([]);
+    setProgramWorkouts([]);
+    setWorkoutScheduleOverrides({});
+    setChecking(false);
+  }
+
+  async function moveSelectedWorkout(nextDate) {
+    if (!user || !activeWorkoutGroup || !nextDate || nextDate === selectedDate) return;
+    const movedItems = activeWorkoutGroup.items.map((item) => ({
+      ...item,
+      date: nextDate,
+      day: new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date(`${nextDate}T12:00:00`)),
+    }));
+    const movedIds = new Set(movedItems.map((item) => item.id));
+    const nextWorkoutKey = workoutGroupKey(movedItems[0]);
+    const nextOverrides = { ...workoutScheduleOverrides };
+
+    movedItems.forEach((item) => {
+      if (String(item.id || "").startsWith("mock-")) {
+        nextOverrides[item.id] = nextDate;
+      }
+    });
+
+    setWorkoutScheduleOverrides(nextOverrides);
+    saveWorkoutScheduleOverrides(user.uid, nextOverrides);
+
+    if (customWorkouts.some((item) => movedIds.has(item.id))) {
+      setCustomWorkouts((current) => current.map((item) => (
+        movedIds.has(item.id) ? movedItems.find((movedItem) => movedItem.id === item.id) || item : item
+      )));
+    }
+
+    if (programWorkouts.some((item) => movedIds.has(item.id))) {
+      setProgramWorkouts((current) => current.map((item) => (
+        movedIds.has(item.id) ? movedItems.find((movedItem) => movedItem.id === item.id) || item : item
+      )));
+    }
+
+    await Promise.all(movedItems
+      .filter((item) => !String(item.id || "").startsWith("mock-"))
+      .map((item) => saveCustomWorkout(item.programId || "default", item)));
+
+    moveWorkoutDraft(user.uid, selectedDate, activeWorkoutKey, nextDate, nextWorkoutKey);
+    setSelectedDate(nextDate);
+    setSelectedWorkoutKey(nextWorkoutKey);
+    setView("workout");
+    handleWorkoutSaveStatus({ synced: false, local: true });
+  }
+
+  function applyAppUpdate() {
+    activateWaitingServiceWorker(updateRegistration);
+  }
+
+  function resetTimer() {
+    setTimerStartedAt(null);
+    setTimerBankedSeconds(0);
+    setTimerNow(Date.now());
+    if (timerMode === "interval") {
+      setIntervalPhase("work");
+      setIntervalCurrentRound(1);
+    }
+  }
+
+  function toggleTimer() {
+    if (timerRunning) {
+      setTimerBankedSeconds(timerElapsedSeconds);
+      setTimerStartedAt(null);
+      return;
+    }
+    setTimerStartedAt(Date.now());
+    setTimerNow(Date.now());
+  }
+
+  function startTimerPress() {
+    setTimerPressHandled(false);
+    const timeoutId = window.setTimeout(() => {
+      setTimerPressHandled(true);
+      setShowTimerSettings(true);
+    }, 550);
+    setLongPressTimer(timeoutId);
+  }
+
+  function endTimerPress() {
+    if (longPressTimer) window.clearTimeout(longPressTimer);
+    setLongPressTimer(null);
+  }
+
+  function handleTimerClick() {
+    if (timerPressHandled) {
+      setTimerPressHandled(false);
+      return;
+    }
+    const now = Date.now();
+    if (now - lastTimerTap < 320) {
+      setLastTimerTap(0);
+      resetTimer();
+      return;
+    }
+    setLastTimerTap(now);
+    toggleTimer();
+  }
+
+  function changeTimerMode(mode) {
+    setTimerMode(mode);
+    setTimerStartedAt(null);
+    setTimerBankedSeconds(0);
+    setIntervalPhase("work");
+    setIntervalCurrentRound(1);
+  }
+
+  function updateCountdownPart(part, value) {
+    const numericValue = Math.max(0, Number(value) || 0);
+    const nextMinutes = part === "minutes" ? numericValue : countdownMinutes;
+    const nextSeconds = part === "seconds" ? Math.min(59, numericValue) : countdownRemainderSeconds;
+    setCountdownSeconds(Math.max(1, (nextMinutes * 60) + nextSeconds));
+    setTimerStartedAt(null);
+    setTimerBankedSeconds(0);
+  }
+
+  function startMenuButtonPress() {
+    if (menuEditMode) return;
+    setMenuPressHandled(false);
+    if (menuLongPressTimer.current) window.clearTimeout(menuLongPressTimer.current);
+    menuLongPressTimer.current = window.setTimeout(() => {
+      setMenuPressHandled(true);
+      setMenuEditMode(true);
+    }, 600);
+  }
+
+  function endMenuButtonPress() {
+    if (menuLongPressTimer.current) window.clearTimeout(menuLongPressTimer.current);
+    menuLongPressTimer.current = null;
+  }
+
+  function handleMenuButtonClick(item) {
+    if (menuPressHandled) {
+      setMenuPressHandled(false);
+      return;
+    }
+    if (menuEditMode) return;
+    openMenuView(item.view);
+  }
+
+  function moveMenuButton(itemId, targetItemId) {
+    setMenuButtonPreferences((current) => {
+      const nextPreferences = normalizeMenuButtonPreferences(current);
+      const currentIndex = nextPreferences.order.indexOf(itemId);
+      const nextIndex = nextPreferences.order.indexOf(targetItemId);
+      if (currentIndex < 0 || nextIndex < 0 || nextIndex >= nextPreferences.order.length) return nextPreferences;
+      const nextOrder = [...nextPreferences.order];
+      [nextOrder[currentIndex], nextOrder[nextIndex]] = [nextOrder[nextIndex], nextOrder[currentIndex]];
+      return { ...nextPreferences, order: nextOrder };
+    });
+  }
+
+  function toggleMenuButtonHidden(itemId) {
+    setMenuButtonPreferences((current) => {
+      const nextPreferences = normalizeMenuButtonPreferences(current);
+      const hidden = new Set(nextPreferences.hidden);
+      if (hidden.has(itemId)) {
+        hidden.delete(itemId);
+      } else {
+        hidden.add(itemId);
+      }
+      return { ...nextPreferences, hidden: [...hidden] };
+    });
+  }
+
+  function resetMenuButtons() {
+    setMenuButtonPreferences(normalizeMenuButtonPreferences());
+  }
+
+  function openMenuView(nextView) {
+    setView(nextView);
+    setShowNavMenu(false);
+    setMenuEditMode(false);
+  }
+
+  function handleWorkoutSaveStatus(result) {
+    if (result?.synced) {
+      setSaveMessage("Workout synced.");
+    } else {
+      setSaveMessage("Workout saved on this device.");
+    }
+    window.setTimeout(() => setSaveMessage(""), 3200);
+  }
+
+  if (checking) return <main className="loading">Loading...</main>;
+  if (!user) return <AuthCard onAuthed={hydrateUser} />;
+
+  return (
+    <main
+      className={view === "workout-list" ? "app-shell day-swipe-shell" : "app-shell"}
+      onPointerDown={startDaySwipe}
+      onPointerUp={finishDaySwipe}
+      onPointerCancel={() => setDaySwipeStart(null)}
+    >
+      <nav className="top-nav">
+        <button className="nav-button nav-icon menu-button" type="button" onClick={() => setShowNavMenu(true)} aria-label="Open menu" title="Menu">
+          <Menu size={19} />
+        </button>
+        <button className="nav-brand" type="button" onClick={() => setView("client")} aria-label="Go to home" title="Home">
+          <Dumbbell size={22} />
+          <span>Primitive</span>
+        </button>
+        <div className="nav-actions">
+          <button
+            className={timerRunning ? "nav-button timer-button active" : "nav-button timer-button"}
+            onClick={handleTimerClick}
+            onPointerDown={startTimerPress}
+            onPointerUp={endTimerPress}
+            onPointerCancel={endTimerPress}
+            onPointerLeave={endTimerPress}
+            type="button"
+            aria-label={timerRunning ? `Stop timer at ${timerLabel}` : `Start timer at ${timerLabel}`}
+            title="Tap start/stop, double tap reset, long press settings"
+          >
+            <Clock size={17} />
+            <span>{timerLabel}</span>
+          </button>
+          <button className="nav-profile-button" type="button" onClick={() => setView("profile")} aria-label="Open profile" title="Profile">
+            {user.photoURL ? <img src={user.photoURL} alt="" /> : <UserRound size={18} />}
+          </button>
+        </div>
+      </nav>
+
+      {showNavMenu && (
+        <div
+          className="nav-menu-backdrop"
+          role="presentation"
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerUp={(event) => event.stopPropagation()}
+          onPointerCancel={(event) => event.stopPropagation()}
+          onClick={() => {
+            setShowNavMenu(false);
+            setMenuEditMode(false);
+          }}
+        >
+          <div className="nav-menu-panel" role="dialog" aria-modal="true" aria-label="Main menu" onClick={(event) => event.stopPropagation()}>
+            <div className="nav-menu-header">
+              <Dumbbell size={22} />
+              <strong>Primitive</strong>
+              {menuEditMode && (
+                <div className="nav-menu-edit-actions">
+                  <button type="button" onClick={resetMenuButtons}>Reset</button>
+                  <button type="button" onClick={() => setMenuEditMode(false)}>Done</button>
+                </div>
+              )}
+            </div>
+            {orderedMenuButtons.map((item, index) => {
+              const Icon = item.icon;
+              const isHidden = hiddenMenuButtonIds.has(item.id);
+              const previousItem = orderedMenuButtons[index - 1];
+              const nextItem = orderedMenuButtons[index + 1];
+              return (
+                <div className={isHidden ? "menu-edit-row hidden" : "menu-edit-row"} key={item.id}>
+                  <button
+                    className="menu-link"
+                    type="button"
+                    onClick={() => handleMenuButtonClick(item)}
+                    onPointerDown={startMenuButtonPress}
+                    onPointerUp={endMenuButtonPress}
+                    onPointerCancel={endMenuButtonPress}
+                    onPointerLeave={endMenuButtonPress}
+                    aria-disabled={menuEditMode}
+                    title={menuEditMode ? "Editing menu" : "Long press to edit menu"}
+                  >
+                    {menuEditMode && <GripVertical className="menu-drag-icon" size={16} />}
+                    <Icon size={18} />
+                    <span>{item.label}</span>
+                  </button>
+                  {menuEditMode && (
+                    <div className="menu-edit-controls" aria-label={`${item.label} menu controls`}>
+                      <button type="button" onClick={() => previousItem && moveMenuButton(item.id, previousItem.id)} disabled={!previousItem} aria-label={`Move ${item.label} up`}>
+                        <ArrowUp size={15} />
+                      </button>
+                      <button type="button" onClick={() => nextItem && moveMenuButton(item.id, nextItem.id)} disabled={!nextItem} aria-label={`Move ${item.label} down`}>
+                        <ArrowDown size={15} />
+                      </button>
+                      <button type="button" onClick={() => toggleMenuButtonHidden(item.id)} aria-label={isHidden ? `Show ${item.label}` : `Hide ${item.label}`}>
+                        {isHidden ? <Eye size={15} /> : <EyeOff size={15} />}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {showProfileSetup && (
+        <ProfileSetupModal user={user} onComplete={handleProfileSetupComplete} />
+      )}
+
+      {showTimerSettings && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="timer-settings-title">
+            <div>
+              <p className="eyebrow">Timer</p>
+              <h2 id="timer-settings-title">Timer settings</h2>
+            </div>
+            <div className="timer-mode-grid">
+              <button className={timerMode === "countup" ? "choice-button active" : "choice-button"} type="button" onClick={() => changeTimerMode("countup")}>
+                <strong>Count up</strong>
+                <span>Tap to start from zero and stop whenever.</span>
+              </button>
+              <button className={timerMode === "countdown" ? "choice-button active" : "choice-button"} type="button" onClick={() => changeTimerMode("countdown")}>
+                <strong>Countdown</strong>
+                <span>Runs to zero, then stops.</span>
+              </button>
+              <button className={timerMode === "interval" ? "choice-button active" : "choice-button"} type="button" onClick={() => changeTimerMode("interval")}>
+                <strong>Intervals</strong>
+                <span>Alternates work/rest each time it finishes.</span>
+              </button>
+            </div>
+            {timerMode === "countdown" && (
+              <div className="timer-settings-grid">
+                <label>
+                  Minutes
+                  <input value={countdownMinutes} onChange={(event) => updateCountdownPart("minutes", event.target.value)} inputMode="numeric" />
+                </label>
+                <label>
+                  Seconds
+                  <input value={countdownRemainderSeconds} onChange={(event) => updateCountdownPart("seconds", event.target.value)} inputMode="numeric" />
+                </label>
+              </div>
+            )}
+            {timerMode === "interval" && (
+              <>
+                <div className="timer-settings-grid">
+                  <label>
+                    Work seconds
+                    <input value={intervalWorkSeconds} onChange={(event) => setIntervalWorkSeconds(Math.max(1, Number(event.target.value) || 1))} inputMode="numeric" />
+                  </label>
+                  <label>
+                    Rest seconds
+                    <input value={intervalRestSeconds} onChange={(event) => setIntervalRestSeconds(Math.max(1, Number(event.target.value) || 1))} inputMode="numeric" />
+                  </label>
+                </div>
+                <label className="checkbox-field">
+                  <input
+                    checked={intervalEndless}
+                    onChange={(event) => {
+                      setIntervalEndless(event.target.checked);
+                      setIntervalCurrentRound(1);
+                      setTimerStartedAt(null);
+                      setTimerBankedSeconds(0);
+                    }}
+                    type="checkbox"
+                  />
+                  Endless intervals
+                </label>
+                {!intervalEndless && (
+                  <label>
+                    Rounds
+                    <input value={intervalRounds} onChange={(event) => {
+                      setIntervalRounds(Math.max(1, Number(event.target.value) || 1));
+                      setIntervalCurrentRound(1);
+                      setTimerStartedAt(null);
+                      setTimerBankedSeconds(0);
+                    }} inputMode="numeric" />
+                  </label>
+                )}
+              </>
+            )}
+            <div className="timer-settings-actions">
+              <button className="secondary" type="button" onClick={resetTimer}>
+                Reset timer
+              </button>
+              <button className="primary" type="button" onClick={() => setShowTimerSettings(false)}>
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {view === "profile" ? (
+        <ProfilePage user={user} isTrainer={isTrainer} logs={logs} onOpenEdit={() => setView("edit-profile")} onOpenMaxes={() => setView("maxes")} onOpenGoals={() => setView("progress")} onOpenSettings={() => setView("settings")} />
+      ) : view === "edit-profile" ? (
+        <ProfileEditPage user={user} onProfileSaved={handleProfileSaved} />
+      ) : view === "maxes" ? (
+        <MaxesPage user={user} onSaveMaxes={syncUserMaxes} />
+      ) : view === "progress" ? (
+        <GoalsPage user={user} logs={logs} />
+      ) : view === "settings" ? (
+        <SettingsPage onOpenSection={(section) => setView(`settings-${section}`)} />
+      ) : view.startsWith("settings-") ? (
+        <SettingsSectionPage
+          section={view.replace("settings-", "")}
+          user={user}
+          serviceWorkerRegistration={serviceWorkerRegistration}
+          updateRegistration={updateRegistration}
+          onApplyUpdate={applyAppUpdate}
+          onLogout={handleLogout}
+          onBack={() => setView("settings")}
+          onProfileSaved={handleProfileSaved}
+        />
+      ) : view === "store" ? (
+        <StorePage />
+      ) : view === "community" ? (
+        <CommunityPage user={user} />
+      ) : view === "messages" ? (
+        <MessagesPage />
+      ) : view === "news" ? (
+        <NewsPage />
+      ) : view === "food-log" ? (
+        <FoodLogPage />
+      ) : view === "stretches" ? (
+        <StretchesPage />
+      ) : view === "warmup-cooldown" ? (
+        <WarmupCooldownPage />
+      ) : view === "stored-programs" ? (
+        <StoredProgramsPage user={user} programs={programs} workouts={allProgramSourceWorkouts} logs={logs} onProgramStarted={refreshCustomWorkouts} />
+      ) : view === "stored-workouts" ? (
+        <StoredWorkoutsPage user={user} programs={programs} workouts={scheduledWorkouts} logs={logs} onOpenWorkout={openStoredWorkout} />
+      ) : view === "programs" ? (
+        <ProgramsPage
+          user={user}
+          isTrainer={isTrainer}
+          programs={programs}
+          workouts={allProgramSourceWorkouts}
+          logs={athleteProgressLogs}
+          selectedDate={selectedDate}
+          onProgramCreated={refreshCustomWorkouts}
+          onWorkoutCreated={handleProgramWorkoutCreated}
+        />
+      ) : view === "athletes" ? (
+        <AthletesPage programs={programs} workouts={allProgramSourceWorkouts} logs={athleteProgressLogs} />
+      ) : view === "workout-list" ? (
+        <WorkoutListView date={selectedDate} workoutGroups={selectedWorkoutGroups} logs={logs} programs={programs} onOpenWorkout={openWorkout} onAddWorkout={openBlankWorkout} onChangeDate={openWorkoutList} />
+      ) : view === "workout" ? (
+        <WorkoutView workout={selectedWorkout} workoutKey={activeWorkoutKey} date={selectedDate} user={user} logs={logs} setLogs={setLogs} onDone={() => setView("client")} onSaveStatus={handleWorkoutSaveStatus} onMoveWorkout={moveSelectedWorkout} />
+      ) : (
+        <>
+          <div className="today-row">
+            <button className="primary" type="button" onClick={() => openWorkoutList(todayTarget)}>
+              View today's workout
+            </button>
+          </div>
+          <CalendarStrip
+            sections={calendarMonths}
+            selectedDate={selectedDate}
+            onSelectDate={openWorkoutList}
+            logs={logs}
+            workoutsByDate={workoutsByDate}
+            onShowMoreMonths={() => setVisibleCalendarMonths((count) => count + 3)}
+          />
+        </>
+      )}
+      {!isOnline && <div className="connection-banner" role="status">Offline. Workout changes save on this device.</div>}
+      {saveMessage && <div className="sync-toast" role="status">{saveMessage}</div>}
+      {notificationMessage && <div className="notification-toast" role="status">{notificationMessage}</div>}
+    </main>
+  );
+}

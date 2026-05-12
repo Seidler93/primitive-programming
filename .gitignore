@@ -4,3 +4,18 @@ dist/
 .env.local
 .firebase/
 firebase-debug.log
+
+# Codex/Git scratch artifacts from local release and deploy attempts
+.codex*
+codex-*/
+codex-*
+.live-git/
+.merge-git/
+.merge-work*/
+.publish-work/
+release-objects/
+release-publish-*/
+release-index*.lock
+vite-dev*.log
+write-probe.tmp
+writetest-dir-*/
