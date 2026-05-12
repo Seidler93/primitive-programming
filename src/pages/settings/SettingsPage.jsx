@@ -86,7 +86,7 @@ export function SettingsPage({ onOpenSection }) {
   );
 }
 
-export function SettingsSectionPage({ section, user, serviceWorkerRegistration, updateRegistration, onApplyUpdate, onLogout, onBack, onProfileSaved }) {
+export function SettingsSectionPage({ section, user, isTrainer, serviceWorkerRegistration, updateRegistration, onApplyUpdate, onLogout, onBack, onProfileSaved }) {
   const [bodyMetricSettings, setBodyMetricSettings] = useState(() => loadBodyMetricSettings(user.uid));
   const [weightUnit, setWeightUnit] = useState(() => loadUserWeightUnit(user.uid));
   const [distanceUnit, setDistanceUnit] = useState(() => loadUserDistanceUnit(user.uid));
@@ -308,27 +308,35 @@ export function SettingsSectionPage({ section, user, serviceWorkerRegistration, 
         </div>
       ) : (
         <div className="settings-actions">
+          <div className="profile-block">
+            <h3>Account info</h3>
+            <dl className="profile-list">
+              <div>
+                <dt>Email</dt>
+                <dd>{user.email || "No email on file"}</dd>
+              </div>
+              <div>
+                <dt>Role</dt>
+                <dd>{isTrainer ? "Coach" : "Athlete"}</dd>
+              </div>
+              <div>
+                <dt>User ID</dt>
+                <dd>{user.uid}</dd>
+              </div>
+            </dl>
+          </div>
           <form className="profile-settings-form" onSubmit={savePhysicalProfile}>
             <div className="settings-block-heading">
               <p className="eyebrow">Profile</p>
               <h3>Body details</h3>
-              <p>Metric preference, height, and weight used for goals and body metrics.</p>
+              <p>Height and weight used for goals and body metrics.</p>
             </div>
-            <label>
-              Metric preference
-              <select value={measurementSystem} onChange={(event) => setMeasurementSystem(event.target.value)}>
-                <option value="metric">Metric (kg, cm)</option>
-                <option value="imperial">Imperial (lb, in)</option>
-              </select>
-            </label>
             <label>
               Gender
               <select value={gender} onChange={(event) => setGender(event.target.value)}>
                 <option value="">Prefer not to say</option>
-                <option value="female">Female</option>
                 <option value="male">Male</option>
-                <option value="nonbinary">Non-binary</option>
-                <option value="self-described">Self-described</option>
+                <option value="female">Female</option>
               </select>
             </label>
             <label>

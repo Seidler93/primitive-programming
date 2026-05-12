@@ -1,8 +1,10 @@
 import React from "react";
-import { CalendarStrip, WorkoutListView, WorkoutView } from "../components/workout/WorkoutViews";
+import { WorkoutView } from "../components/workout/WorkoutViews";
 import { AthletesPage } from "../pages/athletes/AthletesPage";
 import { CommunityPage } from "../pages/community/CommunityPage";
 import { FoodLogPage } from "../pages/food-log/FoodLogPage";
+import { DayView } from "../pages/home/day-view/DayView";
+import { HomePage } from "../pages/home/HomePage";
 import { MessagesPage } from "../pages/messages/MessagesPage";
 import { NewsPage } from "../pages/news/NewsPage";
 import { GoalsPage } from "../pages/progress/GoalsPage";
@@ -64,6 +66,7 @@ export function AppRoutes({
         <SettingsPage onOpenSection={(section) => setView(`settings-${section}`)} />
       ) : view.startsWith("settings-") ? (
         <SettingsSectionPage
+          isTrainer={isTrainer}
           section={view.replace("settings-", "")}
           user={user}
           serviceWorkerRegistration={serviceWorkerRegistration}
@@ -105,25 +108,19 @@ export function AppRoutes({
       ) : view === "athletes" ? (
         <AthletesPage programs={programs} workouts={allProgramSourceWorkouts} logs={athleteProgressLogs} />
       ) : view === "workout-list" ? (
-        <WorkoutListView date={selectedDate} workoutGroups={selectedWorkoutGroups} logs={logs} programs={programs} onOpenWorkout={openWorkout} onAddWorkout={openBlankWorkout} onChangeDate={openWorkoutList} />
+        <DayView date={selectedDate} workoutGroups={selectedWorkoutGroups} logs={logs} programs={programs} onOpenWorkout={openWorkout} onAddWorkout={openBlankWorkout} onChangeDate={openWorkoutList} />
       ) : view === "workout" ? (
         <WorkoutView workout={selectedWorkout} workoutKey={activeWorkoutKey} date={selectedDate} user={user} logs={logs} setLogs={setLogs} onDone={() => setView("client")} onSaveStatus={handleWorkoutSaveStatus} onMoveWorkout={moveSelectedWorkout} onSaveMaxes={syncUserMaxes} />
       ) : (
-        <>
-          <div className="today-row">
-            <button className="primary" type="button" onClick={() => openWorkoutList(todayTarget)}>
-              View today's workout
-            </button>
-          </div>
-          <CalendarStrip
-            sections={calendarMonths}
-            selectedDate={selectedDate}
-            onSelectDate={openWorkoutList}
-            logs={logs}
-            workoutsByDate={workoutsByDate}
-            onShowMoreMonths={() => setVisibleCalendarMonths((count) => count + 3)}
-          />
-        </>
+        <HomePage
+          calendarMonths={calendarMonths}
+          logs={logs}
+          onOpenWorkoutList={openWorkoutList}
+          onShowMoreMonths={() => setVisibleCalendarMonths((count) => count + 3)}
+          selectedDate={selectedDate}
+          todayTarget={todayTarget}
+          workoutsByDate={workoutsByDate}
+        />
       )
   );
 }

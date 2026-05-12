@@ -1,28 +1,39 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AppRoutes } from "./AppRoutes";
 import { AppShell } from "../components/shell/AppShell";
+import { useToastNotifications } from "../components/notifications/useToastNotifications";
 import { BootPage } from "../pages/boot/BootPage";
 import { LoginPage } from "../pages/login/LoginPage";
-import { ProfileSetupModal } from "../pages/profile/ProfilePage";
+import { ProfileSetupModal } from "../components/profile/ProfileSetupModal";
 import { defaultSelectedDate, flexibleScheduleMode } from "./config";
-import { menuButtonItemMap } from "./menuRoutes";
-import { AuthProvider } from "../context/AuthContext";
+import { AuthProvider, useAuth } from "../context/AuthContext";
 import { MenuProvider } from "../context/MenuContext";
 import { TimerProvider } from "../context/TimerContext";
-import { ensureUserDocument, isTrainerUser, listenForForegroundMessages, loadCustomWorkouts, loadPrograms, loadProgramsForUser, loadUserMaxes as loadCloudUserMaxes, loadUserProfile, loadUserWorkouts, logout, observeAuth, saveCustomWorkout, saveUserActiveProgram, saveUserMaxes as saveCloudUserMaxes } from "../services/firebase";
+import { loadCustomWorkouts, loadPrograms, loadProgramsForUser, loadUserWorkouts, saveCustomWorkout, saveUserActiveProgram } from "../services/firebase";
 import { activateWaitingServiceWorker, registerAppServiceWorker } from "../services/pwa";
-import { appRouteUrl, applyActiveProgramDates, buildWorkoutDatesForProgram, calendarSections, flexibleProgramWorkoutGroups, formatTimer, groupByDate, groupWorkouts, isDevUser, loadMenuButtonPreferences, loadWorkoutScheduleOverrides, mergeUserProfile, moveWorkoutDraft, normalizeMenuButtonPreferences, readAppRoute, saveMenuButtonPreferences, saveUserMaxes, saveWorkoutScheduleOverrides, shiftDate, workoutDateMapKey } from "../utils/appHelpers";
-
-async function syncUserMaxes(userId, maxes) {
-  saveUserMaxes(userId, maxes);
-  return saveCloudUserMaxes(userId, maxes);
-}
+import { appRouteUrl, applyActiveProgramDates, buildWorkoutDatesForProgram, calendarSections, flexibleProgramWorkoutGroups, groupByDate, groupWorkouts, isDevUser, loadWorkoutScheduleOverrides, moveWorkoutDraft, readAppRoute, saveWorkoutScheduleOverrides, shiftDate, workoutDateMapKey } from "../utils/appHelpers";
 
 export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+}
+
+function AppContent() {
   const initialRoute = useMemo(() => readAppRoute(), []);
-  const [user, setUser] = useState(null);
-  const [checking, setChecking] = useState(true);
-  const [isTrainer, setIsTrainer] = useState(false);
+  const {
+    checking,
+    handleLogout: logoutUser,
+    handleProfileSaved,
+    handleProfileSetupComplete,
+    hydrateUser,
+    isTrainer,
+    showProfileSetup,
+    syncUserMaxes,
+    user,
+  } = useAuth();
   const [logs, setLogs] = useState({});
   const [athleteProgressLogs, setAthleteProgressLogs] = useState({});
   const [customWorkouts, setCustomWorkouts] = useState([]);
@@ -35,68 +46,13 @@ export default function App() {
   const [daySwipeStart, setDaySwipeStart] = useState(null);
   const [serviceWorkerRegistration, setServiceWorkerRegistration] = useState(null);
   const [updateRegistration, setUpdateRegistration] = useState(null);
-  const [notificationMessage, setNotificationMessage] = useState("");
-  const [saveMessage, setSaveMessage] = useState("");
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
   const [isMobileViewport, setIsMobileViewport] = useState(() => (
     typeof window === "undefined" ? false : window.matchMedia("(max-width: 760px)").matches
   ));
-  const [showNavMenu, setShowNavMenu] = useState(false);
-  const [menuEditMode, setMenuEditMode] = useState(false);
-  const [menuPressHandled, setMenuPressHandled] = useState(false);
-  const [menuButtonPreferences, setMenuButtonPreferences] = useState(loadMenuButtonPreferences);
-  const [showProfileSetup, setShowProfileSetup] = useState(false);
   const [visibleCalendarMonths, setVisibleCalendarMonths] = useState(3);
-  const [timerMode, setTimerMode] = useState("countup");
-  const [countdownSeconds, setCountdownSeconds] = useState(180);
-  const [intervalWorkSeconds, setIntervalWorkSeconds] = useState(60);
-  const [intervalRestSeconds, setIntervalRestSeconds] = useState(30);
-  const [intervalPhase, setIntervalPhase] = useState("work");
-  const [intervalRounds, setIntervalRounds] = useState(5);
-  const [intervalCurrentRound, setIntervalCurrentRound] = useState(1);
-  const [intervalEndless, setIntervalEndless] = useState(true);
-  const [showTimerSettings, setShowTimerSettings] = useState(false);
-  const [longPressTimer, setLongPressTimer] = useState(null);
-  const [timerPressHandled, setTimerPressHandled] = useState(false);
-  const [lastTimerTap, setLastTimerTap] = useState(0);
-  const [timerStartedAt, setTimerStartedAt] = useState(null);
-  const [timerBankedSeconds, setTimerBankedSeconds] = useState(0);
-  const [timerNow, setTimerNow] = useState(Date.now());
   const routeWritePending = useRef(false);
-  const menuLongPressTimer = useRef(null);
-  const timerRunning = Boolean(timerStartedAt);
-  const timerElapsedSeconds = timerBankedSeconds + (timerRunning ? Math.floor((timerNow - timerStartedAt) / 1000) : 0);
-  const activeIntervalSeconds = intervalPhase === "work" ? intervalWorkSeconds : intervalRestSeconds;
-  const timerSeconds = timerMode === "countup" ? timerElapsedSeconds : Math.max(0, (timerMode === "countdown" ? countdownSeconds : activeIntervalSeconds) - timerElapsedSeconds);
-  const timerLabel = timerMode === "interval" ? `${intervalPhase === "work" ? "W" : "R"}${intervalEndless ? "" : intervalCurrentRound} ${formatTimer(timerSeconds)}` : formatTimer(timerSeconds);
-  const countdownMinutes = Math.floor(countdownSeconds / 60);
-  const countdownRemainderSeconds = countdownSeconds % 60;
-
-  useEffect(() => {
-    if (!showNavMenu || typeof document === "undefined" || typeof window === "undefined") return undefined;
-
-    const scrollY = window.scrollY;
-    const body = document.body;
-    const previousStyles = {
-      overflow: body.style.overflow,
-      position: body.style.position,
-      top: body.style.top,
-      width: body.style.width,
-    };
-
-    body.style.overflow = "hidden";
-    body.style.position = "fixed";
-    body.style.top = `-${scrollY}px`;
-    body.style.width = "100%";
-
-    return () => {
-      body.style.overflow = previousStyles.overflow;
-      body.style.position = previousStyles.position;
-      body.style.top = previousStyles.top;
-      body.style.width = previousStyles.width;
-      window.scrollTo(0, scrollY);
-    };
-  }, [showNavMenu]);
+  const { handleWorkoutSaveStatus, notificationMessage, saveMessage } = useToastNotifications(user);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -107,44 +63,28 @@ export default function App() {
     return () => mobileQuery.removeEventListener("change", syncMobileViewport);
   }, []);
 
-  async function hydrateUser(nextUser) {
-    if (!nextUser) {
-      setUser(null);
-      setShowProfileSetup(false);
-      setLogs({});
-      setAthleteProgressLogs({});
-      setIsTrainer(false);
-      setCustomWorkouts([]);
-      setPrograms([]);
-      setProgramWorkouts([]);
-      setWorkoutScheduleOverrides({});
-      return;
-    }
-
-    const [profile, cloudMaxes, rootUser] = await Promise.all([
-      loadUserProfile(nextUser.uid),
-      loadCloudUserMaxes(nextUser.uid),
-      ensureUserDocument(nextUser),
-    ]);
-    saveUserMaxes(nextUser.uid, cloudMaxes);
-    const profiledUser = mergeUserProfile(nextUser, { ...rootUser, ...profile });
-    setUser(profiledUser);
-    setShowProfileSetup(profile.profileSetupCompleted !== true);
-
-    const [nextLogs, nextTrainer] = await Promise.all([
-      loadUserWorkouts(nextUser.uid),
-      isTrainerUser(nextUser),
-    ]);
-    const nextPrograms = nextTrainer || isDevUser(nextUser.uid) ? await loadPrograms() : await loadProgramsForUser(profiledUser);
-
-    setLogs(nextLogs);
-    setIsTrainer(nextTrainer);
-    setAthleteProgressLogs(nextTrainer ? await loadUserWorkouts("dev-athlete") : nextLogs);
+  function clearAppData() {
+    setLogs({});
+    setAthleteProgressLogs({});
     setCustomWorkouts([]);
-    setWorkoutScheduleOverrides(loadWorkoutScheduleOverrides(nextUser.uid));
-    const programWorkoutState = await loadProgramWorkoutState(nextUser, nextPrograms, nextTrainer);
-    setPrograms(programWorkoutState.programs);
-    setProgramWorkouts(programWorkoutState.workouts);
+    setPrograms([]);
+    setProgramWorkouts([]);
+    setWorkoutScheduleOverrides({});
+  }
+
+  async function loadAuthenticatedUserData(currentUser, userIsTrainer) {
+    const [nextLogs, nextPrograms] = await Promise.all([
+      loadUserWorkouts(currentUser.uid),
+      userIsTrainer || isDevUser(currentUser.uid) ? loadPrograms() : loadProgramsForUser(currentUser),
+    ]);
+    const programWorkoutState = await loadProgramWorkoutState(currentUser, nextPrograms, userIsTrainer);
+    return {
+      logs: nextLogs,
+      athleteProgressLogs: userIsTrainer ? await loadUserWorkouts("dev-athlete") : nextLogs,
+      programs: programWorkoutState.programs,
+      programWorkouts: programWorkoutState.workouts,
+      workoutScheduleOverrides: loadWorkoutScheduleOverrides(currentUser.uid),
+    };
   }
 
   async function loadProgramWorkoutState(currentUser, nextPrograms, userIsTrainer = isTrainer) {
@@ -198,12 +138,25 @@ export default function App() {
   }
 
   useEffect(() => {
-    return observeAuth((nextUser) => {
-      setUser(mergeUserProfile(nextUser));
-      setChecking(false);
-      hydrateUser(nextUser);
+    if (checking) return undefined;
+    if (!user) {
+      clearAppData();
+      return undefined;
+    }
+    let active = true;
+    loadAuthenticatedUserData(user, isTrainer).then((nextData) => {
+      if (!active) return;
+      setLogs(nextData.logs);
+      setAthleteProgressLogs(nextData.athleteProgressLogs);
+      setCustomWorkouts([]);
+      setWorkoutScheduleOverrides(nextData.workoutScheduleOverrides);
+      setPrograms(nextData.programs);
+      setProgramWorkouts(nextData.programWorkouts);
     });
-  }, []);
+    return () => {
+      active = false;
+    };
+  }, [checking, isTrainer, user?.uid]);
 
   useEffect(() => {
     function applyBrowserRoute() {
@@ -212,7 +165,6 @@ export default function App() {
       setSelectedDate(nextRoute.selectedDate);
       setSelectedWorkoutKey(nextRoute.selectedWorkoutKey);
       setView(nextRoute.view);
-      setShowNavMenu(false);
     }
 
     window.addEventListener("popstate", applyBrowserRoute);
@@ -250,65 +202,6 @@ export default function App() {
       window.removeEventListener("offline", updateOnlineStatus);
     };
   }, []);
-
-  useEffect(() => {
-    saveMenuButtonPreferences(menuButtonPreferences);
-  }, [menuButtonPreferences]);
-
-  useEffect(() => () => {
-    if (menuLongPressTimer.current) window.clearTimeout(menuLongPressTimer.current);
-  }, []);
-
-  useEffect(() => {
-    if (!user) return undefined;
-    let unsubscribe = () => {};
-    let active = true;
-
-    listenForForegroundMessages((payload = {}) => {
-      const notification = payload?.notification || {};
-      const data = payload?.data || {};
-      const title = notification.title || data.title || "Primitive Programming";
-      const body = notification.body || data.body || "New training update received.";
-      setNotificationMessage(`${title}: ${body}`);
-      window.setTimeout(() => setNotificationMessage(""), 5000);
-    }).then((nextUnsubscribe) => {
-      if (active) unsubscribe = nextUnsubscribe;
-    });
-
-    return () => {
-      active = false;
-      unsubscribe();
-    };
-  }, [user]);
-
-  useEffect(() => {
-    if (!timerRunning) return undefined;
-    const intervalId = window.setInterval(() => setTimerNow(Date.now()), 500);
-    return () => window.clearInterval(intervalId);
-  }, [timerRunning]);
-
-  useEffect(() => {
-    if (!timerRunning || timerMode === "countup") return;
-    const targetSeconds = timerMode === "countdown" ? countdownSeconds : activeIntervalSeconds;
-    if (timerElapsedSeconds < targetSeconds) return;
-
-    if (timerMode === "interval") {
-      if (intervalPhase === "work") {
-        setIntervalPhase("rest");
-      } else {
-        const nextRound = intervalCurrentRound + 1;
-        if (!intervalEndless && nextRound > intervalRounds) {
-          setIntervalPhase("work");
-          setIntervalCurrentRound(1);
-        } else {
-          setIntervalPhase("work");
-          setIntervalCurrentRound(nextRound);
-        }
-      }
-    }
-    setTimerStartedAt(null);
-    setTimerBankedSeconds(0);
-  }, [activeIntervalSeconds, countdownSeconds, intervalCurrentRound, intervalEndless, intervalPhase, intervalRounds, timerElapsedSeconds, timerMode, timerRunning]);
 
   useEffect(() => {
     if (isMobileViewport && view === "programs") {
@@ -362,23 +255,6 @@ export default function App() {
     : selectedWorkoutGroups.find((group) => group.key === activeWorkoutKey) || selectedWorkoutGroups[0] || null;
   const today = new Date().toISOString().slice(0, 10);
   const todayTarget = workoutsByDate[today] ? today : dates.find((date) => date >= today) || dates[0] || today;
-  const orderedMenuButtons = useMemo(() => {
-    const normalized = normalizeMenuButtonPreferences(menuButtonPreferences);
-    const hiddenIds = new Set(normalized.hidden);
-    const applicableItems = normalized.order
-      .map((id) => menuButtonItemMap[id])
-      .filter(Boolean)
-      .filter((item) => {
-        if (item.trainerOnly && !isTrainer) return false;
-        if (item.hideForTrainer && isTrainer) return false;
-        if (item.hideOnMobile && isMobileViewport) return false;
-        return true;
-      });
-    const visibleItems = applicableItems.filter((item) => !hiddenIds.has(item.id));
-    if (!menuEditMode) return visibleItems.length ? visibleItems : [menuButtonItemMap.settings];
-    return applicableItems;
-  }, [isMobileViewport, isTrainer, menuButtonPreferences, menuEditMode]);
-  const hiddenMenuButtonIds = useMemo(() => new Set(normalizeMenuButtonPreferences(menuButtonPreferences).hidden), [menuButtonPreferences]);
 
   function openWorkoutList(date) {
     setSelectedDate(date);
@@ -437,28 +313,15 @@ export default function App() {
     setSelectedWorkoutKey(nextWorkoutKey);
   }
 
-  function handleProfileSaved(profile) {
-    setUser((currentUser) => ({ ...currentUser, ...profile }));
-  }
-
-  function handleProfileSetupComplete(profile) {
-    setUser((currentUser) => ({ ...currentUser, ...profile }));
-    setShowProfileSetup(false);
-  }
-
-  async function handleLogout() {
-    await logout();
+  async function handleAppLogout() {
+    await logoutUser();
     setView("client");
-    setUser(null);
-    setShowProfileSetup(false);
     setLogs({});
     setAthleteProgressLogs({});
-    setIsTrainer(false);
     setCustomWorkouts([]);
     setPrograms([]);
     setProgramWorkouts([]);
     setWorkoutScheduleOverrides({});
-    setChecking(false);
   }
 
   async function moveSelectedWorkout(nextDate) {
@@ -508,199 +371,12 @@ export default function App() {
     activateWaitingServiceWorker(updateRegistration);
   }
 
-  function resetTimer() {
-    setTimerStartedAt(null);
-    setTimerBankedSeconds(0);
-    setTimerNow(Date.now());
-    if (timerMode === "interval") {
-      setIntervalPhase("work");
-      setIntervalCurrentRound(1);
-    }
-  }
-
-  function toggleTimer() {
-    if (timerRunning) {
-      setTimerBankedSeconds(timerElapsedSeconds);
-      setTimerStartedAt(null);
-      return;
-    }
-    setTimerStartedAt(Date.now());
-    setTimerNow(Date.now());
-  }
-
-  function startTimerPress() {
-    setTimerPressHandled(false);
-    const timeoutId = window.setTimeout(() => {
-      setTimerPressHandled(true);
-      setShowTimerSettings(true);
-    }, 550);
-    setLongPressTimer(timeoutId);
-  }
-
-  function endTimerPress() {
-    if (longPressTimer) window.clearTimeout(longPressTimer);
-    setLongPressTimer(null);
-  }
-
-  function handleTimerClick() {
-    if (timerPressHandled) {
-      setTimerPressHandled(false);
-      return;
-    }
-    const now = Date.now();
-    if (now - lastTimerTap < 320) {
-      setLastTimerTap(0);
-      resetTimer();
-      return;
-    }
-    setLastTimerTap(now);
-    toggleTimer();
-  }
-
-  function changeTimerMode(mode) {
-    setTimerMode(mode);
-    setTimerStartedAt(null);
-    setTimerBankedSeconds(0);
-    setIntervalPhase("work");
-    setIntervalCurrentRound(1);
-  }
-
-  function updateCountdownPart(part, value) {
-    const numericValue = Math.max(0, Number(value) || 0);
-    const nextMinutes = part === "minutes" ? numericValue : countdownMinutes;
-    const nextSeconds = part === "seconds" ? Math.min(59, numericValue) : countdownRemainderSeconds;
-    setCountdownSeconds(Math.max(1, (nextMinutes * 60) + nextSeconds));
-    setTimerStartedAt(null);
-    setTimerBankedSeconds(0);
-  }
-
-  function startMenuButtonPress() {
-    if (menuEditMode) return;
-    setMenuPressHandled(false);
-    if (menuLongPressTimer.current) window.clearTimeout(menuLongPressTimer.current);
-    menuLongPressTimer.current = window.setTimeout(() => {
-      setMenuPressHandled(true);
-      setMenuEditMode(true);
-    }, 600);
-  }
-
-  function endMenuButtonPress() {
-    if (menuLongPressTimer.current) window.clearTimeout(menuLongPressTimer.current);
-    menuLongPressTimer.current = null;
-  }
-
-  function handleMenuButtonClick(item) {
-    if (menuPressHandled) {
-      setMenuPressHandled(false);
-      return;
-    }
-    if (menuEditMode) return;
-    openMenuView(item.view);
-  }
-
-  function moveMenuButton(itemId, targetItemId) {
-    setMenuButtonPreferences((current) => {
-      const nextPreferences = normalizeMenuButtonPreferences(current);
-      const currentIndex = nextPreferences.order.indexOf(itemId);
-      const nextIndex = nextPreferences.order.indexOf(targetItemId);
-      if (currentIndex < 0 || nextIndex < 0 || nextIndex >= nextPreferences.order.length) return nextPreferences;
-      const nextOrder = [...nextPreferences.order];
-      [nextOrder[currentIndex], nextOrder[nextIndex]] = [nextOrder[nextIndex], nextOrder[currentIndex]];
-      return { ...nextPreferences, order: nextOrder };
-    });
-  }
-
-  function toggleMenuButtonHidden(itemId) {
-    setMenuButtonPreferences((current) => {
-      const nextPreferences = normalizeMenuButtonPreferences(current);
-      const hidden = new Set(nextPreferences.hidden);
-      if (hidden.has(itemId)) {
-        hidden.delete(itemId);
-      } else {
-        hidden.add(itemId);
-      }
-      return { ...nextPreferences, hidden: [...hidden] };
-    });
-  }
-
-  function resetMenuButtons() {
-    setMenuButtonPreferences(normalizeMenuButtonPreferences());
-  }
-
-  function openMenuView(nextView) {
-    setView(nextView);
-    setShowNavMenu(false);
-    setMenuEditMode(false);
-  }
-
-  function handleWorkoutSaveStatus(result) {
-    if (result?.synced) {
-      setSaveMessage("Workout synced.");
-    } else {
-      setSaveMessage("Workout saved on this device.");
-    }
-    window.setTimeout(() => setSaveMessage(""), 3200);
-  }
-
   if (checking) return <BootPage />;
   if (!user) return <LoginPage onAuthed={hydrateUser} />;
 
-  const authContextValue = {
-    handleLogout,
-    isTrainer,
-    setUser,
-    showProfileSetup,
-    user,
-  };
-  const menuContextValue = {
-    handleMenuButtonClick,
-    hiddenMenuButtonIds,
-    hideMenu: () => {
-      setShowNavMenu(false);
-      setMenuEditMode(false);
-    },
-    menuEditMode,
-    moveMenuButton,
-    orderedMenuButtons,
-    resetMenuButtons,
-    setMenuEditMode,
-    showMenu: () => setShowNavMenu(true),
-    showNavMenu,
-    startMenuButtonPress,
-    stopMenuButtonPress: endMenuButtonPress,
-    toggleMenuButtonHidden,
-  };
-  const timerContextValue = {
-    changeTimerMode,
-    countdownMinutes,
-    countdownRemainderSeconds,
-    handleTimerClick,
-    intervalEndless,
-    intervalRestSeconds,
-    intervalRounds,
-    intervalWorkSeconds,
-    resetTimer,
-    setIntervalCurrentRound,
-    setIntervalEndless,
-    setIntervalRestSeconds,
-    setIntervalRounds,
-    setIntervalWorkSeconds,
-    setShowTimerSettings,
-    setTimerBankedSeconds,
-    setTimerStartedAt,
-    showTimerSettings,
-    startTimerPress,
-    stopTimerPress: endTimerPress,
-    timerLabel,
-    timerMode,
-    timerRunning,
-    updateCountdownPart,
-  };
-
   return (
-    <AuthProvider value={authContextValue}>
-      <MenuProvider value={menuContextValue}>
-        <TimerProvider value={timerContextValue}>
+      <MenuProvider isMobileViewport={isMobileViewport} isTrainer={isTrainer} onOpenView={setView}>
+        <TimerProvider>
           <AppShell
             view={view}
             onStartDaySwipe={startDaySwipe}
@@ -749,11 +425,10 @@ export default function App() {
               user={user}
               view={view}
               workoutsByDate={workoutsByDate}
-              handleLogout={handleLogout}
+              handleLogout={handleAppLogout}
             />
           </AppShell>
         </TimerProvider>
       </MenuProvider>
-    </AuthProvider>
   );
 }

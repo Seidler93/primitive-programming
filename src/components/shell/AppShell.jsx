@@ -1,6 +1,7 @@
 import React from "react";
 import { MenuPanel } from "../menu/MenuPanel";
 import { NavBar } from "../nav/NavBar";
+import { NotificationToasts } from "../notifications/NotificationToasts";
 import { TimerSettingsModal } from "../nav/TimerSettingsModal";
 import { useMenu } from "../../context/MenuContext";
 import { useTimer } from "../../context/TimerContext";
@@ -38,9 +39,11 @@ export function AppShell({
 
       {children}
 
-      {!isOnline && <div className="connection-banner" role="status">Offline. Workout changes save on this device.</div>}
-      {saveMessage && <div className="sync-toast" role="status">{saveMessage}</div>}
-      {notificationMessage && <div className="notification-toast" role="status">{notificationMessage}</div>}
+      <NotificationToasts
+        isOnline={isOnline}
+        notificationMessage={notificationMessage}
+        saveMessage={saveMessage}
+      />
     </main>
   );
 }
