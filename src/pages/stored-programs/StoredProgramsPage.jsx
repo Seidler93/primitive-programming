@@ -1,44 +1,90 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { CalendarDays, ChevronRight, ClipboardList, Eye, Minus } from "lucide-react";
 import { defaultSelectedDate, flexibleScheduleMode } from "../../app/config";
-import { removeUserActiveProgram, saveUserActiveProgram } from "../../services/firebase";
+import { loadAthletes, removeUserActiveProgram, saveUserActiveProgram } from "../../services/firebase";
 import { buildWorkoutDatesForProgram, formatDate, progressSummary } from "../../utils/appHelpers";
 import { ProgramWorkoutViewer } from "../programs/ProgramsPage";
 
-export function StoredProgramsPage({ user, programs, workouts, logs, onProgramStarted }) {
+export function StoredProgramsPage({ user, isTrainer, programs, workouts, logs, onProgramStarted }) {
   const [expandedProgramId, setExpandedProgramId] = useState("");
+  const [activePanel, setActivePanel] = useState("");
   const [viewingProgram, setViewingProgram] = useState(null);
-  const [startingProgram, setStartingProgram] = useState(null);
   const [programStartDate, setProgramStartDate] = useState(defaultSelectedDate);
   const [programScheduleMode, setProgramScheduleMode] = useState("fixed");
+  const [athleteOptions, setAthleteOptions] = useState([]);
+  const [assignAthleteId, setAssignAthleteId] = useState("");
+  const [assignStartDate, setAssignStartDate] = useState(defaultSelectedDate);
+  const [assignScheduleMode, setAssignScheduleMode] = useState("fixed");
+  const [statusMessage, setStatusMessage] = useState("");
   const programOptions = programs;
 
+  useEffect(() => {
+    if (!isTrainer) return undefined;
+    let active = true;
+    loadAthletes().then((athletes) => {
+      if (!active) return;
+      setAthleteOptions(athletes);
+      setAssignAthleteId((current) => current || athletes[0]?.uid || "");
+    });
+    return () => {
+      active = false;
+    };
+  }, [isTrainer]);
+
   function openStartProgram(program) {
-    setStartingProgram(program);
-    setProgramStartDate(program.startDate || new Date().toISOString().slice(0, 10));
-    setProgramScheduleMode(program.scheduleMode || "fixed");
-    setExpandedProgramId("");
+    setExpandedProgramId(program.id);
+    setActivePanel(activePanel === "start" && expandedProgramId === program.id ? "" : "start");
+    setProgramStartDate(program.activeProgram?.startDate || program.startDate || new Date().toISOString().slice(0, 10));
+    setProgramScheduleMode(program.scheduleMode || (program.activeProgram?.scheduled === false ? flexibleScheduleMode : "fixed"));
+    setStatusMessage("");
   }
 
-  async function startProgram(event) {
-    event.preventDefault();
-    if (!user?.uid || !startingProgram || !programStartDate) return;
+  function openAssignProgram(program) {
+    setExpandedProgramId(program.id);
+    setActivePanel(activePanel === "assign" && expandedProgramId === program.id ? "" : "assign");
+    setAssignStartDate(program.startDate || new Date().toISOString().slice(0, 10));
+    setAssignScheduleMode(program.scheduleMode || "fixed");
+    setAssignAthleteId((current) => current || athleteOptions[0]?.uid || "");
+    setStatusMessage("");
+  }
 
+  function activeProgramPayload(program, selectedStartDate, selectedScheduleMode) {
     const programWorkouts = workouts
-      .filter((item) => (item.programId || "default") === startingProgram.id && item.date)
+      .filter((item) => (item.programId || "default") === program.id && item.date)
       .sort((a, b) => a.date.localeCompare(b.date));
-    const scheduled = programScheduleMode !== flexibleScheduleMode;
-    await saveUserActiveProgram(user.uid, {
-      id: startingProgram.id,
-      startDate: programStartDate,
+    const scheduled = selectedScheduleMode !== flexibleScheduleMode;
+    return {
+      id: program.id,
+      startDate: selectedStartDate,
       scheduled,
       currentWeek: 1,
       nextWorkoutIndex: 0,
-      ...(scheduled ? { workoutDates: buildWorkoutDatesForProgram(programWorkouts, programStartDate) } : {}),
-    });
-    setStartingProgram(null);
+      ...(scheduled ? { workoutDates: buildWorkoutDatesForProgram(programWorkouts, selectedStartDate) } : {}),
+    };
+  }
+
+  async function startProgram(program, event) {
+    event.preventDefault();
+    if (!user?.uid || !program?.id || !programStartDate) return;
+
+    await saveUserActiveProgram(user.uid, activeProgramPayload(program, programStartDate, programScheduleMode));
+    setStatusMessage(`${program.name} started.`);
+    setActivePanel("");
     setProgramStartDate(defaultSelectedDate);
     setProgramScheduleMode("fixed");
+    await onProgramStarted?.();
+  }
+
+  async function assignProgram(program, event) {
+    event.preventDefault();
+    if (!assignAthleteId || !program?.id || !assignStartDate) return;
+
+    await saveUserActiveProgram(assignAthleteId, activeProgramPayload(program, assignStartDate, assignScheduleMode));
+    const athlete = athleteOptions.find((item) => item.uid === assignAthleteId);
+    setStatusMessage(`${program.name} assigned to ${athlete?.displayName || athlete?.email || "athlete"}.`);
+    setActivePanel("");
+    setAssignStartDate(defaultSelectedDate);
+    setAssignScheduleMode("fixed");
     await onProgramStarted?.();
   }
 
@@ -46,6 +92,7 @@ export function StoredProgramsPage({ user, programs, workouts, logs, onProgramSt
     if (!user?.uid || !program?.id) return;
     await removeUserActiveProgram(user.uid, program.id);
     setExpandedProgramId("");
+    setActivePanel("");
     await onProgramStarted?.();
   }
 
@@ -79,7 +126,11 @@ export function StoredProgramsPage({ user, programs, workouts, logs, onProgramSt
               <button
                 className="program-card-toggle"
                 type="button"
-                onClick={() => setExpandedProgramId(expanded ? "" : program.id)}
+                onClick={() => {
+                  setExpandedProgramId(expanded ? "" : program.id);
+                  setActivePanel("");
+                  setStatusMessage("");
+                }}
                 aria-expanded={expanded}
               >
                 <div>
@@ -106,7 +157,7 @@ export function StoredProgramsPage({ user, programs, workouts, logs, onProgramSt
                 <div className="program-expanded-actions">
                   <button className="secondary" type="button" onClick={() => setViewingProgram(program)}>
                     <Eye size={17} />
-                    View workout
+                    View program
                   </button>
                   {isActiveProgram ? (
                     <button className="secondary danger-text-button" type="button" onClick={() => quitProgram(program)}>
@@ -119,6 +170,64 @@ export function StoredProgramsPage({ user, programs, workouts, logs, onProgramSt
                       Start program
                     </button>
                   )}
+                  {isTrainer && (
+                    <button className="secondary" type="button" onClick={() => openAssignProgram(program)}>
+                      <CalendarDays size={17} />
+                      Assign program
+                    </button>
+                  )}
+                  {activePanel === "start" && (
+                    <form className="program-inline-form" onSubmit={(event) => startProgram(program, event)}>
+                      <label>
+                        Start date
+                        <input type="date" value={programStartDate} onChange={(event) => setProgramStartDate(event.target.value)} required />
+                      </label>
+                      <div className="choice-list" role="radiogroup" aria-label="Program scheduling">
+                        <button className={programScheduleMode === "fixed" ? "choice-button active" : "choice-button"} type="button" onClick={() => setProgramScheduleMode("fixed")}>
+                          <strong>Known workout days</strong>
+                          <span>Keep workouts on the programmed calendar days.</span>
+                        </button>
+                        <button className={programScheduleMode === flexibleScheduleMode ? "choice-button active" : "choice-button"} type="button" onClick={() => setProgramScheduleMode(flexibleScheduleMode)}>
+                          <strong>Unknown workout days</strong>
+                          <span>Pick training days week to week and show the next program day.</span>
+                        </button>
+                      </div>
+                      <button className="primary" type="submit" disabled={!programStartDate || !user?.uid}>
+                        Confirm start
+                      </button>
+                    </form>
+                  )}
+                  {activePanel === "assign" && isTrainer && (
+                    <form className="program-inline-form" onSubmit={(event) => assignProgram(program, event)}>
+                      <label>
+                        Athlete
+                        <select value={assignAthleteId} onChange={(event) => setAssignAthleteId(event.target.value)} required>
+                          {athleteOptions.map((athlete) => (
+                            <option key={athlete.uid} value={athlete.uid}>
+                              {athlete.displayName || athlete.email || athlete.uid}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        Start date
+                        <input type="date" value={assignStartDate} onChange={(event) => setAssignStartDate(event.target.value)} required />
+                      </label>
+                      <div className="choice-list" role="radiogroup" aria-label="Program scheduling">
+                        <button className={assignScheduleMode === "fixed" ? "choice-button active" : "choice-button"} type="button" onClick={() => setAssignScheduleMode("fixed")}>
+                          <strong>Known workout days</strong>
+                          <span>Keep workouts on the programmed calendar days.</span>
+                        </button>
+                        <button className={assignScheduleMode === flexibleScheduleMode ? "choice-button active" : "choice-button"} type="button" onClick={() => setAssignScheduleMode(flexibleScheduleMode)}>
+                          <strong>Unknown workout days</strong>
+                          <span>The athlete chooses workout days week to week.</span>
+                        </button>
+                      </div>
+                      <button className="primary" type="submit" disabled={!assignAthleteId || !assignStartDate}>
+                        Assign program
+                      </button>
+                    </form>
+                  )}
                 </div>
               )}
             </article>
@@ -128,43 +237,7 @@ export function StoredProgramsPage({ user, programs, workouts, logs, onProgramSt
       ) : (
         <p className="empty-list-copy">No saved programs yet.</p>
       )}
-      {startingProgram && (
-        <div className="modal-backdrop" role="presentation">
-          <form className="modal-panel modal-form start-program-form" onSubmit={startProgram} role="dialog" aria-modal="true" aria-labelledby="stored-start-program-title">
-            <div>
-              <p className="eyebrow">Start program</p>
-              <h2 id="stored-start-program-title">{startingProgram.name}</h2>
-            </div>
-            <label>
-              Start date
-              <input type="date" value={programStartDate} onChange={(event) => setProgramStartDate(event.target.value)} required />
-            </label>
-            <div className="choice-list" role="radiogroup" aria-label="Program scheduling">
-              <button className={programScheduleMode === "fixed" ? "choice-button active" : "choice-button"} type="button" onClick={() => setProgramScheduleMode("fixed")}>
-                <strong>Known workout days</strong>
-                <span>Keep workouts on the programmed calendar days.</span>
-              </button>
-              <button className={programScheduleMode === flexibleScheduleMode ? "choice-button active" : "choice-button"} type="button" onClick={() => setProgramScheduleMode(flexibleScheduleMode)}>
-                <strong>Unknown workout days</strong>
-                <span>Pick training days week to week and show the next program day.</span>
-              </button>
-            </div>
-            <p className="modal-helper-copy">
-              {programScheduleMode === flexibleScheduleMode
-                ? "Each calendar week advances by completed program days, so your next selected day shows the next workout."
-                : "Program workouts will move so the first scheduled workout starts on this date."}
-            </p>
-            <div className="modal-action-row">
-              <button className="secondary" type="button" onClick={() => setStartingProgram(null)}>
-                Cancel
-              </button>
-              <button className="primary" type="submit" disabled={!programStartDate || !user?.uid}>
-                Confirm start
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+      {statusMessage && <p className="save-status">{statusMessage}</p>}
     </section>
   );
 }

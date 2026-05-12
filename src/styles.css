@@ -1285,6 +1285,7 @@ select:focus {
 
 .program-card.expanded {
   border-color: #6f54a0;
+  background: #1c1424;
 }
 
 .program-card-header {
@@ -1388,6 +1389,23 @@ select:focus {
 .program-expanded-actions .secondary {
   justify-content: flex-start;
   min-height: 42px;
+}
+
+.program-inline-form {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  background: #14101a;
+  border: 1px solid #3a2948;
+  border-radius: 8px;
+}
+
+.program-inline-form label {
+  display: grid;
+  gap: 7px;
+  color: #b9a9c9;
+  font-size: 0.8rem;
+  font-weight: 850;
 }
 
 .program-status {

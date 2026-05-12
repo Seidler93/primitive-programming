@@ -88,7 +88,7 @@ export function AppRoutes({
       ) : view === "warmup-cooldown" ? (
         <WarmupCooldownPage />
       ) : view === "stored-programs" ? (
-        <StoredProgramsPage user={user} programs={programs} workouts={allProgramSourceWorkouts} logs={logs} onProgramStarted={refreshCustomWorkouts} />
+        <StoredProgramsPage user={user} isTrainer={isTrainer} programs={programs} workouts={allProgramSourceWorkouts} logs={logs} onProgramStarted={refreshCustomWorkouts} />
       ) : view === "stored-workouts" ? (
         <StoredWorkoutsPage user={user} programs={programs} workouts={scheduledWorkouts} logs={logs} onOpenWorkout={openStoredWorkout} />
       ) : view === "programs" ? (
