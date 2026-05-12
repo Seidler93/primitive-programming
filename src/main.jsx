@@ -2977,7 +2977,20 @@ function WarmupCooldownPage() {
 }
 
 function StoredProgramsPage({ programs, workouts, logs }) {
+  const [expandedProgramId, setExpandedProgramId] = useState("");
+  const [viewingProgram, setViewingProgram] = useState(null);
   const programOptions = [{ id: "default", name: "Default Program", goal: "Nine-week Olympic lifting meet prep" }, ...programs.filter((program) => program.id !== "default")];
+
+  if (viewingProgram) {
+    return (
+      <ProgramWorkoutViewer
+        program={viewingProgram}
+        workouts={workouts.filter((item) => (item.programId || "default") === viewingProgram.id)}
+        logs={logs}
+        onBack={() => setViewingProgram(null)}
+      />
+    );
+  }
 
   return (
     <section className="programs-panel">
@@ -2991,12 +3004,21 @@ function StoredProgramsPage({ programs, workouts, logs }) {
           {programOptions.map((program) => {
           const programWorkouts = workouts.filter((item) => (item.programId || "default") === program.id);
           const summary = progressSummary(programWorkouts, logs);
+          const expanded = expandedProgramId === program.id;
           return (
-            <article className="program-card" key={program.id}>
-              <div>
-                <p className="eyebrow">{programWorkouts.length} saved workout{programWorkouts.length === 1 ? "" : "s"}</p>
-                <h4>{program.name}</h4>
-              </div>
+            <article className={`program-card ${expanded ? "expanded" : ""}`} key={program.id}>
+              <button
+                className="program-card-toggle"
+                type="button"
+                onClick={() => setExpandedProgramId(expanded ? "" : program.id)}
+                aria-expanded={expanded}
+              >
+                <div>
+                  <p className="eyebrow">{programWorkouts.length} saved workout{programWorkouts.length === 1 ? "" : "s"}</p>
+                  <h4>{program.name}</h4>
+                </div>
+                <ChevronRight className="program-expand-icon" size={18} aria-hidden="true" />
+              </button>
               <div className="progress-meter" aria-label={`${summary.percent}% complete`}>
                 <span style={{ width: `${summary.percent}%` }} />
               </div>
@@ -3011,6 +3033,14 @@ function StoredProgramsPage({ programs, workouts, logs }) {
                 </div>
               </dl>
               {program.goal && <p className="program-note">{program.goal}</p>}
+              {expanded && (
+                <div className="program-expanded-actions">
+                  <button className="secondary" type="button" onClick={() => setViewingProgram(program)}>
+                    <Eye size={17} />
+                    View workout
+                  </button>
+                </div>
+              )}
             </article>
           );
           })}
