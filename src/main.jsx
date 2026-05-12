@@ -46,6 +46,7 @@ import {
   loadCustomWorkouts,
   loadPrograms,
   loadProgramsForUser,
+  loadUserActivePrograms,
   loadUserCommunities,
   loadUserMaxes as loadCloudUserMaxes,
   loadUserProfile,
@@ -2156,7 +2157,8 @@ function ProgramsPage({ user, isTrainer, programs, workouts, logs, selectedDate,
   const [prescription, setPrescription] = useState("");
   const [intensity, setIntensity] = useState("");
   const [notes, setNotes] = useState("");
-  const [openProgramMenu, setOpenProgramMenu] = useState("");
+  const [expandedProgramId, setExpandedProgramId] = useState("");
+  const [viewingProgram, setViewingProgram] = useState(null);
   const [startingProgram, setStartingProgram] = useState(null);
   const [assigningProgram, setAssigningProgram] = useState(null);
   const [athleteOptions, setAthleteOptions] = useState([]);
@@ -2166,6 +2168,7 @@ function ProgramsPage({ user, isTrainer, programs, workouts, logs, selectedDate,
   const [assignmentMessage, setAssignmentMessage] = useState("");
   const [programStartDate, setProgramStartDate] = useState(defaultSelectedDate);
   const [programScheduleMode, setProgramScheduleMode] = useState("fixed");
+  const [ownActivePrograms, setOwnActivePrograms] = useState([]);
   const savedDefaultProgram = programs.find((program) => program.id === "default");
   const defaultProgram = {
     id: "default",
@@ -2198,6 +2201,20 @@ function ProgramsPage({ user, isTrainer, programs, workouts, logs, selectedDate,
       active = false;
     };
   }, [isTrainer]);
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setOwnActivePrograms([]);
+      return undefined;
+    }
+    let active = true;
+    loadUserActivePrograms(user.uid).then((activePrograms) => {
+      if (active) setOwnActivePrograms(activePrograms);
+    });
+    return () => {
+      active = false;
+    };
+  }, [user?.uid, programs]);
 
   async function createProgram(event) {
     event.preventDefault();
@@ -2248,7 +2265,7 @@ function ProgramsPage({ user, isTrainer, programs, workouts, logs, selectedDate,
       statusUpdatedAt: new Date().toISOString(),
     };
     await saveProgram(savedProgram);
-    setOpenProgramMenu("");
+    setExpandedProgramId("");
     onProgramCreated();
   }
 
@@ -2256,7 +2273,7 @@ function ProgramsPage({ user, isTrainer, programs, workouts, logs, selectedDate,
     setStartingProgram(program);
     setProgramStartDate(program.startDate || new Date().toISOString().slice(0, 10));
     setProgramScheduleMode(program.scheduleMode || "fixed");
-    setOpenProgramMenu("");
+    setExpandedProgramId("");
   }
 
   function openAssignProgram(program) {
@@ -2265,7 +2282,7 @@ function ProgramsPage({ user, isTrainer, programs, workouts, logs, selectedDate,
     setAssignScheduleMode(program.scheduleMode || "fixed");
     setAssignmentMessage("");
     setAssignAthleteId((current) => current || athleteOptions[0]?.uid || "");
-    setOpenProgramMenu("");
+    setExpandedProgramId("");
   }
 
   async function startProgram(event) {
@@ -2293,8 +2310,12 @@ function ProgramsPage({ user, isTrainer, programs, workouts, logs, selectedDate,
     };
 
     await saveProgram(savedProgram);
-    if (!isTrainer && user?.uid) {
+    if (user?.uid) {
       await saveUserActiveProgram(user.uid, activeProgram);
+      setOwnActivePrograms((current) => [
+        ...current.filter((item) => item.id !== activeProgram.id),
+        activeProgram,
+      ]);
     }
 
     setStartingProgram(null);
@@ -2332,6 +2353,17 @@ function ProgramsPage({ user, isTrainer, programs, workouts, logs, selectedDate,
     return "Not started";
   }
 
+  if (viewingProgram) {
+    return (
+      <ProgramWorkoutViewer
+        program={viewingProgram}
+        workouts={workouts.filter((item) => (item.programId || "default") === viewingProgram.id)}
+        logs={logs}
+        onBack={() => setViewingProgram(null)}
+      />
+    );
+  }
+
   return (
     <section className="programs-panel">
       <div className="section-heading">
@@ -2349,41 +2381,26 @@ function ProgramsPage({ user, isTrainer, programs, workouts, logs, selectedDate,
             {visiblePrograms.map((program) => {
               const programWorkouts = workouts.filter((item) => (item.programId || "default") === program.id);
               const summary = progressSummary(programWorkouts, logs);
+              const ownActiveProgram = ownActivePrograms.find((item) => item.id === program.id) || program.activeProgram;
+              const ownProgressWorkouts = ownActiveProgram?.scheduled
+                ? applyActiveProgramDates(programWorkouts, [{ ...program, activeProgram: ownActiveProgram }])
+                : programWorkouts;
+              const ownSummary = ownActiveProgram ? progressSummary(ownProgressWorkouts, logs) : null;
+              const expanded = expandedProgramId === program.id;
               return (
-                <article className="program-card" key={program.id}>
-                  <div className="program-card-header">
+                <article className={`program-card ${expanded ? "expanded" : ""}`} key={program.id}>
+                  <button
+                    className="program-card-toggle"
+                    type="button"
+                    onClick={() => setExpandedProgramId(expanded ? "" : program.id)}
+                    aria-expanded={expanded}
+                  >
                     <div>
                       <p className="eyebrow">{program.athleteEmail || "No athlete assigned"}</p>
                       <h4>{program.name}</h4>
                     </div>
-                    <div className="program-actions">
-                      <button
-                        className="icon-button program-menu-button"
-                        type="button"
-                        onClick={() => setOpenProgramMenu(openProgramMenu === program.id ? "" : program.id)}
-                        aria-expanded={openProgramMenu === program.id}
-                        aria-label={`Open ${program.name} actions`}
-                        title="Program actions"
-                      >
-                        <Menu size={17} />
-                      </button>
-                      {openProgramMenu === program.id && (
-                        <div className="program-action-menu" role="menu">
-                          <button type="button" role="menuitem" onClick={() => openStartProgram(program)}>
-                            Start program
-                          </button>
-                          {isTrainer && (
-                            <button type="button" role="menuitem" onClick={() => openAssignProgram(program)}>
-                              Assign program
-                            </button>
-                          )}
-                          <button type="button" role="menuitem" onClick={() => updateProgramStatus(program, "quit")}>
-                            Quit program
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                    <ChevronRight className="program-expand-icon" size={18} aria-hidden="true" />
+                  </button>
                   <p className={`program-status program-status-${program.status || "idle"}`}>{programStatusLabel(program.status)}</p>
                   <div className="progress-meter" aria-label={`${summary.percent}% complete`}>
                     <span style={{ width: `${summary.percent}%` }} />
@@ -2398,7 +2415,36 @@ function ProgramsPage({ user, isTrainer, programs, workouts, logs, selectedDate,
                       <dd>{summary.nextDate ? formatDate(summary.nextDate) : "All caught up"}</dd>
                     </div>
                   </dl>
+                  {ownSummary && (
+                    <div className="program-own-progress" aria-label={`Your progress is ${ownSummary.percent}% complete`}>
+                      <div>
+                        <span>Your progress</span>
+                        <strong>{ownSummary.completed}/{ownSummary.total} workouts</strong>
+                      </div>
+                      <div className="progress-meter">
+                        <span style={{ width: `${ownSummary.percent}%` }} />
+                      </div>
+                    </div>
+                  )}
                   {program.goal && <p className="program-note">{program.goal}</p>}
+                  {expanded && (
+                    <div className="program-expanded-actions">
+                      <button className="secondary" type="button" onClick={() => setViewingProgram(program)}>
+                        <Eye size={17} />
+                        View workout
+                      </button>
+                      <button className="secondary" type="button" onClick={() => openStartProgram(program)}>
+                        <CalendarDays size={17} />
+                        Start program
+                      </button>
+                      {isTrainer && (
+                        <button className="secondary" type="button" onClick={() => openAssignProgram(program)}>
+                          <UsersRound size={17} />
+                          Assign program
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </article>
               );
             })}
@@ -2536,7 +2582,7 @@ function ProgramsPage({ user, isTrainer, programs, workouts, logs, selectedDate,
                 Cancel
               </button>
               <button className="primary" type="submit" disabled={!programStartDate}>
-                Start program
+                Confirm start
               </button>
             </div>
           </form>
@@ -2583,6 +2629,73 @@ function ProgramsPage({ user, isTrainer, programs, workouts, logs, selectedDate,
             </div>
           </form>
         </div>
+      )}
+    </section>
+  );
+}
+
+function ProgramWorkoutViewer({ program, workouts, logs, onBack }) {
+  const workoutGroups = groupWorkouts(
+    [...workouts]
+      .filter((item) => item.date)
+      .sort((a, b) => a.date.localeCompare(b.date) || String(a.focus || "").localeCompare(String(b.focus || ""))),
+  );
+  const summary = progressSummary(workouts, logs);
+
+  return (
+    <section className="programs-panel program-workout-view">
+      <div className="section-heading program-workout-heading">
+        <button className="icon-button" type="button" onClick={onBack} aria-label="Back to programs" title="Back to programs">
+          <ArrowLeft size={20} />
+        </button>
+        <div>
+          <p className="eyebrow">Program workouts</p>
+          <h2>{program.name}</h2>
+        </div>
+      </div>
+
+      <div className="program-workout-summary">
+        <div>
+          <span>Workouts</span>
+          <strong>{summary.total}</strong>
+        </div>
+        <div>
+          <span>Complete</span>
+          <strong>{summary.completed}</strong>
+        </div>
+        <div>
+          <span>Next</span>
+          <strong>{summary.nextDate ? formatDate(summary.nextDate) : "All caught up"}</strong>
+        </div>
+      </div>
+
+      {workoutGroups.length ? (
+        <div className="program-workout-list">
+          {workoutGroups.map((group, index) => {
+            const completed = Boolean(logs[group.date]?.completed);
+            return (
+              <article className={`program-workout-card ${completed ? "completed" : ""}`} key={group.key}>
+                <div className="program-workout-card-header">
+                  <div>
+                    <p className="eyebrow">Workout {index + 1} | {formatDate(group.date)}</p>
+                    <h3>{group.title}</h3>
+                  </div>
+                  {completed && <CheckCircle2 size={20} aria-label="Completed" />}
+                </div>
+                <div className="program-workout-exercises">
+                  {group.items.map((item, itemIndex) => (
+                    <div className="program-workout-exercise" key={item.id || `${group.key}-${itemIndex}`}>
+                      <strong>{item.exercise || "Exercise"}</strong>
+                      <span>{[item.prescription, item.intensity].filter(Boolean).join(" | ") || "No prescription yet"}</span>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="empty-list-copy">No workouts have been added to this program yet.</p>
       )}
     </section>
   );

@@ -1290,11 +1290,49 @@ select:focus {
   border-radius: 8px;
 }
 
+.program-card.expanded {
+  border-color: #6f54a0;
+}
+
 .program-card-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+}
+
+.program-card-toggle {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+}
+
+.program-card-toggle:hover h4,
+.program-card-toggle:focus-visible h4 {
+  color: #ffffff;
+}
+
+.program-card-toggle:focus-visible {
+  outline: 2px solid #8b5cf6;
+  outline-offset: 4px;
+}
+
+.program-expand-icon {
+  flex: 0 0 auto;
+  margin-top: 3px;
+  color: #b9a9c9;
+  transition: transform 160ms ease;
+}
+
+.program-card.expanded .program-expand-icon {
+  transform: rotate(90deg);
 }
 
 .program-card h4 {
@@ -1345,6 +1383,18 @@ select:focus {
 .program-action-menu button:focus-visible {
   background: #33243f;
   outline: none;
+}
+
+.program-expanded-actions {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid #33243f;
+}
+
+.program-expanded-actions .secondary {
+  justify-content: flex-start;
+  min-height: 42px;
 }
 
 .program-status {
@@ -1484,6 +1534,139 @@ select:focus {
 
 .program-note {
   margin: 0;
+}
+
+.program-own-progress {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  background: #0f0b15;
+  border: 1px solid #33243f;
+  border-radius: 8px;
+}
+
+.program-own-progress > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.program-own-progress span {
+  color: #b9a9c9;
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.program-own-progress strong {
+  color: #f3eefb;
+  font-size: 0.84rem;
+  white-space: nowrap;
+}
+
+.program-workout-view {
+  align-content: start;
+}
+
+.program-workout-heading {
+  justify-content: flex-start;
+}
+
+.program-workout-heading h2 {
+  margin: 0;
+}
+
+.program-workout-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.program-workout-summary div,
+.program-workout-card {
+  background: #14101a;
+  border: 1px solid #3a2948;
+  border-radius: 8px;
+}
+
+.program-workout-summary div {
+  display: grid;
+  gap: 4px;
+  min-height: 74px;
+  padding: 12px;
+}
+
+.program-workout-summary span {
+  color: #b9a9c9;
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.program-workout-summary strong {
+  color: #f3eefb;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.program-workout-list {
+  display: grid;
+  gap: 12px;
+}
+
+.program-workout-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.program-workout-card.completed {
+  border-color: #2e6d45;
+  background: #111c17;
+}
+
+.program-workout-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.program-workout-card-header h3 {
+  margin: 0;
+  color: #f3eefb;
+  font-size: 1rem;
+}
+
+.program-workout-card-header svg {
+  color: #84cc7f;
+  flex: 0 0 auto;
+}
+
+.program-workout-exercises {
+  display: grid;
+  gap: 8px;
+}
+
+.program-workout-exercise {
+  display: grid;
+  gap: 2px;
+  padding: 10px;
+  background: #0f0b15;
+  border: 1px solid #33243f;
+  border-radius: 8px;
+}
+
+.program-workout-exercise strong {
+  color: #f3eefb;
+  font-size: 0.9rem;
+}
+
+.program-workout-exercise span {
+  color: #b9a9c9;
+  font-size: 0.82rem;
+  font-weight: 800;
 }
 
 .food-log-panel {
@@ -2437,6 +2620,7 @@ select:focus {
   .exercise-row,
   .creator-form,
   .program-card-grid,
+  .program-workout-summary,
   .food-summary,
   .macro-grid,
   .store-grid,
