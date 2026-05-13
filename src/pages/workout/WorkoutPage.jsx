@@ -310,6 +310,9 @@ export function WorkoutPage({ workout, workoutKey, date, user, logs, setLogs, on
   }
 
   function isCustomExerciseComplete(exercise) {
+    if (exercise.section === "cardio" && !isMetricCardioType(exercise.cardioType)) {
+      return Boolean(String(exercise.cardioDetails?.score || "").trim());
+    }
     return exercise.sets.length > 0 && exercise.sets.every((set) => Boolean(set.done));
   }
 
