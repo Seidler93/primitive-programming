@@ -1032,6 +1032,17 @@ select:focus {
   flex-wrap: wrap;
 }
 
+.set-action-group .quiet-button {
+  min-height: 28px;
+  color: #9d8aad;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.set-action-group .danger-text-button {
+  color: #c98f98;
+}
+
 .quiet-icon-button {
   width: 36px;
   height: 36px;
@@ -1043,6 +1054,16 @@ select:focus {
   padding: 14px;
   border-top: 1px solid #33243f;
   background: #14101a;
+}
+
+.add-exercise-row .secondary {
+  min-height: 34px;
+  padding: 0;
+  color: #9d8aad;
+  background: transparent;
+  border: 0;
+  font-size: 0.86rem;
+  font-weight: 800;
 }
 
 .modal-backdrop {
