@@ -221,6 +221,25 @@ export async function saveUserWorkout(userId, workoutId, payload) {
   return { synced: false, local: true };
 }
 
+export async function deleteUserWorkout(userId, workoutId) {
+  if (!userId || !workoutId) return { synced: false };
+  const workouts = await loadUserWorkouts(userId);
+  delete workouts[workoutId];
+  localStorage.setItem(localKey(`workouts:${userId}`), JSON.stringify(workouts));
+
+  if (db && !isDevUserId(userId)) {
+    try {
+      await deleteDoc(doc(db, "users", userId, "workouts", workoutId));
+      return { synced: true };
+    } catch (error) {
+      console.warn("Deleted user workout locally; cloud sync failed.", error);
+      return { synced: false, local: true };
+    }
+  }
+
+  return { synced: false, local: true };
+}
+
 export async function loadUserProfile(userId) {
   if (db && !isDevUserId(userId)) {
     try {
@@ -524,10 +543,15 @@ export async function loadUserActivePrograms(userId) {
     try {
       const snapshot = await withTimeout(getDoc(doc(db, "users", userId)), "User active programs request timed out.");
       if (snapshot.exists()) {
-        return normalizeActivePrograms(snapshot.data().activePrograms);
+        const activePrograms = normalizeActivePrograms(snapshot.data().activePrograms);
+        localStorage.setItem(userActiveProgramsLocalKey(userId), JSON.stringify(activePrograms));
+        return activePrograms;
       }
+      localStorage.setItem(userActiveProgramsLocalKey(userId), JSON.stringify([]));
+      return [];
     } catch (error) {
-      console.warn("Falling back to local active programs.", error);
+      console.warn("Could not load cloud active programs.", error);
+      return [];
     }
   }
   return normalizeActivePrograms(readJson(localStorage.getItem(userActiveProgramsLocalKey(userId)), []));
@@ -633,6 +657,55 @@ export async function saveUserMaxes(userId, maxes) {
       return { synced: true };
     } catch (error) {
       console.warn("Saved user maxes locally; cloud sync failed.", error);
+      return { synced: false, local: true };
+    }
+  }
+
+  return { synced: false, local: true };
+}
+
+export async function loadUserProgress(userId) {
+  if (db && !isDevUserId(userId)) {
+    try {
+      const snapshot = await withTimeout(getDoc(doc(db, "users", userId)), "User progress request timed out.");
+      if (snapshot.exists()) {
+        const progress = snapshot.data().progress;
+        return {
+          maxes: Array.isArray(progress?.maxes) ? progress.maxes : [],
+          bodyMetrics: Array.isArray(progress?.bodyMetrics) ? progress.bodyMetrics : [],
+        };
+      }
+    } catch (error) {
+      console.warn("Falling back to local user progress.", error);
+    }
+  }
+  try {
+    const progress = JSON.parse(localStorage.getItem(localKey(`progress:${userId}`)) || "{}");
+    return {
+      maxes: Array.isArray(progress.maxes) ? progress.maxes : [],
+      bodyMetrics: Array.isArray(progress.bodyMetrics) ? progress.bodyMetrics : [],
+    };
+  } catch {
+    return { maxes: [], bodyMetrics: [] };
+  }
+}
+
+export async function saveUserProgress(userId, progress) {
+  const normalizedProgress = {
+    maxes: Array.isArray(progress?.maxes) ? progress.maxes : [],
+    bodyMetrics: Array.isArray(progress?.bodyMetrics) ? progress.bodyMetrics : [],
+  };
+  localStorage.setItem(localKey(`progress:${userId}`), JSON.stringify(normalizedProgress));
+
+  if (db && !isDevUserId(userId)) {
+    try {
+      await setDoc(doc(db, "users", userId), {
+        progress: normalizedProgress,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+      return { synced: true };
+    } catch (error) {
+      console.warn("Saved user progress locally; cloud sync failed.", error);
       return { synced: false, local: true };
     }
   }

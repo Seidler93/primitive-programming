@@ -1,12 +1,32 @@
 import React, { useState } from "react";
-import { ArrowLeft, CheckCircle2, Dumbbell, Plus } from "lucide-react";
+import { ArrowLeft, Bike, Bot, CalendarDays, CheckCircle2, Dumbbell, Footprints, Play, Plus, Save, ShipWheel, Trash2, Volleyball, Waves } from "lucide-react";
 import { importedProgramMeta } from "../../../data/programData";
-import { formatDate, shiftDate, workoutExerciseCount } from "../../../utils/appHelpers";
+import { formatDate, loadWorkoutDraft, shiftDate, workoutExerciseCount, workoutLogKey } from "../../../utils/appHelpers";
 
-export function DayView({ date, workoutGroups, logs, programs, onOpenWorkout, onAddWorkout, onChangeDate }) {
+const workoutTypeOptions = [
+  { id: "strength", label: "Strength workout", icon: Dumbbell },
+  { id: "running", label: "Running", icon: Footprints },
+  { id: "swimming", label: "Swimming", icon: Waves },
+  { id: "biking", label: "Biking", icon: Bike },
+  { id: "rowing", label: "Rowing", icon: ShipWheel },
+  { id: "walking", label: "Walking", icon: Footprints },
+  { id: "sport", label: "Sport", icon: Volleyball },
+];
+
+const workoutSourceOptions = [
+  { id: "saved", label: "Saved workout", copy: "Reuse one of your saved workout templates.", disabled: true, icon: Save },
+  { id: "generated", label: "Generate workout", copy: "Build a workout from goals, maxes, and recent training.", disabled: true, icon: Bot },
+];
+
+export function DayView({ date, user, workoutGroups, logs, programs, onOpenWorkout, onAddWorkout, onChangeDate, onMoveWorkout, onDeleteWorkout }) {
   const [showAddWorkoutOptions, setShowAddWorkoutOptions] = useState(false);
-  const [selectedAddMode, setSelectedAddMode] = useState("new");
+  const [selectedWorkoutType, setSelectedWorkoutType] = useState("strength");
   const [isSchedulingWorkout, setIsSchedulingWorkout] = useState(false);
+  const [expandedWorkoutKey, setExpandedWorkoutKey] = useState("");
+  const [moveWorkoutKey, setMoveWorkoutKey] = useState("");
+  const [moveDate, setMoveDate] = useState(date);
+  const [isMovingWorkout, setIsMovingWorkout] = useState(false);
+  const [isDeletingWorkout, setIsDeletingWorkout] = useState(false);
   const hasPlannedWorkout = workoutGroups.length > 0;
   const today = new Date().toISOString().slice(0, 10);
   const isFutureDate = date > today;
@@ -16,8 +36,48 @@ export function DayView({ date, workoutGroups, logs, programs, onOpenWorkout, on
     if (!programId || programId === "default") return importedProgramMeta.name;
     return programs.find((program) => program.id === programId)?.name || "Program";
   };
+  const hasCompletedSet = (workoutState = {}) => {
+    const hasCheckedProgrammedSet = Object.entries(workoutState.loads || {}).some(([key, value]) => (
+      key.endsWith(":done") && value === true
+    ));
+    const hasCheckedCustomSet = (workoutState.customExercises || []).some((exercise) => (
+      (exercise.sets || []).some((set) => set.done === true)
+    ));
+    return hasCheckedProgrammedSet || hasCheckedCustomSet;
+  };
+  const workoutStarted = (group) => {
+    const log = logs[workoutLogKey(group.date, group.key)] || {};
+    const draft = user?.uid ? loadWorkoutDraft(user.uid, group.date, group.key) : {};
+    return Boolean(log.completed) || log.status === "completed" || hasCompletedSet(log) || hasCompletedSet(draft);
+  };
   const goToPreviousDay = () => onChangeDate(shiftDate(date, -1));
   const goToNextDay = () => onChangeDate(shiftDate(date, 1));
+  const openMovePanel = (group) => {
+    setMoveWorkoutKey(group.key);
+    setMoveDate(group.date);
+  };
+  const submitMoveWorkout = async (event) => {
+    event.preventDefault();
+    if (!moveWorkoutKey || !moveDate) return;
+    try {
+      setIsMovingWorkout(true);
+      await onMoveWorkout(moveWorkoutKey, moveDate);
+      setMoveWorkoutKey("");
+      setExpandedWorkoutKey("");
+    } finally {
+      setIsMovingWorkout(false);
+    }
+  };
+  const deleteWorkout = async (group) => {
+    if (!window.confirm("Delete this workout from your schedule?")) return;
+    try {
+      setIsDeletingWorkout(true);
+      await onDeleteWorkout(group.key);
+      setExpandedWorkoutKey("");
+    } finally {
+      setIsDeletingWorkout(false);
+    }
+  };
 
   return (
     <section className="workout-list-panel">
@@ -44,15 +104,51 @@ export function DayView({ date, workoutGroups, logs, programs, onOpenWorkout, on
         <div className="workout-card-list">
           {workoutGroups.map((group) => {
             const exerciseCount = workoutExerciseCount(group, logs);
+            const isExpanded = expandedWorkoutKey === group.key;
+            const isStarted = workoutStarted(group);
             return (
-              <button className="workout-card-button" type="button" key={group.key} onClick={() => onOpenWorkout(group.key)}>
-                <div>
-                  <p className="eyebrow">{programName(group.programId)}</p>
-                  <h3>{group.title}</h3>
-                  <span>{group.week ? `Week ${group.week}` : group.phase} | {exerciseCount} exercise{exerciseCount === 1 ? "" : "s"}</span>
+              <div className={isExpanded ? "workout-card expanded" : "workout-card"} key={group.key}>
+                <button className="workout-card-button" type="button" onClick={() => setExpandedWorkoutKey(isExpanded ? "" : group.key)}>
+                  <div>
+                    <p className="eyebrow">{programName(group.programId)}</p>
+                    <h3>{group.title}</h3>
+                    <span>{group.week ? `Week ${group.week}` : group.phase} | {exerciseCount} exercise{exerciseCount === 1 ? "" : "s"}</span>
+                  </div>
+                  {logs[workoutLogKey(group.date, group.key)]?.completed ? <CheckCircle2 size={20} /> : <Dumbbell size={20} />}
+                </button>
+                {isExpanded && (
+                  <div className="workout-card-actions">
+                    <button className="primary" type="button" onClick={() => onOpenWorkout(group.key, { start: true })}>
+                      <Play size={18} />
+                      {isStarted ? "Resume workout" : "Start workout"}
+                    </button>
+                    <button className="secondary" type="button" onClick={() => openMovePanel(group)}>
+                      <CalendarDays size={18} />
+                      Move workout
+                    </button>
+                    <button className="danger-button" type="button" disabled={isDeletingWorkout} onClick={() => deleteWorkout(group)}>
+                      <Trash2 size={18} />
+                      Delete workout
+                    </button>
+                  </div>
+                )}
+                {moveWorkoutKey === group.key && (
+                  <form className="workout-move-inline-form" onSubmit={submitMoveWorkout}>
+                    <label>
+                      Move to
+                      <input value={moveDate} onChange={(event) => setMoveDate(event.target.value)} type="date" required />
+                    </label>
+                    <div className="modal-action-row">
+                      <button className="text-button" type="button" onClick={() => setMoveWorkoutKey("")}>
+                        Cancel
+                      </button>
+                      <button className="primary" type="submit" disabled={isMovingWorkout}>
+                        Move
+                      </button>
+                    </div>
+                  </form>
+                )}
                 </div>
-                {logs[date]?.completed ? <CheckCircle2 size={20} /> : <Dumbbell size={20} />}
-              </button>
             );
           })}
         </div>
@@ -67,51 +163,31 @@ export function DayView({ date, workoutGroups, logs, programs, onOpenWorkout, on
               <h2 id="add-workout-title">Add workout</h2>
             </div>
             <div className="choice-list" role="tablist" aria-label="Workout add options">
-              <button className={selectedAddMode === "new" ? "choice-button active" : "choice-button"} type="button" onClick={() => setSelectedAddMode("new")}>
-                <strong>New workout</strong>
-                <span>Start blank and add exercises yourself.</span>
-              </button>
-              <button className={selectedAddMode === "stored" ? "choice-button active" : "choice-button"} type="button" onClick={() => setSelectedAddMode("stored")}>
-                <strong>Stored workout</strong>
-                <span>Reuse saved templates once the library is ready.</span>
-              </button>
-              <button className={selectedAddMode === "ai" ? "choice-button active" : "choice-button"} type="button" onClick={() => setSelectedAddMode("ai")}>
-                <strong>Generate workout</strong>
-                <span>AI with guard rails for readiness, volume, and maxes.</span>
-              </button>
+              {workoutTypeOptions.map((option) => (
+                <button className={selectedWorkoutType === option.id ? "choice-button workout-type-choice active" : "choice-button workout-type-choice"} type="button" key={option.id} onClick={() => setSelectedWorkoutType(option.id)}>
+                  <option.icon size={18} />
+                  <strong>{option.label}</strong>
+                </button>
+              ))}
+              {workoutSourceOptions.map((option) => (
+                <button className="choice-button" type="button" key={option.id} disabled={option.disabled}>
+                  <option.icon size={18} />
+                  <strong>{option.label}</strong>
+                  <span>{option.copy}</span>
+                </button>
+              ))}
             </div>
-            {selectedAddMode === "new" ? (
-              <div className="option-panel">
-                <p>{isFutureDate ? "Schedule a blank workout for this day. You can add warm-ups, lifts, accessories, and cardio next." : "Create a blank workout for this day. You can add warm-ups, lifts, accessories, and cardio next."}</p>
-                <button className="primary" type="button" disabled={isSchedulingWorkout} onClick={async () => {
-                  try {
-                    setIsSchedulingWorkout(true);
-                    setShowAddWorkoutOptions(false);
-                    await onAddWorkout();
-                  } finally {
-                    setIsSchedulingWorkout(false);
-                  }
-                }}>
-                  <Plus size={18} />
-                  {isFutureDate ? "Schedule blank workout" : "Start blank workout"}
-                </button>
-              </div>
-            ) : selectedAddMode === "stored" ? (
-              <div className="option-panel">
-                <p>Stored workout templates will live here. For now, this is the place-holder path for saved workouts.</p>
-                <button className="secondary" type="button" disabled>
-                  Stored workouts coming soon
-                </button>
-              </div>
-            ) : (
-              <div className="option-panel">
-                <p>Generation will use guard rails like available maxes, recent completed volume, movement balance, and coach limits before inserting anything.</p>
-                <textarea rows={3} placeholder="Example: light lower body day, 45 minutes, no maxing" />
-                <button className="secondary" type="button" disabled>
-                  Generate workout coming soon
-                </button>
-              </div>
-            )}
+            <button className="primary" type="button" disabled={isSchedulingWorkout} onClick={async () => {
+              try {
+                setIsSchedulingWorkout(true);
+                setShowAddWorkoutOptions(false);
+                await onAddWorkout(selectedWorkoutType);
+              } finally {
+                setIsSchedulingWorkout(false);
+              }
+            }}>
+              {isFutureDate ? "Schedule workout" : "Start workout"}
+            </button>
             <button className="text-button" type="button" onClick={() => setShowAddWorkoutOptions(false)}>
               Cancel
             </button>

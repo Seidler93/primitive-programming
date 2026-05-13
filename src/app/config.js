@@ -18,7 +18,7 @@ export const maxFields = [
 export const appVersion = packageInfo.version;
 export const defaultSelectedDate = "2026-05-11";
 export const flexibleScheduleMode = "unknown-days";
-export const routeViews = new Set(["client", "workout-list", "workout", "profile", "edit-profile", "maxes", "goals", "progress", "food-log", "stretches", "warmup-cooldown", "settings", "settings-account", "settings-preferences", "settings-metrics", "settings-updates", "store", "community", "messages", "news", "stored-programs", "stored-workouts", "programs", "athletes"]);
+export const routeViews = new Set(["client", "workout-list", "workout", "profile", "edit-profile", "maxes", "goals", "progress", "food-log", "stretches", "warmup-cooldown", "settings", "settings-account", "settings-preferences", "settings-metrics", "settings-updates", "store", "community", "messages", "news", "stored-programs", "stored-workouts", "programs", "program-builder", "athletes"]);
 
 export const bodyMetricFields = [
   { key: "bodyweight", label: "Bodyweight", unit: "lb", unitType: "weight" },

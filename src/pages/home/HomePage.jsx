@@ -1,5 +1,5 @@
 import React from "react";
-import { CalendarStrip } from "../../components/workout/WorkoutViews";
+import { CalendarStrip } from "./CalendarStrip";
 
 export function HomePage({
   calendarMonths,

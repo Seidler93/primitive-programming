@@ -10,9 +10,9 @@ import { AuthProvider, useAuth } from "../context/AuthContext";
 import { MenuProvider } from "../context/MenuContext";
 import { TimerProvider } from "../context/TimerContext";
 import { importedProgram } from "../data/programData";
-import { loadCustomWorkouts, loadPrograms, loadProgramsForUser, loadUserWorkouts, saveCustomWorkout, saveUserActiveProgram } from "../services/firebase";
+import { deleteUserWorkout, loadCustomWorkouts, loadPrograms, loadProgramsForUser, loadUserWorkouts, saveUserActiveProgram, saveUserWorkout } from "../services/firebase";
 import { activateWaitingServiceWorker, registerAppServiceWorker } from "../services/pwa";
-import { appRouteUrl, applyActiveProgramDates, buildWorkoutDatesForProgram, calendarSections, flexibleProgramWorkoutGroups, groupByDate, groupWorkouts, isDevUser, loadWorkoutScheduleOverrides, moveWorkoutDraft, readAppRoute, saveWorkoutScheduleOverrides, shiftDate, workoutDateMapKey, workoutGroupKey } from "../utils/appHelpers";
+import { appRouteUrl, applyActiveProgramDates, buildWorkoutDatesForProgram, calendarSections, flexibleProgramWorkoutGroups, groupByDate, groupWorkouts, isDevUser, loadWorkoutDraft, loadWorkoutScheduleOverrides, moveWorkoutDraft, readAppRoute, saveWorkoutDraft, saveWorkoutScheduleOverrides, shiftDate, workoutDateMapKey, workoutGroupKey, workoutLogKey } from "../utils/appHelpers";
 
 export default function App() {
   return (
@@ -73,6 +73,23 @@ function AppContent() {
     setWorkoutScheduleOverrides({});
   }
 
+  function userScheduledWorkoutsFromLogs(nextLogs) {
+    return Object.entries(nextLogs)
+      .filter(([, workout]) => workout?.scheduledPlaceholder && workout?.date && workout.status !== "completed")
+      .flatMap(([id, workout]) => {
+        if (Array.isArray(workout.items) && workout.items.length) {
+          return workout.items.map((item, index) => ({
+            ...item,
+            date: workout.date,
+            id: item.id || `${id}:${index}`,
+            scheduledPlaceholder: true,
+            userWorkoutId: id,
+          }));
+        }
+        return [{ ...workout, id: workout.id || id, userWorkoutId: id }];
+      });
+  }
+
   async function loadAuthenticatedUserData(currentUser, userIsTrainer) {
     const [nextLogs, nextPrograms] = await Promise.all([
       loadUserWorkouts(currentUser.uid),
@@ -82,6 +99,7 @@ function AppContent() {
     return {
       logs: nextLogs,
       athleteProgressLogs: userIsTrainer ? await loadUserWorkouts("dev-athlete") : nextLogs,
+      customWorkouts: userScheduledWorkoutsFromLogs(nextLogs),
       programs: programWorkoutState.programs,
       programWorkouts: programWorkoutState.workouts,
       workoutScheduleOverrides: loadWorkoutScheduleOverrides(currentUser.uid),
@@ -103,15 +121,15 @@ function AppContent() {
     const programsWithSchedules = await Promise.all(nextPrograms.map(async (program) => {
       const activeProgram = program.activeProgram;
       if (!activeProgram?.scheduled) return program;
-      const programItems = rawWorkouts.filter((workout) => (workout.programId || "default") === program.id);
+      const programItems = rawWorkouts.filter((workout) => !workout.scheduledPlaceholder && (workout.programId || "default") === program.id);
       const expectedDates = buildWorkoutDatesForProgram(programItems, activeProgram.startDate || program.startDate);
-      const missingDates = Object.keys(expectedDates).some((key) => !activeProgram.workoutDates?.[key]);
-      if (!missingDates) return program;
+      const staleDates = Object.entries(expectedDates).some(([key, date]) => activeProgram.workoutDates?.[key] !== date);
+      if (!staleDates) return program;
       const nextActiveProgram = {
         ...activeProgram,
         workoutDates: {
-          ...expectedDates,
           ...(activeProgram.workoutDates || {}),
+          ...expectedDates,
         },
       };
       await saveUserActiveProgram(currentUser.uid, nextActiveProgram);
@@ -149,7 +167,7 @@ function AppContent() {
       if (!active) return;
       setLogs(nextData.logs);
       setAthleteProgressLogs(nextData.athleteProgressLogs);
-      setCustomWorkouts([]);
+      setCustomWorkouts(nextData.customWorkouts);
       setWorkoutScheduleOverrides(nextData.workoutScheduleOverrides);
       setPrograms(nextData.programs);
       setProgramWorkouts(nextData.programWorkouts);
@@ -205,7 +223,7 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    if (isMobileViewport && view === "programs") {
+    if (isMobileViewport && view === "program-builder") {
       setView("client");
     }
   }, [isMobileViewport, view]);
@@ -216,20 +234,32 @@ function AppContent() {
     .map((program) => program.id)), [programs]);
   const hasActiveDefaultProgram = activeProgramIds.has("default");
   const activeFlexibleProgramIds = useMemo(() => new Set(programs
-    .filter((program) => program.activeProgram && program.scheduleMode === flexibleScheduleMode)
+    .filter((program) => program.activeProgram?.scheduled === false)
     .map((program) => program.id)), [programs]);
-  const starterProgramWorkouts = useMemo(() => (
-    !hasActiveDefaultProgram || activeFlexibleProgramIds.has("default")
-      ? []
-      : importedProgram.map((item) => (
-        workoutScheduleOverrides[item.id] ? { ...item, date: workoutScheduleOverrides[item.id] } : item
-      ))
-  ), [activeFlexibleProgramIds, hasActiveDefaultProgram, workoutScheduleOverrides]);
-  const savedWorkouts = useMemo(() => [...customWorkouts, ...programWorkouts], [customWorkouts, programWorkouts]);
+  const defaultProgram = useMemo(() => programs.find((program) => program.id === "default"), [programs]);
+  const starterProgramWorkouts = useMemo(() => {
+    if (!hasActiveDefaultProgram || activeFlexibleProgramIds.has("default")) return [];
+    const sourceWorkouts = importedProgram.map((item) => (
+      workoutScheduleOverrides[item.id] ? { ...item, date: workoutScheduleOverrides[item.id] } : item
+    ));
+    const activeProgram = defaultProgram?.activeProgram;
+    if (!activeProgram?.scheduled) return sourceWorkouts;
+    const workoutDates = {
+      ...(activeProgram.workoutDates || {}),
+      ...buildWorkoutDatesForProgram(sourceWorkouts, activeProgram.startDate || defaultProgram.startDate),
+    };
+    return applyActiveProgramDates(sourceWorkouts, [{
+      ...defaultProgram,
+      activeProgram: {
+        ...activeProgram,
+        workoutDates,
+      },
+    }]);
+  }, [activeFlexibleProgramIds, defaultProgram, hasActiveDefaultProgram, workoutScheduleOverrides]);
   const allProgramSourceWorkouts = useMemo(() => [
     ...(hasDefaultProgramAccess ? importedProgram : []),
-    ...savedWorkouts,
-  ], [hasDefaultProgramAccess, savedWorkouts]);
+    ...programWorkouts,
+  ], [hasDefaultProgramAccess, programWorkouts]);
   const scheduledWorkouts = useMemo(() => [
     ...starterProgramWorkouts,
     ...customWorkouts,
@@ -237,7 +267,10 @@ function AppContent() {
       const programId = item.programId || "default";
       return activeProgramIds.has(programId) && !activeFlexibleProgramIds.has(programId);
     }),
-  ], [activeFlexibleProgramIds, activeProgramIds, customWorkouts, programWorkouts, starterProgramWorkouts]);
+  ].filter((item) => {
+    const status = logs[workoutLogKey(item.date, workoutGroupKey(item))]?.status;
+    return status !== "deleted" && status !== "moved";
+  }), [activeFlexibleProgramIds, activeProgramIds, customWorkouts, logs, programWorkouts, starterProgramWorkouts]);
   const flexibleWorkoutGroupsForSelectedDate = useMemo(() => (
     flexibleProgramWorkoutGroups(selectedDate, programs, allProgramSourceWorkouts, logs)
   ), [allProgramSourceWorkouts, logs, programs, selectedDate]);
@@ -257,7 +290,7 @@ function AppContent() {
   const selectedWorkout = selectedWorkoutKey === "blank"
     ? []
     : (selectedWorkoutGroups.find((group) => group.key === selectedWorkoutKey)?.items || selectedWorkoutGroups[0]?.items || [])
-      .filter((item) => !item.scheduledPlaceholder);
+      .filter((item) => !item.scheduledPlaceholder || (item.workoutType && item.workoutType !== "strength"));
   const activeWorkoutKey = selectedWorkoutKey || selectedWorkoutGroups[0]?.key || "blank";
   const activeWorkoutGroup = selectedWorkoutKey === "blank"
     ? null
@@ -286,7 +319,24 @@ function AppContent() {
     openWorkoutList(shiftDate(selectedDate, deltaX < 0 ? 1 : -1));
   }
 
-  function openWorkout(key) {
+  async function openWorkout(key, options = {}) {
+    if (options.start && user?.uid) {
+      const draft = loadWorkoutDraft(user.uid, selectedDate, key);
+      saveWorkoutDraft(user.uid, selectedDate, key, { ...draft, started: true });
+      const logKey = workoutLogKey(selectedDate, key);
+      const currentLog = logs[logKey] || {};
+      if (currentLog.completed || currentLog.status === "completed") {
+        const resumedLog = {
+          ...currentLog,
+          completed: false,
+          status: currentLog.status === "completed" ? "scheduled" : currentLog.status || "scheduled",
+          resumedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        setLogs((current) => ({ ...current, [logKey]: resumedLog }));
+        await saveUserWorkout(user.uid, logKey, resumedLog);
+      }
+    }
     setSelectedWorkoutKey(key);
     setView("workout");
   }
@@ -297,28 +347,55 @@ function AppContent() {
     setView("workout");
   }
 
-  async function openBlankWorkout() {
+  async function openBlankWorkout(workoutType = "strength") {
+    const workoutTypeLabels = {
+      strength: "Strength Workout",
+      running: "Running",
+      swimming: "Swimming",
+      biking: "Biking",
+      rowing: "Rowing",
+      walking: "Walking",
+      sport: "Sport",
+    };
+    const workoutTitle = workoutTypeLabels[workoutType] || "Workout";
     const scheduledWorkout = {
       id: `scheduled-${selectedDate}-${Date.now()}`,
       date: selectedDate,
-      focus: "Scheduled Workout",
+      focus: workoutTitle,
       exercise: "",
       prescription: "",
       intensity: "",
       notes: "",
       programId: "default",
+      workoutType,
       day: new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date(`${selectedDate}T12:00:00`)),
-      phase: "Scheduled Workout",
+      phase: workoutTitle,
       week: "Custom",
       scheduledPlaceholder: true,
       createdAt: new Date().toISOString(),
     };
     const nextWorkoutKey = workoutGroupKey(scheduledWorkout);
+    const logKey = workoutLogKey(selectedDate, nextWorkoutKey);
+    const isFutureWorkout = selectedDate > today;
+    const nextWorkoutLog = {
+      ...scheduledWorkout,
+      status: "scheduled",
+      completed: false,
+    };
     setCustomWorkouts((current) => [...current.filter((item) => item.id !== scheduledWorkout.id), scheduledWorkout]);
+    setLogs((current) => ({
+      ...current,
+      [logKey]: {
+        ...(current[logKey] || {}),
+        ...nextWorkoutLog,
+      },
+    }));
+    if (!isFutureWorkout && user?.uid) {
+      saveWorkoutDraft(user.uid, selectedDate, nextWorkoutKey, { started: true });
+    }
     setSelectedWorkoutKey(nextWorkoutKey);
     setView("workout");
-    await saveCustomWorkout("default", scheduledWorkout);
-    await refreshCustomWorkouts();
+    await saveUserWorkout(user.uid, logKey, nextWorkoutLog);
     setSelectedWorkoutKey(nextWorkoutKey);
   }
 
@@ -333,15 +410,19 @@ function AppContent() {
     setWorkoutScheduleOverrides({});
   }
 
-  async function moveSelectedWorkout(nextDate) {
+  async function moveSelectedWorkout(nextDate, workoutKey = activeWorkoutKey) {
     if (!user || !activeWorkoutGroup || !nextDate || nextDate === selectedDate) return;
-    const movedItems = activeWorkoutGroup.items.map((item) => ({
+    const workoutGroup = selectedWorkoutGroups.find((group) => group.key === workoutKey) || activeWorkoutGroup;
+    const originalLogKey = workoutLogKey(selectedDate, workoutKey);
+    const movedItems = workoutGroup.items.map((item) => ({
       ...item,
       date: nextDate,
       day: new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date(`${nextDate}T12:00:00`)),
+      scheduledPlaceholder: true,
     }));
     const movedIds = new Set(movedItems.map((item) => item.id));
     const nextWorkoutKey = workoutGroupKey(movedItems[0]);
+    const movedLogKey = workoutLogKey(nextDate, nextWorkoutKey);
     const nextOverrides = { ...workoutScheduleOverrides };
 
     movedItems.forEach((item) => {
@@ -353,27 +434,85 @@ function AppContent() {
     setWorkoutScheduleOverrides(nextOverrides);
     saveWorkoutScheduleOverrides(user.uid, nextOverrides);
 
-    if (customWorkouts.some((item) => movedIds.has(item.id))) {
-      setCustomWorkouts((current) => current.map((item) => (
-        movedIds.has(item.id) ? movedItems.find((movedItem) => movedItem.id === item.id) || item : item
-      )));
-    }
+    const movedWorkout = {
+      ...(logs[originalLogKey] || {}),
+      date: nextDate,
+      status: "scheduled",
+      completed: false,
+      scheduledPlaceholder: true,
+      movedFrom: {
+        date: selectedDate,
+        workoutKey,
+      },
+      items: movedItems,
+      updatedAt: new Date().toISOString(),
+    };
+    const movedOriginalWorkout = {
+      ...(logs[originalLogKey] || {}),
+      date: selectedDate,
+      status: "moved",
+      completed: false,
+      movedTo: {
+        date: nextDate,
+        workoutKey: nextWorkoutKey,
+      },
+      updatedAt: new Date().toISOString(),
+    };
 
-    if (programWorkouts.some((item) => movedIds.has(item.id))) {
-      setProgramWorkouts((current) => current.map((item) => (
-        movedIds.has(item.id) ? movedItems.find((movedItem) => movedItem.id === item.id) || item : item
-      )));
-    }
+    setCustomWorkouts((current) => [
+      ...current.filter((item) => !movedIds.has(item.id)),
+      ...movedItems,
+    ]);
+    setLogs((current) => ({
+      ...current,
+      [originalLogKey]: movedOriginalWorkout,
+      [movedLogKey]: movedWorkout,
+    }));
+    await Promise.all([
+      saveUserWorkout(user.uid, originalLogKey, movedOriginalWorkout),
+      saveUserWorkout(user.uid, movedLogKey, movedWorkout),
+    ]);
 
-    await Promise.all(movedItems
-      .filter((item) => !String(item.id || "").startsWith("mock-"))
-      .map((item) => saveCustomWorkout(item.programId || "default", item)));
-
-    moveWorkoutDraft(user.uid, selectedDate, activeWorkoutKey, nextDate, nextWorkoutKey);
+    moveWorkoutDraft(user.uid, selectedDate, workoutKey, nextDate, nextWorkoutKey);
     setSelectedDate(nextDate);
     setSelectedWorkoutKey(nextWorkoutKey);
     setView("workout");
-    handleWorkoutSaveStatus({ synced: false, local: true });
+    handleWorkoutSaveStatus({ synced: true });
+  }
+
+  async function deleteScheduledWorkout(workoutKey) {
+    if (!user || !workoutKey) return;
+    const workoutGroup = selectedWorkoutGroups.find((group) => group.key === workoutKey);
+    if (!workoutGroup) return;
+    const logKey = workoutLogKey(selectedDate, workoutKey);
+    const itemIds = new Set(workoutGroup.items.map((item) => item.id));
+    const isUserScheduledWorkout = workoutGroup.items.some((item) => item.scheduledPlaceholder);
+
+    setCustomWorkouts((current) => current.filter((item) => !itemIds.has(item.id)));
+
+    if (isUserScheduledWorkout) {
+      setLogs((current) => {
+        const next = { ...current };
+        delete next[logKey];
+        return next;
+      });
+      await deleteUserWorkout(user.uid, logKey);
+    } else {
+      const deletedWorkout = {
+        ...(logs[logKey] || {}),
+        date: selectedDate,
+        status: "deleted",
+        completed: false,
+        deletedAt: new Date().toISOString(),
+      };
+      setLogs((current) => ({ ...current, [logKey]: deletedWorkout }));
+      await saveUserWorkout(user.uid, logKey, deletedWorkout);
+    }
+
+    if (selectedWorkoutKey === workoutKey) {
+      setSelectedWorkoutKey("");
+    }
+    handleWorkoutSaveStatus({ synced: true });
   }
 
   function applyAppUpdate() {
@@ -407,6 +546,7 @@ function AppContent() {
               applyAppUpdate={applyAppUpdate}
               athleteProgressLogs={athleteProgressLogs}
               calendarMonths={calendarMonths}
+              deleteScheduledWorkout={deleteScheduledWorkout}
               handleProfileSaved={handleProfileSaved}
               handleProgramWorkoutCreated={handleProgramWorkoutCreated}
               handleWorkoutSaveStatus={handleWorkoutSaveStatus}

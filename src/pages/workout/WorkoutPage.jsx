@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Dumbbell, Minus, PencilLine, Plus, Save } from "lucide-react";
-import { flexibleScheduleMode, warmupPresets } from "../../app/config";
-import { ExerciseAutocomplete, SimilarExerciseButtons } from "../exercise/ExerciseAutocomplete";
+import { flexibleScheduleMode, maxFields, warmupPresets } from "../../app/config";
+import { ExerciseAutocomplete, SimilarExerciseButtons } from "../../components/exercise/ExerciseAutocomplete";
 import { saveUserWorkout } from "../../services/firebase";
+import { metricWorkoutPages } from "./layouts";
 import {
   formatDate,
+  loadUserDistanceUnit,
   loadUserMaxes,
   loadUserWeightUnit,
   loadWorkoutDraft,
@@ -15,49 +17,16 @@ import {
   workoutLogKey,
 } from "../../utils/appHelpers";
 
-export function CalendarStrip({ sections, selectedDate, onSelectDate, logs, workoutsByDate, onShowMoreMonths }) {
-  return (
-    <section className="calendar-band" aria-label="Workout calendar">
-      <div className="month-stack">
-        {sections.map((section) => (
-          <div className="calendar-month" key={section.key}>
-            <h3>{section.label}</h3>
-            <div className="date-grid">
-              {section.dates.map((date) => {
-                const isOutsideMonth = new Date(`${date}T12:00:00`).getMonth() !== section.month;
-                return (
-                  <button
-                    className={`date-tile ${workoutsByDate[date] ? "" : "empty"} ${logs[date]?.completed ? "completed" : ""} ${isOutsideMonth ? "outside-month" : ""} ${selectedDate === date && !isOutsideMonth ? "selected" : ""}`}
-                    key={`${section.key}-${date}`}
-                    onClick={() => onSelectDate(date)}
-                    type="button"
-                  >
-                    <span>{formatDate(date).slice(0, 3)}</span>
-                    <strong>{new Date(`${date}T12:00:00`).getDate()}</strong>
-                    {logs[date]?.completed && <CheckCircle2 className="complete-day-icon" size={16} />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-      <button className="secondary calendar-more-button" type="button" onClick={onShowMoreMonths}>
-        Show more months
-      </button>
-    </section>
-  );
-}
-
-export function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, onDone, onSaveStatus, onMoveWorkout, onSaveMaxes }) {
+export function WorkoutPage({ workout, workoutKey, date, user, logs, setLogs, onDone, onSaveStatus, onSaveMaxes }) {
   const logKey = workoutLogKey(date, workoutKey);
   const existing = logs[logKey] || {};
   const initialDraft = loadWorkoutDraft(user.uid, date, workoutKey);
   const savedMaxes = loadUserMaxes(user.uid);
+  const mergedMaxes = (sessionMaxes = {}) => ({ ...savedMaxes, ...(sessionMaxes || {}) });
   const [hydratedDraftFor, setHydratedDraftFor] = useState(`${user.uid}:${date}:${workoutKey}`);
   const isBlankWorkout = workout.length === 0;
   const [started, setStarted] = useState(initialDraft.started || isBlankWorkout);
-  const [maxes, setMaxes] = useState(initialDraft.maxes || existing.maxes || savedMaxes);
+  const [maxes, setMaxes] = useState(mergedMaxes(initialDraft.maxes || existing.maxes));
   const [loads, setLoads] = useState(initialDraft.loads || existing.loads || {});
   const [notes, setNotes] = useState(initialDraft.notes ?? existing.notes ?? "");
   const [warmupSetCounts, setWarmupSetCounts] = useState(initialDraft.warmupSetCounts || existing.warmupSetCounts || {});
@@ -67,7 +36,8 @@ export function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, on
   const [showAddExercise, setShowAddExercise] = useState(false);
   const [showAddCardio, setShowAddCardio] = useState(false);
   const [newCardioName, setNewCardioName] = useState("");
-  const [newCardioTracksWeight, setNewCardioTracksWeight] = useState(false);
+  const [newCardioType, setNewCardioType] = useState("metcon");
+  const [newCardioDetails, setNewCardioDetails] = useState({});
   const [showAddWarmup, setShowAddWarmup] = useState(false);
   const [newWarmupName, setNewWarmupName] = useState("");
   const [newWarmupTracksWeight, setNewWarmupTracksWeight] = useState(false);
@@ -75,22 +45,75 @@ export function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, on
   const [newExerciseTracksWeight, setNewExerciseTracksWeight] = useState(true);
   const [openExerciseMenu, setOpenExerciseMenu] = useState("");
   const [collapsedExercises, setCollapsedExercises] = useState({});
-  const [showMoveWorkout, setShowMoveWorkout] = useState(false);
-  const [moveWorkoutDate, setMoveWorkoutDate] = useState(date);
   const requiredMaxes = useMemo(() => needsMaxes(workout), [workout]);
   const weightUnit = loadUserWeightUnit(user.uid);
+  const distanceUnit = loadUserDistanceUnit(user.uid);
   const maxValue = (key) => maxes[key]?.value ?? maxes[key] ?? "";
   const missingMaxes = requiredMaxes.filter((key) => !Number(maxValue(key)));
   const workoutPhase = workout[0]?.phase || "Custom workout";
-  const workoutTitle = workout[0] ? `${workout[0].focus} - Week ${workout[0].week}` : workoutKey === "blank" ? "Create workout" : "Scheduled Workout";
-  const canMoveWorkout = workoutKey !== "blank" && workout[0]?.scheduleMode !== flexibleScheduleMode;
+  const workoutTitle = workout[0]
+    ? workout[0].workoutType && workout[0].workoutType !== "strength"
+      ? workout[0].focus
+      : `${workout[0].focus} - Week ${workout[0].week}`
+    : workoutKey === "blank" ? "Create workout" : "Scheduled Workout";
   const isFutureWorkout = date > new Date().toISOString().slice(0, 10);
-  const finishButtonLabel = isFutureWorkout ? "Save workout" : "Complete workout";
+  const finishButtonLabel = "Save workout";
+  const workoutType = workout[0]?.workoutType || "strength";
+  const MetricWorkoutPage = metricWorkoutPages[workoutType] || null;
+  const metricWorkoutTitle = workout[0]?.focus || workoutTitle;
+  const cardioTypeOptions = [
+    { value: "metcon", label: "Metcon" },
+    { value: "hiit", label: "HIIT" },
+    { value: "running", label: "Running" },
+    { value: "swimming", label: "Swimming" },
+    { value: "biking", label: "Biking" },
+    { value: "rowing", label: "Rowing" },
+    { value: "walking", label: "Walking" },
+    { value: "sport", label: "Sport" },
+  ];
+  const cardioMetricLayouts = {
+    running: [
+      { key: "distance", label: "Distance" },
+      { key: "duration", label: "Duration", kind: "time" },
+      { key: "pace", label: "Pace", kind: "time" },
+      { key: "surface", label: "Surface", options: ["Pavement", "Trail", "Treadmill"], defaultValue: "pavement" },
+    ],
+    swimming: [
+      { key: "distance", label: "Distance" },
+      { key: "duration", label: "Duration", kind: "time" },
+      { key: "pace", label: "Pace", kind: "time" },
+      { key: "location", label: "Location", options: ["Pool", "Open water"] },
+    ],
+    biking: [
+      { key: "distance", label: "Distance" },
+      { key: "duration", label: "Duration", kind: "time" },
+      { key: "pace", label: "Pace", kind: "time" },
+      { key: "surface", label: "Surface", options: ["Pavement", "Trail", "Stationary"], defaultValue: "pavement" },
+    ],
+    rowing: [
+      { key: "distance", label: "Distance" },
+      { key: "duration", label: "Duration", kind: "time" },
+      { key: "pace", label: "Pace", kind: "time" },
+    ],
+    walking: [
+      { key: "distance", label: "Distance" },
+      { key: "duration", label: "Duration", kind: "time" },
+      { key: "pace", label: "Pace", kind: "time" },
+      { key: "surface", label: "Surface", options: ["Pavement", "Trail", "Treadmill"], defaultValue: "pavement" },
+    ],
+  };
+  const isMetricCardioType = (type) => Boolean(cardioMetricLayouts[type]);
+  const cardioTypeLabel = (type) => cardioTypeOptions.find((option) => option.value === type)?.label || "Cardio";
+  const cardioTextRows = (value = "") => Math.max(
+    4,
+    String(value || "").split("\n").reduce((rows, line) => rows + Math.max(1, Math.ceil(line.length / 44)), 0),
+  );
 
   useEffect(() => {
     const draft = loadWorkoutDraft(user.uid, date, workoutKey);
     setStarted(draft.started || workout.length === 0);
-    setMaxes(draft.maxes || existing.maxes || loadUserMaxes(user.uid));
+    const nextSavedMaxes = loadUserMaxes(user.uid);
+    setMaxes({ ...nextSavedMaxes, ...(draft.maxes || existing.maxes || {}) });
     setLoads(draft.loads || existing.loads || {});
     setNotes(draft.notes ?? existing.notes ?? "");
     setWarmupSetCounts(draft.warmupSetCounts || existing.warmupSetCounts || {});
@@ -100,7 +123,8 @@ export function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, on
     setShowAddExercise(false);
     setShowAddCardio(false);
     setNewCardioName("");
-    setNewCardioTracksWeight(false);
+    setNewCardioType("metcon");
+    setNewCardioDetails({});
     setShowAddWarmup(false);
     setNewWarmupName("");
     setNewWarmupTracksWeight(false);
@@ -108,8 +132,6 @@ export function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, on
     setNewExerciseTracksWeight(true);
     setOpenExerciseMenu("");
     setCollapsedExercises({});
-    setShowMoveWorkout(false);
-    setMoveWorkoutDate(date);
     setHydratedDraftFor(`${user.uid}:${date}:${workoutKey}`);
   }, [date, user.uid, workout.length, workoutKey]);
 
@@ -188,25 +210,28 @@ export function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, on
 
   function addCardioExercise(event) {
     event.preventDefault();
-    const name = newCardioName.trim();
+    const name = newCardioName.trim() || cardioTypeLabel(newCardioType);
     if (!name) return;
     const nextExercises = [
       ...customExercises,
-      customExercisePayload({ name, trackWeights: newCardioTracksWeight, section: "cardio", reps: "Time" }),
+      customExercisePayload({ name, cardioType: newCardioType, cardioDetails: newCardioDetails, trackWeights: true, section: "cardio", reps: "Score" }),
     ];
     setCustomExercises(nextExercises);
     setNewCardioName("");
-    setNewCardioTracksWeight(false);
+    setNewCardioType("metcon");
+    setNewCardioDetails({});
     setShowAddCardio(false);
     saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises: nextExercises });
     void persist({}, { customExercises: nextExercises });
   }
 
-  function customExercisePayload({ name, trackWeights = true, section = "accessory", reps = "" }) {
+  function customExercisePayload({ name, cardioType = "", cardioDetails = {}, trackWeights = true, section = "accessory", reps = "" }) {
     const createdAt = Date.now();
     return {
       id: `session-${createdAt}-${Math.random().toString(16).slice(2)}`,
       name,
+      cardioType,
+      cardioDetails,
       section,
       trackWeights,
       sets: [{ id: `${createdAt}-1`, reps, weight: "", done: false }],
@@ -319,6 +344,75 @@ export function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, on
     void persist({}, { customExercises: nextExercises });
   }
 
+  function updateCustomCardioDetails(exercise, patch) {
+    updateCustomExerciseField(exercise.id, {
+      cardioDetails: {
+        ...(exercise.cardioDetails || {}),
+        ...patch,
+      },
+    });
+  }
+
+  function saveExerciseEdit() {
+    setOpenExerciseMenu("");
+    void persist();
+  }
+
+  function updateNewCardioDetails(patch) {
+    setNewCardioDetails((current) => ({ ...current, ...patch }));
+  }
+
+  function renderCardioMetricFields(type, details, onChange, idPrefix) {
+    const fields = cardioMetricLayouts[type] || [];
+    return fields.map((field) => {
+      const value = details[field.key] ?? field.defaultValue ?? "";
+      if (field.options) {
+        return (
+          <label key={field.key}>
+            {field.label}
+            <select value={value} onChange={(event) => onChange({ [field.key]: event.target.value })}>
+              <option value="">Select</option>
+              {field.options.map((option) => (
+                <option value={option.toLowerCase()} key={option}>{option}</option>
+              ))}
+            </select>
+          </label>
+        );
+      }
+      if (field.key === "distance") {
+        return (
+          <label key={field.key}>
+            {field.label}
+            <div className="typed-distance-control">
+              <input value={details.distance || ""} onChange={(event) => onChange({ distance: event.target.value })} inputMode="decimal" placeholder={distanceUnit === "mi" ? "Miles" : "Kilometers"} />
+              <select value={details.distanceUnit || distanceUnit} onChange={(event) => onChange({ distanceUnit: event.target.value })} aria-label={`${field.label} unit`}>
+                <option value="mi">mi</option>
+                <option value="km">km</option>
+              </select>
+            </div>
+          </label>
+        );
+      }
+      if (field.kind === "time") {
+        return (
+          <label key={field.key}>
+            {field.label}
+            <div className="typed-time-control">
+              <input value={details[`${field.key}Min`] || ""} onChange={(event) => onChange({ [`${field.key}Min`]: event.target.value })} inputMode="numeric" placeholder="Min" aria-label={`${field.label} minutes`} />
+              <input value={details[`${field.key}Sec`] || ""} onChange={(event) => onChange({ [`${field.key}Sec`]: event.target.value })} inputMode="numeric" placeholder="Sec" aria-label={`${field.label} seconds`} />
+            </div>
+          </label>
+        );
+      }
+      return (
+        <label key={field.key}>
+          {field.label}
+          <input id={`${idPrefix}-${field.key}`} value={value} onChange={(event) => onChange({ [field.key]: event.target.value })} />
+        </label>
+      );
+    });
+  }
+
   function removeCustomExercise(exerciseId) {
     const nextExercises = customExercises.filter((exercise) => exercise.id !== exerciseId);
     setCustomExercises(nextExercises);
@@ -342,6 +436,14 @@ export function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, on
       ...exercise,
       sets: exercise.sets.length > 1 ? exercise.sets.slice(0, -1) : exercise.sets,
     }));
+  }
+
+  function removeCustomSetOrExercise(exercise) {
+    if (exercise.sets.length <= 1) {
+      removeCustomExercise(exercise.id);
+      return;
+    }
+    removeCustomSet(exercise.id);
   }
 
   function programmedRows(item) {
@@ -410,20 +512,95 @@ export function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, on
     void persist({}, { programmedSetCounts: nextCounts });
   }
 
-  async function moveWorkout(event) {
-    event.preventDefault();
-    if (!moveWorkoutDate || moveWorkoutDate === date) {
-      setShowMoveWorkout(false);
-      return;
-    }
-    await onMoveWorkout?.(moveWorkoutDate);
-    setShowMoveWorkout(false);
-  }
-
-  const moveWorkoutButton = (
-    <button className="icon-button" type="button" onClick={() => setShowMoveWorkout(true)} aria-label="Change workout day" title="Change workout day">
-      <PencilLine size={18} />
-    </button>
+  const metricWarmups = (
+    <>
+      {customExercises.filter((exercise) => exercise.section === "warmup").map((exercise) => (
+        <div className={`exercise-row custom-exercise-row warmup-exercise-row typed-warmup-row ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] ? "collapsed" : ""} ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] && isCustomExerciseComplete(exercise) ? "exercise-complete" : ""}`} key={exercise.id}>
+          <div className="exercise-info" onClick={() => toggleExerciseCollapse(exerciseCollapseId("custom", exercise.id))} role="button" tabIndex={0}>
+            <div>
+              <strong>{exercise.name}</strong>
+              <small>{exercise.trackWeights ? "Warm-up | Track weights" : "Warm-up | Completion only"}</small>
+              <span className="collapsed-set-summary">{customSetSummary(exercise)}</span>
+            </div>
+            <div className="exercise-edit-wrap">
+              <button className="icon-button exercise-edit-button" type="button" onClick={(event) => {
+                event.stopPropagation();
+                setOpenExerciseMenu(openExerciseMenu === exerciseMenuId("custom", exercise.id) ? "" : exerciseMenuId("custom", exercise.id));
+              }} aria-label={`Edit ${exercise.name}`} title="Edit warm-up">
+                <PencilLine size={16} />
+              </button>
+              {openExerciseMenu === exerciseMenuId("custom", exercise.id) && (
+                <div className="exercise-edit-menu">
+                  <div className="exercise-edit-menu-header">
+                    <strong>Change warm-up</strong>
+                    <span>Replaces this warm-up for this session.</span>
+                  </div>
+                  <label>
+                    New warm-up
+                    <ExerciseAutocomplete value={exercise.name} onChange={(value) => updateCustomExerciseField(exercise.id, { name: value })} id={`typed-warmup-edit-${exercise.id}`} placeholder="Mobility, drills, easy prep" />
+                  </label>
+                  <label className="checkbox-field">
+                    <input
+                      checked={exercise.trackWeights}
+                      onChange={(event) => updateCustomExerciseField(exercise.id, { trackWeights: event.target.checked })}
+                      type="checkbox"
+                    />
+                    Track weights used
+                  </label>
+                  <div className="exercise-edit-action-row">
+                    <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomExercise(exercise.id)}>
+                      Remove warm-up
+                    </button>
+                    <button className="quiet-button" type="button" onClick={saveExerciseEdit}>
+                      <Save size={16} />
+                      Save
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          {!collapsedExercises[exerciseCollapseId("custom", exercise.id)] && <div className="set-list">
+            {exercise.sets.map((set) => (
+              <label className={`set-row ${exercise.trackWeights ? "tracked-set-row" : "check-set-row"}`} key={set.id}>
+                <input
+                  value={set.reps}
+                  onChange={(event) => updateCustomSet(exercise.id, set.id, { reps: event.target.value })}
+                  onBlur={() => persist()}
+                  placeholder="Prep"
+                />
+                {exercise.trackWeights && (
+                  <input
+                    value={set.weight}
+                    onChange={(event) => updateCustomSet(exercise.id, set.id, { weight: event.target.value })}
+                    onBlur={() => persist()}
+                    placeholder="Weight"
+                  />
+                )}
+                <input
+                  checked={set.done}
+                  onChange={(event) => updateCustomSet(exercise.id, set.id, { done: event.target.checked })}
+                  onBlur={() => persist()}
+                  type="checkbox"
+                />
+              </label>
+            ))}
+            <div className="set-action-row">
+              <div className="set-action-group">
+                <button className="quiet-button" type="button" onClick={() => addCustomSet(exercise.id)}>
+                  <Plus size={16} />
+                  Add set
+                </button>
+                <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomSetOrExercise(exercise)}>
+                  <Minus size={16} />
+                  {exercise.sets.length <= 1 ? "Remove warm-up" : "Remove set"}
+                </button>
+              </div>
+            </div>
+          </div>}
+        </div>
+      ))}
+    </>
   );
 
   return (
@@ -435,11 +612,10 @@ export function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, on
               <p className="eyebrow">{formatDate(date)} | {workoutPhase}</p>
               <h2>{workoutTitle}</h2>
             </div>
-            {canMoveWorkout && moveWorkoutButton}
           </div>
-          {requiredMaxes.length > 0 && (
+          {missingMaxes.length > 0 && (
             <div className="max-grid">
-              {requiredMaxes.map((key) => {
+              {missingMaxes.map((key) => {
                 const field = maxFields.find((item) => item.key === key);
                 return (
                   <label key={key}>
@@ -478,26 +654,38 @@ export function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, on
               <h2>{workoutTitle}</h2>
             </div>
             <div className="workout-title-actions">
-              {canMoveWorkout && moveWorkoutButton}
               <button className="icon-button" type="button" onClick={() => finishWorkout({ completed: true })} aria-label="Mark complete" title="Mark complete">
                 <CheckCircle2 size={20} />
               </button>
             </div>
           </div>
+          {MetricWorkoutPage ? (
+            <MetricWorkoutPage
+              finishButtonLabel={finishButtonLabel}
+              distanceUnit={distanceUnit}
+              isFutureWorkout={isFutureWorkout}
+              loads={loads}
+              notes={notes}
+              onAddWarmup={() => setShowAddWarmup(true)}
+              onCompleteWorkout={finishWorkout}
+              onFinishWorkout={finishWorkout}
+              onPersist={persist}
+              setLoads={setLoads}
+              setNotes={setNotes}
+              title={metricWorkoutTitle}
+              warmups={metricWarmups}
+            />
+          ) : (
+            <>
+          <button className="secondary" type="button" onClick={() => setShowAddWarmup(true)}>
+            <Plus size={18} />
+            Add warm-up
+          </button>
           <div className="exercise-table">
             <div className="table-head">
               <span>Exercise</span>
               <span>Sets</span>
             </div>
-            <div className="workout-warmup-row">
-              <button className="secondary" type="button" onClick={() => setShowAddWarmup(true)}>
-                <Plus size={18} />
-                Add warm-up
-              </button>
-            </div>
-            {isBlankWorkout && customExercises.length === 0 && (
-              <p className="empty-list-copy">No exercises yet. Add the first exercise below.</p>
-            )}
             {customExercises.filter((exercise) => exercise.section === "warmup").map((exercise) => (
               <div className={`exercise-row custom-exercise-row warmup-exercise-row ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] ? "collapsed" : ""} ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] && isCustomExerciseComplete(exercise) ? "exercise-complete" : ""}`} key={exercise.id}>
                 <div className="exercise-info" onClick={() => toggleExerciseCollapse(exerciseCollapseId("custom", exercise.id))} role="button" tabIndex={0}>
@@ -532,9 +720,15 @@ export function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, on
                           />
                           Track weights used
                         </label>
-                        <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomExercise(exercise.id)}>
-                          Remove warm-up
-                        </button>
+                        <div className="exercise-edit-action-row">
+                          <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomExercise(exercise.id)}>
+                            Remove warm-up
+                          </button>
+                          <button className="quiet-button" type="button" onClick={saveExerciseEdit}>
+                            <Save size={16} />
+                            Save
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -570,9 +764,9 @@ export function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, on
                         <Plus size={16} />
                         Add set
                       </button>
-                      <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomSet(exercise.id)} disabled={exercise.sets.length <= 1}>
+                      <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomSetOrExercise(exercise)}>
                         <Minus size={16} />
-                        Remove set
+                        {exercise.sets.length <= 1 ? "Remove warm-up" : "Remove set"}
                       </button>
                     </div>
                   </div>
@@ -740,9 +934,15 @@ export function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, on
                           />
                           Track weights used
                         </label>
-                        <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomExercise(exercise.id)}>
-                          Remove exercise
-                        </button>
+                        <div className="exercise-edit-action-row">
+                          <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomExercise(exercise.id)}>
+                            Remove exercise
+                          </button>
+                          <button className="quiet-button" type="button" onClick={saveExerciseEdit}>
+                            <Save size={16} />
+                            Save
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -778,9 +978,9 @@ export function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, on
                         <Plus size={16} />
                         Add set
                       </button>
-                      <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomSet(exercise.id)} disabled={exercise.sets.length <= 1}>
+                      <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomSetOrExercise(exercise)}>
                         <Minus size={16} />
-                        Remove set
+                        {exercise.sets.length <= 1 ? "Remove exercise" : "Remove set"}
                       </button>
                     </div>
                   </div>
@@ -798,8 +998,8 @@ export function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, on
                 <div className="exercise-info" onClick={() => toggleExerciseCollapse(exerciseCollapseId("custom", exercise.id))} role="button" tabIndex={0}>
                   <div>
                     <strong>{exercise.name}</strong>
-                    <small>{exercise.trackWeights ? "Cardio | Track numbers" : "Cardio | Completion only"}</small>
-                    <span className="collapsed-set-summary">{customSetSummary(exercise)}</span>
+                    <small>{cardioTypeLabel(exercise.cardioType)} | Track score</small>
+                    <span className="collapsed-set-summary">{isMetricCardioType(exercise.cardioType) ? "Distance, duration, pace" : exercise.cardioDetails?.workout || "Workout details"}</span>
                   </div>
                   <div className="exercise-edit-wrap">
                     <button className="icon-button exercise-edit-button" type="button" onClick={(event) => {
@@ -818,76 +1018,86 @@ export function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, on
                           New cardio
                           <ExerciseAutocomplete value={exercise.name} onChange={(value) => updateCustomExerciseField(exercise.id, { name: value })} id={`exercise-cardio-${exercise.id}`} />
                         </label>
-                        <SimilarExerciseButtons exerciseName={exercise.name} onSelect={(value) => updateCustomExerciseField(exercise.id, { name: value })} />
-                        <label className="checkbox-field">
-                          <input
-                            checked={exercise.trackWeights}
-                            onChange={(event) => updateCustomExerciseField(exercise.id, { trackWeights: event.target.checked })}
-                            type="checkbox"
-                          />
-                          Track numbers
+                        <label>
+                          Type
+                          <select
+                            value={exercise.cardioType || "metcon"}
+                            onChange={(event) => updateCustomExerciseField(exercise.id, { cardioType: event.target.value, cardioDetails: {} })}
+                          >
+                            {cardioTypeOptions.map((option) => (
+                              <option value={option.value} key={option.value}>{option.label}</option>
+                            ))}
+                          </select>
                         </label>
-                        <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomExercise(exercise.id)}>
-                          Remove cardio
-                        </button>
+                        {!isMetricCardioType(exercise.cardioType) && (
+                          <>
+                            <SimilarExerciseButtons exerciseName={exercise.name} onSelect={(value) => updateCustomExerciseField(exercise.id, { name: value })} />
+                            <label>
+                              Workout
+                              <textarea
+                                value={exercise.cardioDetails?.workout || ""}
+                                onChange={(event) => updateCustomCardioDetails(exercise, { workout: event.target.value })}
+                                rows={cardioTextRows(exercise.cardioDetails?.workout)}
+                                placeholder="Type the workout here"
+                              />
+                            </label>
+                          </>
+                        )}
+                        <div className="exercise-edit-action-row">
+                          <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomExercise(exercise.id)}>
+                            Remove cardio
+                          </button>
+                          <button className="quiet-button" type="button" onClick={saveExerciseEdit}>
+                            <Save size={16} />
+                            Save
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
                 </div>
-                {!collapsedExercises[exerciseCollapseId("custom", exercise.id)] && <div className="set-list">
-                  {exercise.sets.map((set) => (
-                    <label className={`set-row ${exercise.trackWeights ? "tracked-set-row" : "check-set-row"}`} key={set.id}>
-                      <input
-                        value={set.reps}
-                        onChange={(event) => updateCustomSet(exercise.id, set.id, { reps: event.target.value })}
-                        onBlur={() => persist()}
-                        placeholder="Time / distance / rounds"
-                      />
-                      {exercise.trackWeights && (
-                        <input
-                          value={set.weight}
-                          onChange={(event) => updateCustomSet(exercise.id, set.id, { weight: event.target.value })}
-                          onBlur={() => persist()}
-                          placeholder="Score"
-                        />
-                      )}
-                      <input
-                        checked={set.done}
-                        onChange={(event) => updateCustomSet(exercise.id, set.id, { done: event.target.checked })}
-                        onBlur={() => persist()}
-                        type="checkbox"
-                      />
-                    </label>
-                  ))}
-                  <div className="set-action-row">
-                    <div className="set-action-group">
-                      <button className="quiet-button" type="button" onClick={() => addCustomSet(exercise.id)}>
-                        <Plus size={16} />
-                        Add set
-                      </button>
-                      <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomSet(exercise.id)} disabled={exercise.sets.length <= 1}>
-                        <Minus size={16} />
-                        Remove set
-                      </button>
+                {!collapsedExercises[exerciseCollapseId("custom", exercise.id)] && (
+                  isMetricCardioType(exercise.cardioType) ? (
+                    <div className="cardio-metric-fields">
+                      {renderCardioMetricFields(exercise.cardioType, exercise.cardioDetails || {}, (patch) => updateCustomCardioDetails(exercise, patch), `cardio-${exercise.id}`)}
                     </div>
-                  </div>
-                </div>}
+                  ) : (
+                    <div className="cardio-text-fields">
+                      <div className="cardio-workout-display">
+                        <span>Workout</span>
+                        <p>{exercise.cardioDetails?.workout || "No workout details added."}</p>
+                      </div>
+                      <label>
+                        Score
+                        <input
+                          value={exercise.cardioDetails?.score || ""}
+                          onChange={(event) => updateCustomCardioDetails(exercise, { score: event.target.value })}
+                          onBlur={() => persist()}
+                          placeholder="Time, rounds, reps, distance..."
+                        />
+                      </label>
+                    </div>
+                  )
+                )}
               </div>
             ))}
-            <div className="add-exercise-row cardio-add-row">
-              <button className="secondary" type="button" onClick={() => setShowAddCardio(true)}>
-                <Plus size={18} />
-                Add cardio
-              </button>
-            </div>
+            
           </div>
+          <button className="secondary" type="button" onClick={() => setShowAddCardio(true)}>
+            <Plus size={18} />
+            Add cardio
+          </button>
           <label className="notes-field">
             Session notes
             <textarea value={notes} onChange={(event) => setNotes(event.target.value)} onBlur={() => persist()} rows={3} />
           </label>
-          <button className="secondary" type="button" onClick={() => finishWorkout(isFutureWorkout ? {} : { completed: true })}>
-            {isFutureWorkout ? <Save size={18} /> : <CheckCircle2 size={18} />}
+          <button className="secondary" type="button" onClick={() => finishWorkout({})}>
+            <Save size={18} />
             {finishButtonLabel}
+          </button>
+          <button className="primary" type="button" onClick={() => finishWorkout({ completed: true })}>
+            <CheckCircle2 size={18} />
+            Complete workout
           </button>
           {showAddExercise && (
             <div className="modal-backdrop" role="presentation">
@@ -929,17 +1139,37 @@ export function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, on
                 </div>
                 <form className="modal-form" onSubmit={addCardioExercise}>
                   <label>
-                    Cardio name
-                    <ExerciseAutocomplete value={newCardioName} onChange={setNewCardioName} id="new-cardio-name" placeholder="Bike finisher, easy jog, metcon placeholder" />
+                    Type
+                    <select value={newCardioType} onChange={(event) => {
+                      setNewCardioType(event.target.value);
+                      setNewCardioDetails({});
+                    }}>
+                      {cardioTypeOptions.map((option) => (
+                        <option value={option.value} key={option.value}>{option.label}</option>
+                      ))}
+                    </select>
                   </label>
-                  <label className="checkbox-field">
-                    <input
-                      checked={newCardioTracksWeight}
-                      onChange={(event) => setNewCardioTracksWeight(event.target.checked)}
-                      type="checkbox"
-                    />
-                    Track score / distance
+                  <label>
+                    Title
+                    <input value={newCardioName} onChange={(event) => setNewCardioName(event.target.value)} id="new-cardio-name" placeholder={cardioTypeLabel(newCardioType)} />
                   </label>
+                  {isMetricCardioType(newCardioType) ? (
+                    <div className="cardio-metric-fields">
+                      {renderCardioMetricFields(newCardioType, newCardioDetails, updateNewCardioDetails, "new-cardio")}
+                    </div>
+                  ) : (
+                    <>
+                      <label>
+                        Workout
+                        <textarea
+                          value={newCardioDetails.workout || ""}
+                          onChange={(event) => updateNewCardioDetails({ workout: event.target.value })}
+                          rows={cardioTextRows(newCardioDetails.workout)}
+                          placeholder="Type the workout here"
+                        />
+                      </label>
+                    </>
+                  )}
                   <button className="primary" type="submit">
                     <Plus size={18} />
                     Add cardio
@@ -990,29 +1220,9 @@ export function WorkoutView({ workout, workoutKey, date, user, logs, setLogs, on
               </div>
             </div>
           )}
+            </>
+          )}
         </>
-      )}
-      {showMoveWorkout && (
-        <div className="modal-backdrop" role="presentation">
-          <form className="modal-panel move-workout-form" role="dialog" aria-modal="true" aria-labelledby="move-workout-title" onSubmit={moveWorkout}>
-            <div>
-              <p className="eyebrow">{formatDate(date)}</p>
-              <h2 id="move-workout-title">Change workout day</h2>
-            </div>
-            <label>
-              New date
-              <input type="date" value={moveWorkoutDate} onChange={(event) => setMoveWorkoutDate(event.target.value)} />
-            </label>
-            <div className="modal-action-row">
-              <button className="secondary" type="button" onClick={() => setShowMoveWorkout(false)}>
-                Cancel
-              </button>
-              <button className="primary" type="submit" disabled={!moveWorkoutDate || moveWorkoutDate === date}>
-                Move workout
-              </button>
-            </div>
-          </form>
-        </div>
       )}
     </section>
   );

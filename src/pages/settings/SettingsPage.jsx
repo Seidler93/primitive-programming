@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ArrowLeft, Bell, ChevronRight, LogOut, Plus, Save, Settings } from "lucide-react";
+import { ArrowLeft, Bell, ChevronRight, LogOut, PencilLine, Plus, Save, Settings } from "lucide-react";
 import { appVersion, bodyMetricFields, defaultBodyMetricSettings, settingsSections } from "../../app/config";
 import { requestNotificationAccess, saveUserProfile } from "../../services/firebase";
 import { loadBodyMetricSettings, loadUserDistanceUnit, loadUserWeightUnit, saveBodyMetricSettings, saveUserDistanceUnit, saveUserWeightUnit } from "../../utils/appHelpers";
@@ -90,6 +90,13 @@ export function SettingsSectionPage({ section, user, isTrainer, serviceWorkerReg
   const [bodyMetricSettings, setBodyMetricSettings] = useState(() => loadBodyMetricSettings(user.uid));
   const [weightUnit, setWeightUnit] = useState(() => loadUserWeightUnit(user.uid));
   const [distanceUnit, setDistanceUnit] = useState(() => loadUserDistanceUnit(user.uid));
+  const [preferencesEditing, setPreferencesEditing] = useState(false);
+  const [preferencesSaving, setPreferencesSaving] = useState(false);
+  const [preferencesSaved, setPreferencesSaved] = useState(false);
+  const [preferenceDraft, setPreferenceDraft] = useState(() => ({
+    weightUnit: loadUserWeightUnit(user.uid),
+    distanceUnit: loadUserDistanceUnit(user.uid),
+  }));
   const [measurementSystem, setMeasurementSystem] = useState(user.measurementSystem || (loadUserWeightUnit(user.uid) === "lb" ? "imperial" : "metric"));
   const initialHeight = String(user.height || "");
   const initialHeightInches = user.heightUnit === "in" ? Number(initialHeight) || 0 : 0;
@@ -146,14 +153,26 @@ export function SettingsSectionPage({ section, user, isTrainer, serviceWorkerReg
     saveBodyMetricSettings(user.uid, nextSettings);
   }
 
-  function updateWeightUnit(unit) {
-    setWeightUnit(unit);
-    saveUserWeightUnit(user.uid, unit);
+  function beginPreferenceEdit() {
+    setPreferenceDraft({ weightUnit, distanceUnit });
+    setPreferencesSaved(false);
+    setPreferencesEditing(true);
   }
 
-  function updateDistanceUnit(unit) {
-    setDistanceUnit(unit);
-    saveUserDistanceUnit(user.uid, unit);
+  async function savePreferences(event) {
+    event.preventDefault();
+    setPreferencesSaving(true);
+    setPreferencesSaved(false);
+    try {
+      saveUserWeightUnit(user.uid, preferenceDraft.weightUnit);
+      saveUserDistanceUnit(user.uid, preferenceDraft.distanceUnit);
+      setWeightUnit(preferenceDraft.weightUnit);
+      setDistanceUnit(preferenceDraft.distanceUnit);
+      setPreferencesEditing(false);
+      setPreferencesSaved(true);
+    } finally {
+      setPreferencesSaving(false);
+    }
   }
 
   async function savePhysicalProfile(event) {
@@ -239,28 +258,68 @@ export function SettingsSectionPage({ section, user, isTrainer, serviceWorkerReg
               {savingNotifications ? "Enabling..." : notificationState.status === "granted" ? "Enabled" : "Enable notifications"}
             </button>
           </div>
-          <div className="settings-block preference-settings-row">
-            <div>
-              <p className="eyebrow">Weight unit</p>
-              <h3>Training weights</h3>
-              <p>Used for maxes, goals, workout loads, and bodyweight metrics.</p>
+          <form className="settings-preference-form" onSubmit={savePreferences}>
+            <div className="settings-block preference-settings-row">
+              <div>
+                <p className="eyebrow">Weight unit</p>
+                <h3>Training weights</h3>
+                <p>Used for maxes, goals, workout loads, and bodyweight metrics.</p>
+              </div>
+              {preferencesEditing ? (
+                <select
+                  value={preferenceDraft.weightUnit}
+                  onChange={(event) => setPreferenceDraft((current) => ({ ...current, weightUnit: event.target.value }))}
+                  aria-label="Weight unit"
+                >
+                  <option value="kg">kg</option>
+                  <option value="lb">lb</option>
+                </select>
+              ) : (
+                <strong className="preference-value">{weightUnit}</strong>
+              )}
             </div>
-            <select value={weightUnit} onChange={(event) => updateWeightUnit(event.target.value)} aria-label="Weight unit">
-              <option value="kg">kg</option>
-              <option value="lb">lb</option>
-            </select>
-          </div>
-          <div className="settings-block preference-settings-row">
-            <div>
-              <p className="eyebrow">Distance unit</p>
-              <h3>Running and conditioning</h3>
-              <p>Used anywhere distance-based work is shown or logged.</p>
+            <div className="settings-block preference-settings-row">
+              <div>
+                <p className="eyebrow">Distance unit</p>
+                <h3>Running and conditioning</h3>
+                <p>Used anywhere distance-based work is shown or logged.</p>
+              </div>
+              {preferencesEditing ? (
+                <select
+                  value={preferenceDraft.distanceUnit}
+                  onChange={(event) => setPreferenceDraft((current) => ({ ...current, distanceUnit: event.target.value }))}
+                  aria-label="Distance unit"
+                >
+                  <option value="km">km</option>
+                  <option value="mi">mi</option>
+                </select>
+              ) : (
+                <strong className="preference-value">{distanceUnit}</strong>
+              )}
             </div>
-            <select value={distanceUnit} onChange={(event) => updateDistanceUnit(event.target.value)} aria-label="Distance unit">
-              <option value="km">km</option>
-              <option value="mi">mi</option>
-            </select>
-          </div>
+            <div className="preference-action-row">
+              {preferencesEditing ? (
+                <>
+                  <button className="text-button" type="button" onClick={() => {
+                    setPreferenceDraft({ weightUnit, distanceUnit });
+                    setPreferencesEditing(false);
+                  }}>
+                    Cancel
+                  </button>
+                  <button className="primary" type="submit" disabled={preferencesSaving}>
+                    <Save size={18} />
+                    {preferencesSaving ? "Saving..." : "Save preferences"}
+                  </button>
+                </>
+              ) : (
+                <button className="secondary" type="button" onClick={beginPreferenceEdit}>
+                  <PencilLine size={18} />
+                  Edit preferences
+                </button>
+              )}
+            </div>
+            {preferencesSaved && <p className="save-status">Preferences saved.</p>}
+          </form>
         </div>
       ) : section === "metrics" ? (
         <div className="settings-metrics">

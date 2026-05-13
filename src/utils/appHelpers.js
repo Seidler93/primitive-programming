@@ -200,7 +200,11 @@ export function readAppRoute() {
   }
   const params = new URLSearchParams(window.location.search);
   const requestedView = params.get("view");
-  const view = requestedView === "goals" ? "progress" : routeViews.has(requestedView) ? requestedView : "client";
+  const view = requestedView === "goals"
+    ? "progress"
+    : requestedView === "stored-programs"
+    ? "programs"
+    : routeViews.has(requestedView) ? requestedView : "client";
   return {
     view,
     selectedDate: params.get("date") || defaultSelectedDate,

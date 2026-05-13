@@ -1,5 +1,4 @@
 import React from "react";
-import { WorkoutView } from "../components/workout/WorkoutViews";
 import { AthletesPage } from "../pages/athletes/AthletesPage";
 import { CommunityPage } from "../pages/community/CommunityPage";
 import { FoodLogPage } from "../pages/food-log/FoodLogPage";
@@ -10,13 +9,14 @@ import { NewsPage } from "../pages/news/NewsPage";
 import { GoalsPage } from "../pages/progress/GoalsPage";
 import { MaxesPage } from "../pages/maxes/MaxesPage";
 import { ProfileEditPage, ProfilePage } from "../pages/profile/ProfilePage";
+import { ProgramBuilderPage } from "../pages/program-builder/ProgramBuilderPage";
 import { ProgramsPage } from "../pages/programs/ProgramsPage";
 import { SettingsPage, SettingsSectionPage } from "../pages/settings/SettingsPage";
 import { StorePage } from "../pages/store/StorePage";
-import { StoredProgramsPage } from "../pages/stored-programs/StoredProgramsPage";
 import { StoredWorkoutsPage } from "../pages/stored-workouts/StoredWorkoutsPage";
 import { StretchesPage } from "../pages/stretches/StretchesPage";
 import { WarmupCooldownPage } from "../pages/warmup-cooldown/WarmupCooldownPage";
+import { WorkoutPage } from "../pages/workout/WorkoutPage";
 
 export function AppRoutes({
   activeWorkoutKey,
@@ -24,6 +24,7 @@ export function AppRoutes({
   applyAppUpdate,
   athleteProgressLogs,
   calendarMonths,
+  deleteScheduledWorkout,
   handleProfileSaved,
   handleProgramWorkoutCreated,
   handleWorkoutSaveStatus,
@@ -61,7 +62,7 @@ export function AppRoutes({
       ) : view === "maxes" ? (
         <MaxesPage user={user} onSaveMaxes={syncUserMaxes} />
       ) : view === "progress" ? (
-        <GoalsPage user={user} logs={logs} />
+        <GoalsPage user={user} logs={logs} onSaveMaxes={syncUserMaxes} />
       ) : view === "settings" ? (
         <SettingsPage onOpenSection={(section) => setView(`settings-${section}`)} />
       ) : view.startsWith("settings-") ? (
@@ -90,12 +91,12 @@ export function AppRoutes({
         <StretchesPage />
       ) : view === "warmup-cooldown" ? (
         <WarmupCooldownPage />
-      ) : view === "stored-programs" ? (
-        <StoredProgramsPage user={user} isTrainer={isTrainer} programs={programs} workouts={allProgramSourceWorkouts} logs={logs} onProgramStarted={refreshCustomWorkouts} />
+      ) : view === "programs" ? (
+        <ProgramsPage user={user} isTrainer={isTrainer} programs={programs} workouts={allProgramSourceWorkouts} logs={logs} onProgramStarted={refreshCustomWorkouts} />
       ) : view === "stored-workouts" ? (
         <StoredWorkoutsPage user={user} programs={programs} workouts={scheduledWorkouts} logs={logs} onOpenWorkout={openStoredWorkout} />
-      ) : view === "programs" ? (
-        <ProgramsPage
+      ) : view === "program-builder" ? (
+        <ProgramBuilderPage
           user={user}
           isTrainer={isTrainer}
           programs={programs}
@@ -108,9 +109,9 @@ export function AppRoutes({
       ) : view === "athletes" ? (
         <AthletesPage programs={programs} workouts={allProgramSourceWorkouts} logs={athleteProgressLogs} />
       ) : view === "workout-list" ? (
-        <DayView date={selectedDate} workoutGroups={selectedWorkoutGroups} logs={logs} programs={programs} onOpenWorkout={openWorkout} onAddWorkout={openBlankWorkout} onChangeDate={openWorkoutList} />
+        <DayView date={selectedDate} user={user} workoutGroups={selectedWorkoutGroups} logs={logs} programs={programs} onOpenWorkout={openWorkout} onAddWorkout={openBlankWorkout} onChangeDate={openWorkoutList} onMoveWorkout={(workoutKey, nextDate) => moveSelectedWorkout(nextDate, workoutKey)} onDeleteWorkout={deleteScheduledWorkout} />
       ) : view === "workout" ? (
-        <WorkoutView workout={selectedWorkout} workoutKey={activeWorkoutKey} date={selectedDate} user={user} logs={logs} setLogs={setLogs} onDone={() => setView("client")} onSaveStatus={handleWorkoutSaveStatus} onMoveWorkout={moveSelectedWorkout} onSaveMaxes={syncUserMaxes} />
+        <WorkoutPage workout={selectedWorkout} workoutKey={activeWorkoutKey} date={selectedDate} user={user} logs={logs} setLogs={setLogs} onDone={() => setView("client")} onSaveStatus={handleWorkoutSaveStatus} onSaveMaxes={syncUserMaxes} />
       ) : (
         <HomePage
           calendarMonths={calendarMonths}
