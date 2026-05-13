@@ -57,7 +57,7 @@ export function WorkoutPage({ workout, workoutKey, date, user, logs, setLogs, on
       : `${workout[0].focus} - Week ${workout[0].week}`
     : workoutKey === "blank" ? "Create workout" : "Scheduled Workout";
   const isFutureWorkout = date > new Date().toISOString().slice(0, 10);
-  const finishButtonLabel = "Save workout";
+  const finishButtonLabel = "Save";
   const workoutType = workout[0]?.workoutType || "strength";
   const MetricWorkoutPage = metricWorkoutPages[workoutType] || null;
   const metricWorkoutTitle = workout[0]?.focus || workoutTitle;
@@ -1100,7 +1100,7 @@ export function WorkoutPage({ workout, workoutKey, date, user, logs, setLogs, on
           </button>
           <button className="primary" type="button" onClick={() => finishWorkout({ completed: true })}>
             <CheckCircle2 size={18} />
-            Complete workout
+            Complete
           </button>
           {showAddExercise && (
             <div className="modal-backdrop" role="presentation">

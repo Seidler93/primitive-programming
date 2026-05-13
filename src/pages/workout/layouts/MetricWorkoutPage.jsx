@@ -127,7 +127,7 @@ export function MetricWorkoutPage({
       </button>
       <button className="primary" type="button" onClick={() => onCompleteWorkout({ completed: true })}>
         <CheckCircle2 size={18} />
-        Complete workout
+        Complete
       </button>
     </>
   );
