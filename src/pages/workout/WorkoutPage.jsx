@@ -176,7 +176,13 @@ export function WorkoutPage({ workout, workoutKey, date, user, logs, setLogs, on
       customExercises,
       ...stateOverrides,
     };
-    const next = { ...existing, ...workoutMeta, ...nextState, ...payload, updatedAt: new Date().toISOString() };
+    const completed = payload.completed === true || payload.status === "completed";
+    const completionPayload = completed ? {
+      completed: true,
+      completedAt: payload.completedAt || existing.completedAt || new Date().toISOString(),
+      status: "completed",
+    } : {};
+    const next = { ...existing, ...workoutMeta, ...nextState, ...payload, ...completionPayload, updatedAt: new Date().toISOString() };
     setLogs({ ...logs, [logKey]: next });
     const result = await saveUserWorkout(user.uid, logKey, next);
     onSaveStatus?.(result, statusContext);

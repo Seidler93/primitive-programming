@@ -323,19 +323,6 @@ function AppContent() {
     if (options.start && user?.uid) {
       const draft = loadWorkoutDraft(user.uid, selectedDate, key);
       saveWorkoutDraft(user.uid, selectedDate, key, { ...draft, started: true });
-      const logKey = workoutLogKey(selectedDate, key);
-      const currentLog = logs[logKey] || {};
-      if (currentLog.completed || currentLog.status === "completed") {
-        const resumedLog = {
-          ...currentLog,
-          completed: false,
-          status: currentLog.status === "completed" ? "scheduled" : currentLog.status || "scheduled",
-          resumedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        setLogs((current) => ({ ...current, [logKey]: resumedLog }));
-        await saveUserWorkout(user.uid, logKey, resumedLog);
-      }
     }
     setSelectedWorkoutKey(key);
     setView("workout");
