@@ -3,16 +3,16 @@ import { CheckCircle2, ChevronRight, Dumbbell } from "lucide-react";
 import { importedProgramMeta } from "../../data/programData";
 import { formatDate, groupWorkouts, workoutLogKey } from "../../utils/appHelpers";
 
-export function StoredWorkoutsPage({ user, workouts, logs, programs, onOpenWorkout }) {
+export function StoredWorkoutsPage({ user, scheduledWorkouts, workouts, programs, onOpenWorkout }) {
   const [activeTab, setActiveTab] = useState("upcoming");
   const [visibleHistoryCount, setVisibleHistoryCount] = useState(10);
   const programOptions = [{ ...importedProgramMeta }, ...programs.filter((program) => program.id !== "default")];
   const today = new Date().toISOString().slice(0, 10);
-  const upcomingWorkouts = groupWorkouts(workouts)
+  const upcomingWorkouts = groupWorkouts(scheduledWorkouts)
     .filter((workout) => workout.date && workout.date >= today)
     .sort((a, b) => `${a.date || ""}`.localeCompare(`${b.date || ""}`));
   const savedWorkouts = Array.isArray(user?.workoutTemplates) ? user.workoutTemplates.slice(0, 10) : [];
-  const historyWorkouts = Object.entries(logs)
+  const historyWorkouts = Object.entries(workouts)
     .filter(([, workout]) => workout?.completed || workout?.status === "completed")
     .map(([id, workout]) => ({ id, ...workout }))
     .sort((a, b) => `${b.completedAt || b.updatedAt || b.date || ""}`.localeCompare(`${a.completedAt || a.updatedAt || a.date || ""}`));
@@ -51,7 +51,7 @@ export function StoredWorkoutsPage({ user, workouts, logs, programs, onOpenWorko
           {upcomingWorkouts.map((workout) => {
             const programName = programOptions.find((program) => program.id === (workout.programId || "default"))?.name || importedProgramMeta.name;
             const logKey = workoutLogKey(workout.date, workout.key);
-            const completed = Boolean(logs[logKey]?.completed || logs[workout.date]?.completed);
+            const completed = Boolean(workouts[logKey]?.completed || workouts[workout.date]?.completed);
             return (
               <button className="stored-workout-card" key={workout.key} type="button" onClick={() => workout.date && onOpenWorkout(workout.date, workout.key)}>
                 <div>

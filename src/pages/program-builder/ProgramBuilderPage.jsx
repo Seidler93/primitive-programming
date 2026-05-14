@@ -6,7 +6,7 @@ import { loadAthletes, loadUserActivePrograms, saveCustomWorkout, saveProgram, s
 import { applyActiveProgramDates, buildWorkoutDatesForProgram, formatDate, programDayGroups, programSlug, progressSummary } from "../../utils/appHelpers";
 import { ProgramWorkoutViewer } from "../programs/ProgramWorkoutViewer";
 
-export function ProgramBuilderPage({ user, isTrainer, programs, workouts, logs, selectedDate, onProgramCreated, onWorkoutCreated }) {
+export function ProgramBuilderPage({ user, isTrainer, programs, programWorkouts, workouts, selectedDate, onProgramCreated, onWorkoutCreated }) {
   const [programName, setProgramName] = useState("");
   const [athleteEmail, setAthleteEmail] = useState("dev-athlete@primitive.local");
   const [startDate, setStartDate] = useState(selectedDate || defaultSelectedDate);
@@ -163,7 +163,7 @@ export function ProgramBuilderPage({ user, isTrainer, programs, workouts, logs, 
       status: "active",
       statusUpdatedAt: new Date().toISOString(),
     };
-    const programWorkouts = workouts
+    const nextProgramWorkouts = programWorkouts
       .filter((item) => (item.programId || "default") === startingProgram.id && item.date)
       .sort((a, b) => a.date.localeCompare(b.date));
     const scheduled = programScheduleMode !== flexibleScheduleMode;
@@ -173,7 +173,7 @@ export function ProgramBuilderPage({ user, isTrainer, programs, workouts, logs, 
       scheduled,
       currentWeek: 1,
       nextWorkoutIndex: 0,
-      ...(scheduled ? { workoutDates: buildWorkoutDatesForProgram(programWorkouts, programStartDate) } : {}),
+      ...(scheduled ? { workoutDates: buildWorkoutDatesForProgram(nextProgramWorkouts, programStartDate) } : {}),
     };
 
     await saveProgram(savedProgram);
@@ -195,7 +195,7 @@ export function ProgramBuilderPage({ user, isTrainer, programs, workouts, logs, 
     event.preventDefault();
     if (!assigningProgram || !assignAthleteId || !assignStartDate) return;
 
-    const programWorkouts = workouts
+    const nextProgramWorkouts = programWorkouts
       .filter((item) => (item.programId || "default") === assigningProgram.id && item.date)
       .sort((a, b) => a.date.localeCompare(b.date));
     const scheduled = assignScheduleMode !== flexibleScheduleMode;
@@ -205,7 +205,7 @@ export function ProgramBuilderPage({ user, isTrainer, programs, workouts, logs, 
       scheduled,
       currentWeek: 1,
       nextWorkoutIndex: 0,
-      ...(scheduled ? { workoutDates: buildWorkoutDatesForProgram(programWorkouts, assignStartDate) } : {}),
+      ...(scheduled ? { workoutDates: buildWorkoutDatesForProgram(nextProgramWorkouts, assignStartDate) } : {}),
     });
     const athlete = athleteOptions.find((item) => item.uid === assignAthleteId);
     setAssignmentMessage(`${assigningProgram.name} assigned to ${athlete?.displayName || athlete?.email || "athlete"}.`);
@@ -228,14 +228,14 @@ export function ProgramBuilderPage({ user, isTrainer, programs, workouts, logs, 
   }
 
   if (viewingProgram) {
-    const viewingProgramWorkouts = workouts.filter((item) => (
+    const viewingProgramWorkouts = programWorkouts.filter((item) => (
       !item.scheduledPlaceholder && (item.programId || "default") === viewingProgram.id
     ));
     return (
       <ProgramWorkoutViewer
         program={viewingProgram}
-        workouts={viewingProgramWorkouts}
-        logs={logs}
+        programWorkouts={viewingProgramWorkouts}
+        workouts={workouts}
         onBack={() => setViewingProgram(null)}
       />
     );
@@ -256,14 +256,14 @@ export function ProgramBuilderPage({ user, isTrainer, programs, workouts, logs, 
           </div>
           <div className="program-card-grid">
             {visiblePrograms.map((program) => {
-              const programWorkouts = workouts.filter((item) => !item.scheduledPlaceholder && (item.programId || "default") === program.id);
-              const summary = progressSummary(programWorkouts, logs);
+              const nextProgramWorkouts = programWorkouts.filter((item) => !item.scheduledPlaceholder && (item.programId || "default") === program.id);
+              const summary = progressSummary(nextProgramWorkouts, workouts);
               const ownActiveProgram = ownActivePrograms.find((item) => item.id === program.id);
               const isProgramActive = Boolean(ownActiveProgram);
               const ownProgressWorkouts = ownActiveProgram?.scheduled
-                ? applyActiveProgramDates(programWorkouts, [{ ...program, activeProgram: ownActiveProgram }])
-                : programWorkouts;
-              const ownSummary = ownActiveProgram ? progressSummary(ownProgressWorkouts, logs) : null;
+                ? applyActiveProgramDates(nextProgramWorkouts, [{ ...program, activeProgram: ownActiveProgram }])
+                : nextProgramWorkouts;
+              const ownSummary = ownActiveProgram ? progressSummary(ownProgressWorkouts, workouts) : null;
               const activeSummary = ownSummary || summary;
               const expanded = expandedProgramId === program.id;
               return (
@@ -301,7 +301,7 @@ export function ProgramBuilderPage({ user, isTrainer, programs, workouts, logs, 
                     <dl className="program-stats program-library-stats">
                       <div>
                         <dt>Length</dt>
-                        <dd>{programLengthLabel(programWorkouts)}</dd>
+                        <dd>{programLengthLabel(nextProgramWorkouts)}</dd>
                       </div>
                     </dl>
                   )}
@@ -336,12 +336,12 @@ export function ProgramBuilderPage({ user, isTrainer, programs, workouts, logs, 
           </div>
           <div className="progress-list">
             {visiblePrograms.filter((program) => ownActivePrograms.some((item) => item.id === program.id)).map((program) => {
-              const programWorkouts = workouts.filter((item) => !item.scheduledPlaceholder && (item.programId || "default") === program.id);
+              const nextProgramWorkouts = programWorkouts.filter((item) => !item.scheduledPlaceholder && (item.programId || "default") === program.id);
               const ownActiveProgram = ownActivePrograms.find((item) => item.id === program.id);
               const progressWorkouts = ownActiveProgram?.scheduled
-                ? applyActiveProgramDates(programWorkouts, [{ ...program, activeProgram: ownActiveProgram }])
-                : programWorkouts;
-              const summary = progressSummary(progressWorkouts, logs);
+                ? applyActiveProgramDates(nextProgramWorkouts, [{ ...program, activeProgram: ownActiveProgram }])
+                : nextProgramWorkouts;
+              const summary = progressSummary(progressWorkouts, workouts);
               return (
                 <div className="progress-row" key={program.id}>
                   <div>

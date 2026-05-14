@@ -2,13 +2,13 @@ import React from "react";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { formatDate, groupWorkouts, progressSummary } from "../../utils/appHelpers";
 
-export function ProgramWorkoutViewer({ program, workouts, logs, onBack }) {
+export function ProgramWorkoutViewer({ program, programWorkouts, workouts, onBack }) {
   const workoutGroups = groupWorkouts(
-    [...workouts]
+    [...programWorkouts]
       .filter((item) => item.date)
       .sort((a, b) => a.date.localeCompare(b.date) || String(a.focus || "").localeCompare(String(b.focus || ""))),
   );
-  const summary = progressSummary(workouts, logs);
+  const summary = progressSummary(programWorkouts, workouts);
   const isActiveProgram = Boolean(program.activeProgram);
 
   return (
@@ -45,7 +45,7 @@ export function ProgramWorkoutViewer({ program, workouts, logs, onBack }) {
       {workoutGroups.length ? (
         <div className="program-workout-list">
           {workoutGroups.map((group, index) => {
-            const completed = Boolean(logs[group.date]?.completed);
+            const completed = Boolean(workouts[group.date]?.completed);
             return (
               <article className={`program-workout-card ${completed ? "completed" : ""}`} key={group.key}>
                 <div className="program-workout-card-header">

@@ -17,11 +17,11 @@ export function ProfileAvatar({ user, iconSize = 34 }) {
   );
 }
 
-export function ProfilePage({ user, isTrainer, logs, onOpenEdit }) {
+export function ProfilePage({ user, isTrainer, workouts, onOpenEdit }) {
   const maxes = loadUserMaxes(user.uid);
-  const completedCount = Object.values(logs).filter((log) => log.completed).length;
-  const lastUpdated = Object.values(logs)
-    .map((log) => log.updatedAt)
+  const completedCount = Object.values(workouts).filter((workout) => workout.completed).length;
+  const lastUpdated = Object.values(workouts)
+    .map((workout) => workout.updatedAt)
     .filter(Boolean)
     .sort()
     .at(-1);
@@ -45,7 +45,7 @@ export function ProfilePage({ user, isTrainer, logs, onOpenEdit }) {
           </div>
           <div>
             <dt>Workout records</dt>
-            <dd>{Object.keys(logs).length}</dd>
+            <dd>{Object.keys(workouts).length}</dd>
           </div>
           <div>
             <dt>Last updated</dt>

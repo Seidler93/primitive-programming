@@ -17,9 +17,9 @@ import {
   workoutLogKey,
 } from "../../utils/appHelpers";
 
-export function WorkoutPage({ workout, workoutKey, date, user, logs, setLogs, onDone, onSaveStatus, onSaveMaxes }) {
+export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWorkouts, onDone, onSaveStatus, onSaveMaxes }) {
   const logKey = workoutLogKey(date, workoutKey);
-  const existing = logs[logKey] || {};
+  const existing = workouts[logKey] || {};
   const initialDraft = loadWorkoutDraft(user.uid, date, workoutKey);
   const savedMaxes = loadUserMaxes(user.uid);
   const mergedMaxes = (sessionMaxes = {}) => ({ ...savedMaxes, ...(sessionMaxes || {}) });
@@ -183,7 +183,7 @@ export function WorkoutPage({ workout, workoutKey, date, user, logs, setLogs, on
       status: "completed",
     } : {};
     const next = { ...existing, ...workoutMeta, ...nextState, ...payload, ...completionPayload, updatedAt: new Date().toISOString() };
-    setLogs({ ...logs, [logKey]: next });
+    setWorkouts({ ...workouts, [logKey]: next });
     const result = await saveUserWorkout(user.uid, logKey, next);
     onSaveStatus?.(result, statusContext);
     return result;

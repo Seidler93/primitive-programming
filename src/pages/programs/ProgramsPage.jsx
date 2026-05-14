@@ -5,7 +5,7 @@ import { loadAthletes, removeUserActiveProgram, saveUserActiveProgram } from "..
 import { applyActiveProgramDates, buildWorkoutDatesForProgram, formatDate, programDayGroups, progressSummary } from "../../utils/appHelpers";
 import { ProgramWorkoutViewer } from "./ProgramWorkoutViewer";
 
-export function ProgramsPage({ user, isTrainer, programs, workouts, logs, onProgramStarted }) {
+export function ProgramsPage({ user, isTrainer, programs, programWorkouts, workouts, onProgramStarted }) {
   const [expandedProgramId, setExpandedProgramId] = useState("");
   const [activePanel, setActivePanel] = useState("");
   const [viewingProgram, setViewingProgram] = useState(null);
@@ -63,7 +63,7 @@ export function ProgramsPage({ user, isTrainer, programs, workouts, logs, onProg
   }
 
   function activeProgramPayload(program, selectedStartDate, selectedScheduleMode) {
-    const programWorkouts = workouts
+    const nextProgramWorkouts = programWorkouts
       .filter((item) => !item.scheduledPlaceholder && (item.programId || "default") === program.id && item.date)
       .sort((a, b) => a.date.localeCompare(b.date));
     const scheduled = selectedScheduleMode !== flexibleScheduleMode;
@@ -73,7 +73,7 @@ export function ProgramsPage({ user, isTrainer, programs, workouts, logs, onProg
       scheduled,
       currentWeek: 1,
       nextWorkoutIndex: 0,
-      ...(scheduled ? { workoutDates: buildWorkoutDatesForProgram(programWorkouts, selectedStartDate) } : {}),
+      ...(scheduled ? { workoutDates: buildWorkoutDatesForProgram(nextProgramWorkouts, selectedStartDate) } : {}),
     };
   }
 
@@ -111,14 +111,14 @@ export function ProgramsPage({ user, isTrainer, programs, workouts, logs, onProg
   }
 
   if (viewingProgram) {
-    const viewingProgramWorkouts = workouts.filter((item) => (
+    const viewingProgramWorkouts = programWorkouts.filter((item) => (
       !item.scheduledPlaceholder && (item.programId || "default") === viewingProgram.id
     ));
     return (
       <ProgramWorkoutViewer
         program={viewingProgram}
-        workouts={viewingProgramWorkouts}
-        logs={logs}
+        programWorkouts={viewingProgramWorkouts}
+        workouts={workouts}
         onBack={() => setViewingProgram(null)}
       />
     );
@@ -134,12 +134,12 @@ export function ProgramsPage({ user, isTrainer, programs, workouts, logs, onProg
       {programOptions.length ? (
         <div className="program-card-grid">
           {programOptions.map((program) => {
-          const programWorkouts = workouts.filter((item) => !item.scheduledPlaceholder && (item.programId || "default") === program.id);
+          const nextProgramWorkouts = programWorkouts.filter((item) => !item.scheduledPlaceholder && (item.programId || "default") === program.id);
           const isActiveProgram = Boolean(program.activeProgram);
           const progressWorkouts = program.activeProgram?.scheduled
-            ? applyActiveProgramDates(programWorkouts, [{ ...program, activeProgram: program.activeProgram }])
-            : programWorkouts;
-          const summary = progressSummary(progressWorkouts, logs);
+            ? applyActiveProgramDates(nextProgramWorkouts, [{ ...program, activeProgram: program.activeProgram }])
+            : nextProgramWorkouts;
+          const summary = progressSummary(progressWorkouts, workouts);
           const expanded = expandedProgramId === program.id;
           const toggleProgramCard = () => {
             setExpandedProgramId(expanded ? "" : program.id);
@@ -186,7 +186,7 @@ export function ProgramsPage({ user, isTrainer, programs, workouts, logs, onProg
                 <dl className="program-stats program-library-stats">
                   <div>
                     <dt>Length</dt>
-                    <dd>{programLengthLabel(program, programWorkouts)}</dd>
+                    <dd>{programLengthLabel(program, nextProgramWorkouts)}</dd>
                   </div>
                 </dl>
               )}

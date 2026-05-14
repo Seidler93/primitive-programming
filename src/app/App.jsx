@@ -35,8 +35,8 @@ function AppContent() {
     syncUserMaxes,
     user,
   } = useAuth();
-  const [logs, setLogs] = useState({});
-  const [athleteProgressLogs, setAthleteProgressLogs] = useState({});
+  const [workouts, setWorkouts] = useState({});
+  const [athleteProgressWorkouts, setAthleteProgressWorkouts] = useState({});
   const [customWorkouts, setCustomWorkouts] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [programWorkouts, setProgramWorkouts] = useState([]);
@@ -65,17 +65,22 @@ function AppContent() {
   }, []);
 
   function clearAppData() {
-    setLogs({});
-    setAthleteProgressLogs({});
+    setWorkouts({});
+    setAthleteProgressWorkouts({});
     setCustomWorkouts([]);
     setPrograms([]);
     setProgramWorkouts([]);
     setWorkoutScheduleOverrides({});
   }
 
-  function userScheduledWorkoutsFromLogs(nextLogs) {
-    return Object.entries(nextLogs)
-      .filter(([, workout]) => workout?.scheduledPlaceholder && workout?.date && workout.status !== "completed")
+  function getScheduledWorkouts(userWorkouts) {
+    return Object.entries(userWorkouts)
+      .filter(([, workout]) => (
+        workout?.scheduledPlaceholder
+        && workout?.date
+        && workout.status !== "deleted"
+        && workout.status !== "moved"
+      ))
       .flatMap(([id, workout]) => {
         if (Array.isArray(workout.items) && workout.items.length) {
           return workout.items.map((item, index) => ({
@@ -97,9 +102,9 @@ function AppContent() {
     ]);
     const programWorkoutState = await loadProgramWorkoutState(currentUser, nextPrograms, userIsTrainer);
     return {
-      logs: nextLogs,
-      athleteProgressLogs: userIsTrainer ? await loadUserWorkouts("dev-athlete") : nextLogs,
-      customWorkouts: userScheduledWorkoutsFromLogs(nextLogs),
+      workouts: nextLogs,
+      athleteProgressWorkouts: userIsTrainer ? await loadUserWorkouts("dev-athlete") : nextLogs,
+      customWorkouts: getScheduledWorkouts(nextLogs),
       programs: programWorkoutState.programs,
       programWorkouts: programWorkoutState.workouts,
       workoutScheduleOverrides: loadWorkoutScheduleOverrides(currentUser.uid),
@@ -165,8 +170,8 @@ function AppContent() {
     let active = true;
     loadAuthenticatedUserData(user, isTrainer).then((nextData) => {
       if (!active) return;
-      setLogs(nextData.logs);
-      setAthleteProgressLogs(nextData.athleteProgressLogs);
+      setWorkouts(nextData.workouts);
+      setAthleteProgressWorkouts(nextData.athleteProgressWorkouts);
       setCustomWorkouts(nextData.customWorkouts);
       setWorkoutScheduleOverrides(nextData.workoutScheduleOverrides);
       setPrograms(nextData.programs);
@@ -268,12 +273,12 @@ function AppContent() {
       return activeProgramIds.has(programId) && !activeFlexibleProgramIds.has(programId);
     }),
   ].filter((item) => {
-    const status = logs[workoutLogKey(item.date, workoutGroupKey(item))]?.status;
+    const status = workouts[workoutLogKey(item.date, workoutGroupKey(item))]?.status;
     return status !== "deleted" && status !== "moved";
-  }), [activeFlexibleProgramIds, activeProgramIds, customWorkouts, logs, programWorkouts, starterProgramWorkouts]);
+  }), [activeFlexibleProgramIds, activeProgramIds, customWorkouts, workouts, programWorkouts, starterProgramWorkouts]);
   const flexibleWorkoutGroupsForSelectedDate = useMemo(() => (
-    flexibleProgramWorkoutGroups(selectedDate, programs, allProgramSourceWorkouts, logs)
-  ), [allProgramSourceWorkouts, logs, programs, selectedDate]);
+    flexibleProgramWorkoutGroups(selectedDate, programs, allProgramSourceWorkouts, workouts)
+  ), [allProgramSourceWorkouts, workouts, programs, selectedDate]);
   const workoutsByDate = useMemo(() => groupByDate(scheduledWorkouts), [scheduledWorkouts]);
   const programLedWorkoutDates = useMemo(() => (
     scheduledWorkouts
@@ -370,7 +375,7 @@ function AppContent() {
       completed: false,
     };
     setCustomWorkouts((current) => [...current.filter((item) => item.id !== scheduledWorkout.id), scheduledWorkout]);
-    setLogs((current) => ({
+    setWorkouts((current) => ({
       ...current,
       [logKey]: {
         ...(current[logKey] || {}),
@@ -389,8 +394,8 @@ function AppContent() {
   async function handleAppLogout() {
     await logoutUser();
     setView("client");
-    setLogs({});
-    setAthleteProgressLogs({});
+    setWorkouts({});
+    setAthleteProgressWorkouts({});
     setCustomWorkouts([]);
     setPrograms([]);
     setProgramWorkouts([]);
@@ -422,7 +427,7 @@ function AppContent() {
     saveWorkoutScheduleOverrides(user.uid, nextOverrides);
 
     const movedWorkout = {
-      ...(logs[originalLogKey] || {}),
+      ...(workouts[originalLogKey] || {}),
       date: nextDate,
       status: "scheduled",
       completed: false,
@@ -435,7 +440,7 @@ function AppContent() {
       updatedAt: new Date().toISOString(),
     };
     const movedOriginalWorkout = {
-      ...(logs[originalLogKey] || {}),
+      ...(workouts[originalLogKey] || {}),
       date: selectedDate,
       status: "moved",
       completed: false,
@@ -450,7 +455,7 @@ function AppContent() {
       ...current.filter((item) => !movedIds.has(item.id)),
       ...movedItems,
     ]);
-    setLogs((current) => ({
+    setWorkouts((current) => ({
       ...current,
       [originalLogKey]: movedOriginalWorkout,
       [movedLogKey]: movedWorkout,
@@ -478,7 +483,7 @@ function AppContent() {
     setCustomWorkouts((current) => current.filter((item) => !itemIds.has(item.id)));
 
     if (isUserScheduledWorkout) {
-      setLogs((current) => {
+      setWorkouts((current) => {
         const next = { ...current };
         delete next[logKey];
         return next;
@@ -486,13 +491,13 @@ function AppContent() {
       await deleteUserWorkout(user.uid, logKey);
     } else {
       const deletedWorkout = {
-        ...(logs[logKey] || {}),
+        ...(workouts[logKey] || {}),
         date: selectedDate,
         status: "deleted",
         completed: false,
         deletedAt: new Date().toISOString(),
       };
-      setLogs((current) => ({ ...current, [logKey]: deletedWorkout }));
+      setWorkouts((current) => ({ ...current, [logKey]: deletedWorkout }));
       await saveUserWorkout(user.uid, logKey, deletedWorkout);
     }
 
@@ -531,14 +536,14 @@ function AppContent() {
               activeWorkoutKey={activeWorkoutKey}
               allProgramSourceWorkouts={allProgramSourceWorkouts}
               applyAppUpdate={applyAppUpdate}
-              athleteProgressLogs={athleteProgressLogs}
+              athleteProgressWorkouts={athleteProgressWorkouts}
               calendarMonths={calendarMonths}
               deleteScheduledWorkout={deleteScheduledWorkout}
               handleProfileSaved={handleProfileSaved}
               handleProgramWorkoutCreated={handleProgramWorkoutCreated}
               handleWorkoutSaveStatus={handleWorkoutSaveStatus}
               isTrainer={isTrainer}
-              logs={logs}
+              workouts={workouts}
               moveSelectedWorkout={moveSelectedWorkout}
               openBlankWorkout={openBlankWorkout}
               openStoredWorkout={openStoredWorkout}
@@ -551,7 +556,7 @@ function AppContent() {
               selectedWorkout={selectedWorkout}
               selectedWorkoutGroups={selectedWorkoutGroups}
               serviceWorkerRegistration={serviceWorkerRegistration}
-              setLogs={setLogs}
+              setWorkouts={setWorkouts}
               setSelectedDate={setSelectedDate}
               setView={setView}
               setVisibleCalendarMonths={setVisibleCalendarMonths}

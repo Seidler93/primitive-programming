@@ -325,9 +325,9 @@ export function groupWorkouts(items) {
   }, {}));
 }
 
-export function workoutExerciseCount(group, logs = {}) {
+export function workoutExerciseCount(group, workouts = {}) {
   const programmedCount = group.items.filter((item) => !item.scheduledPlaceholder).length;
-  const loggedCustomCount = logs[workoutLogKey(group.date, group.key)]?.customExercises?.filter((exercise) => exercise.section !== "warmup").length || 0;
+  const loggedCustomCount = workouts[workoutLogKey(group.date, group.key)]?.customExercises?.filter((exercise) => exercise.section !== "warmup").length || 0;
   return Math.max(programmedCount, loggedCustomCount);
 }
 
@@ -472,10 +472,10 @@ export function programSlug(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || `program-${Date.now()}`;
 }
 
-export function progressSummary(workouts, logs) {
-  const dates = [...new Set(workouts.map((item) => item.date))].sort();
-  const completed = dates.filter((date) => logs[date]?.completed).length;
-  const nextDate = dates.find((date) => !logs[date]?.completed);
+export function progressSummary(programWorkouts, workouts) {
+  const dates = [...new Set(programWorkouts.map((item) => item.date))].sort();
+  const completed = dates.filter((date) => workouts[date]?.completed).length;
+  const nextDate = dates.find((date) => !workouts[date]?.completed);
   return {
     total: dates.length,
     completed,
@@ -544,24 +544,24 @@ export function applyActiveProgramDates(workouts, programs) {
   });
 }
 
-export function completedFlexibleProgramDaysThisWeek(logs, programId, date) {
-  return Object.entries(logs).filter(([key, log]) => {
-    if (!log?.completed || log.programId !== programId || log.scheduleMode !== flexibleScheduleMode) return false;
-    const logDate = logDateFromKey(log.date || key);
-    return logDate && isDateInSameWeek(logDate, date);
+export function completedFlexibleProgramDaysThisWeek(workouts, programId, date) {
+  return Object.entries(workouts).filter(([key, workout]) => {
+    if (!workout?.completed || workout.programId !== programId || workout.scheduleMode !== flexibleScheduleMode) return false;
+    const workoutDate = logDateFromKey(workout.date || key);
+    return workoutDate && isDateInSameWeek(workoutDate, date);
   }).length;
 }
 
-export function flexibleProgramWorkoutGroups(date, programs, workouts, logs) {
+export function flexibleProgramWorkoutGroups(date, programs, programWorkouts, workouts) {
   return programs
     .filter((program) => program.status === "active" && program.scheduleMode === flexibleScheduleMode)
     .flatMap((program) => {
       const week = programWeekNumber(program, date);
-      const weekGroups = programDayGroups(workouts, program.id)
+      const weekGroups = programDayGroups(programWorkouts, program.id)
         .filter((group) => Number(group.week) === week);
       if (!weekGroups.length) return [];
 
-      const dayIndex = completedFlexibleProgramDaysThisWeek(logs, program.id, date);
+      const dayIndex = completedFlexibleProgramDaysThisWeek(workouts, program.id, date);
       const sourceGroup = weekGroups[dayIndex];
       if (!sourceGroup) return [];
 
@@ -598,28 +598,28 @@ export function logDateFromKey(key) {
   return match ? match[0] : "";
 }
 
-export function completedWorkoutDates(logs) {
-  return Object.entries(logs)
-    .filter(([, log]) => log?.completed)
-    .map(([key, log]) => logDateFromKey(log.date || key))
+export function completedWorkoutDates(workouts) {
+  return Object.entries(workouts)
+    .filter(([, workout]) => workout?.completed)
+    .map(([key, workout]) => logDateFromKey(workout.date || key))
     .filter(Boolean)
     .sort();
 }
 
-export function completedWorkoutsLast30Days(logs, todayValue = new Date()) {
+export function completedWorkoutsLast30Days(workouts, todayValue = new Date()) {
   const today = new Date(todayValue);
   today.setHours(12, 0, 0, 0);
   const startDate = new Date(today);
   startDate.setDate(startDate.getDate() - 29);
 
-  return completedWorkoutDates(logs).filter((date) => {
+  return completedWorkoutDates(workouts).filter((date) => {
     const completedDate = new Date(`${date}T12:00:00`);
     return completedDate >= startDate && completedDate <= today;
   }).length;
 }
 
-export function weeklyWorkoutStreak(logs) {
-  const completedWeeks = new Set(completedWorkoutDates(logs).map((date) => startOfWeekMonday(`${date}T12:00:00`).toISOString().slice(0, 10)));
+export function weeklyWorkoutStreak(workouts) {
+  const completedWeeks = new Set(completedWorkoutDates(workouts).map((date) => startOfWeekMonday(`${date}T12:00:00`).toISOString().slice(0, 10)));
   if (!completedWeeks.size) return 0;
 
   let streak = 0;
@@ -631,9 +631,9 @@ export function weeklyWorkoutStreak(logs) {
   return streak;
 }
 
-export function programTimelineSummary(workouts, logs) {
-  const dates = [...new Set(workouts.map((item) => item.date))].sort();
-  const summary = progressSummary(workouts, logs);
+export function programTimelineSummary(programWorkouts, workouts) {
+  const dates = [...new Set(programWorkouts.map((item) => item.date))].sort();
+  const summary = progressSummary(programWorkouts, workouts);
   return {
     ...summary,
     firstDate: dates[0] || "",
@@ -646,7 +646,7 @@ export function numericMax(maxes, key) {
   return Number(max?.value ?? max ?? 0) || 0;
 }
 
-export function goalProgress(goal, logs, maxes, weightUnit) {
+export function goalProgress(goal, workouts, maxes, weightUnit) {
   const target = Math.max(1, Number(goal.target) || 1);
   let current = 0;
   let label = "";
@@ -661,10 +661,10 @@ export function goalProgress(goal, logs, maxes, weightUnit) {
     const unit = weightUnit || maxes[goal.lift]?.unit || goal.unit || "kg";
     label = `${current || 0}/${target}${unit}`;
   } else {
-    current = Object.values(logs).filter((log) => {
-      if (!log.completed) return false;
+    current = Object.values(workouts).filter((workout) => {
+      if (!workout.completed) return false;
       if (!goal.startDate) return true;
-      return !log.updatedAt || log.updatedAt.slice(0, 10) >= goal.startDate;
+      return !workout.updatedAt || workout.updatedAt.slice(0, 10) >= goal.startDate;
     }).length;
     label = `${current}/${target} workouts`;
   }

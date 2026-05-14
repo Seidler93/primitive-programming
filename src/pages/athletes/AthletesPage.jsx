@@ -3,16 +3,16 @@ import { UsersRound } from "lucide-react";
 import { importedProgramMeta } from "../../data/programData";
 import { formatDate, progressSummary } from "../../utils/appHelpers";
 
-export function AthletesPage({ programs, workouts, logs }) {
+export function AthletesPage({ programs, programWorkouts, workouts }) {
   const defaultProgram = { ...importedProgramMeta, athleteEmail: "dev-athlete@primitive.local" };
   const programOptions = [defaultProgram, ...programs.filter((program) => program.id !== "default")];
   const athletes = Array.from(
     programOptions.reduce((map, program) => {
       const email = program.athleteEmail || "Unassigned athlete";
       const current = map.get(email) || { email, programs: [], workouts: [] };
-      const programWorkouts = workouts.filter((item) => (item.programId || "default") === program.id);
+      const nextProgramWorkouts = programWorkouts.filter((item) => (item.programId || "default") === program.id);
       current.programs.push(program);
-      current.workouts.push(...programWorkouts);
+      current.workouts.push(...nextProgramWorkouts);
       map.set(email, current);
       return map;
     }, new Map()).values(),
@@ -28,7 +28,7 @@ export function AthletesPage({ programs, workouts, logs }) {
       {athletes.length ? (
         <div className="program-card-grid">
           {athletes.map((athlete) => {
-            const summary = progressSummary(athlete.workouts, logs);
+            const summary = progressSummary(athlete.workouts, workouts);
             return (
               <article className="program-card" key={athlete.email}>
                 <div>

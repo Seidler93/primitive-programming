@@ -3,7 +3,7 @@ import { CalendarStrip } from "./CalendarStrip";
 
 export function HomePage({
   calendarMonths,
-  logs,
+  workouts,
   onOpenWorkoutList,
   onShowMoreMonths,
   selectedDate,
@@ -21,7 +21,7 @@ export function HomePage({
         sections={calendarMonths}
         selectedDate={selectedDate}
         onSelectDate={onOpenWorkoutList}
-        logs={logs}
+        workouts={workouts}
         workoutsByDate={workoutsByDate}
         onShowMoreMonths={onShowMoreMonths}
       />

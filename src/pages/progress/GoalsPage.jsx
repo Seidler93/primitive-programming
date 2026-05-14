@@ -26,7 +26,7 @@ function localDateValue() {
   return date.toISOString().slice(0, 10);
 }
 
-export function GoalsPage({ user, logs, onSaveMaxes }) {
+export function GoalsPage({ user, workouts, onSaveMaxes }) {
   const goals = loadUserGoals(user.uid);
   const [bodyMetrics, setBodyMetrics] = useState(() => loadBodyMetrics(user.uid));
   const [maxes, setMaxes] = useState(() => loadUserMaxes(user.uid));
@@ -40,8 +40,8 @@ export function GoalsPage({ user, logs, onSaveMaxes }) {
   const [progressSaved, setProgressSaved] = useState(false);
   const weightUnit = loadUserWeightUnit(user.uid);
   const activeGoals = goals.filter((goal) => !goal.archivedAt);
-  const recentCompletedCount = completedWorkoutsLast30Days(logs);
-  const weekStreak = weeklyWorkoutStreak(logs);
+  const recentCompletedCount = completedWorkoutsLast30Days(workouts);
+  const weekStreak = weeklyWorkoutStreak(workouts);
   const progressOptions = progressType === "max" ? maxFields : bodyMetricFields;
   const selectedProgressField = progressOptions.find((field) => field.key === progressKey) || progressOptions[0];
   const selectedProgressUnit = progressType === "max" ? weightUnit : bodyMetricUnit(selectedProgressField || {}, weightUnit);
@@ -123,7 +123,7 @@ export function GoalsPage({ user, logs, onSaveMaxes }) {
           ...(metricGoalProgress(goal, latestMetric?.[goal.metric]) || { percent: 0, complete: false }),
           label: `${latestMetric?.[goal.metric] || 0}/${goal.target}${bodyMetricUnit(bodyMetricFields.find((field) => field.key === goal.metric) || {}, weightUnit)}`,
         }
-      : goalProgress(goal, logs, maxes, weightUnit);
+      : goalProgress(goal, workouts, maxes, weightUnit);
     const liftLabel = maxFields.find((field) => field.key === goal.lift)?.label;
     const metricLabel = bodyMetricFields.find((field) => field.key === goal.metric)?.label;
     const bodyweightChart = goal.type === "metric" && goal.metric === "bodyweight"
