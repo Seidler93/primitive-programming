@@ -38,9 +38,15 @@ export function useToastNotifications(user) {
     };
   }, [user]);
 
-  function handleWorkoutSaveStatus(result) {
+  function handleWorkoutSaveStatus(result, context = {}) {
     window.clearTimeout(saveTimerRef.current);
-    setSaveMessage(result?.synced ? "Workout synced." : "Workout saved on this device.");
+    if (context.action === "completed") {
+      setSaveMessage("Workout completed.");
+    } else if (context.action === "saved") {
+      setSaveMessage("Workout saved.");
+    } else {
+      setSaveMessage(result?.synced ? "Workout synced." : "Workout saved on this device.");
+    }
     saveTimerRef.current = window.setTimeout(() => setSaveMessage(""), 3200);
   }
 

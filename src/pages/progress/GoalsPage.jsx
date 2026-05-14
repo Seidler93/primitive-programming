@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { CalendarDays, CheckCircle2, Dumbbell, Plus, Save, TrendingUp } from "lucide-react";
 import { bodyMetricFields, maxFields } from "../../app/config";
-import { loadUserProgress, saveUserProgress } from "../../services/firebase";
+import { loadUserProgress, saveUserProgress } from "../../db";
 import {
   bodyMetricUnit,
   completedWorkoutsLast30Days,

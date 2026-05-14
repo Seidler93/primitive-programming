@@ -4,10 +4,9 @@ import {
   isTrainerUser,
   loadUserMaxes as loadCloudUserMaxes,
   loadUserProfile,
-  logout,
-  observeAuth,
   saveUserMaxes as saveCloudUserMaxes,
-} from "../services/firebase";
+} from "../db";
+import { logout, observeAuth } from "../services/firebase";
 import { mergeUserProfile, saveUserMaxes } from "../utils/appHelpers";
 
 const AuthContext = createContext(null);

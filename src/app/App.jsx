@@ -10,7 +10,7 @@ import { AuthProvider, useAuth } from "../context/AuthContext";
 import { MenuProvider } from "../context/MenuContext";
 import { TimerProvider } from "../context/TimerContext";
 import { importedProgram } from "../data/programData";
-import { deleteUserWorkout, loadCustomWorkouts, loadPrograms, loadProgramsForUser, loadUserWorkouts, saveUserActiveProgram, saveUserWorkout } from "../services/firebase";
+import { deleteUserWorkout, loadCustomWorkouts, loadPrograms, loadProgramsForUser, loadUserWorkouts, saveUserActiveProgram, saveUserWorkout } from "../db";
 import { activateWaitingServiceWorker, registerAppServiceWorker } from "../services/pwa";
 import { appRouteUrl, applyActiveProgramDates, buildWorkoutDatesForProgram, calendarSections, flexibleProgramWorkoutGroups, groupByDate, groupWorkouts, isDevUser, loadWorkoutDraft, loadWorkoutScheduleOverrides, moveWorkoutDraft, readAppRoute, saveWorkoutDraft, saveWorkoutScheduleOverrides, shiftDate, workoutDateMapKey, workoutGroupKey, workoutLogKey } from "../utils/appHelpers";
 

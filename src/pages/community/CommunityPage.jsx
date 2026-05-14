@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Plus, UsersRound } from "lucide-react";
-import { createCommunity, joinCommunity, loadUserCommunities } from "../../services/firebase";
+import { createCommunity, joinCommunity, loadUserCommunities } from "../../db";
 
 export function CommunityPage({ user }) {
   const [communities, setCommunities] = useState([]);

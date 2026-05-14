@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { CalendarDays, ChevronRight, ClipboardList, Eye, Minus } from "lucide-react";
 import { defaultSelectedDate, flexibleScheduleMode } from "../../app/config";
-import { loadAthletes, removeUserActiveProgram, saveUserActiveProgram } from "../../services/firebase";
+import { loadAthletes, removeUserActiveProgram, saveUserActiveProgram } from "../../db";
 import { applyActiveProgramDates, buildWorkoutDatesForProgram, formatDate, programDayGroups, progressSummary } from "../../utils/appHelpers";
 import { ProgramWorkoutViewer } from "./ProgramWorkoutViewer";
 

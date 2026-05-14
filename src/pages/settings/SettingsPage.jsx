@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { ArrowLeft, Bell, ChevronRight, LogOut, PencilLine, Plus, Save, Settings } from "lucide-react";
 import { appVersion, bodyMetricFields, defaultBodyMetricSettings, settingsSections } from "../../app/config";
-import { requestNotificationAccess, saveUserProfile } from "../../services/firebase";
+import { saveUserProfile } from "../../db";
+import { requestNotificationAccess } from "../../services/firebase";
 import { loadBodyMetricSettings, loadUserDistanceUnit, loadUserWeightUnit, saveBodyMetricSettings, saveUserDistanceUnit, saveUserWeightUnit } from "../../utils/appHelpers";
 
 export function SettingsPage({ onOpenSection }) {

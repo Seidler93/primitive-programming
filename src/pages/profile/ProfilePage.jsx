@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { PencilLine, Plus, Save, UserRound } from "lucide-react";
 import { maxFields } from "../../app/config";
-import { saveUserProfile, uploadUserProfileImage } from "../../services/firebase";
+import { saveUserProfile } from "../../db";
+import { uploadUserProfileImage } from "../../services/firebase";
 import {
   dataUrlToBlob,
   imageFileToDataUrl,

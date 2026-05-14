@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { CalendarDays, ChevronRight, ClipboardList, Eye, Plus, UsersRound } from "lucide-react";
 import { importedProgramMeta } from "../../data/programData";
 import { defaultSelectedDate, flexibleScheduleMode } from "../../app/config";
-import { loadAthletes, loadUserActivePrograms, saveCustomWorkout, saveProgram, saveUserActiveProgram } from "../../services/firebase";
+import { loadAthletes, loadUserActivePrograms, saveCustomWorkout, saveProgram, saveUserActiveProgram } from "../../db";
 import { applyActiveProgramDates, buildWorkoutDatesForProgram, formatDate, programDayGroups, programSlug, progressSummary } from "../../utils/appHelpers";
 import { ProgramWorkoutViewer } from "../programs/ProgramWorkoutViewer";
 

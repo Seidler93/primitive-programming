@@ -1,19 +1,4 @@
-import {
-  CalendarDays,
-  ClipboardList,
-  Dumbbell,
-  Flame,
-  MessageCircle,
-  Newspaper,
-  PersonStanding,
-  Settings,
-  ShoppingBag,
-  TrendingUp,
-  Trophy,
-  Utensils,
-  UserRound,
-  UsersRound,
-} from "lucide-react";
+import { CalendarDays, ClipboardList, Dumbbell, Flame, MessageCircle, Newspaper, PersonStanding, Settings, ShoppingBag, TrendingUp, Trophy, Utensils, UserRound, UsersRound, } from "lucide-react";
 
 export const menuRoutes = [
   { id: "home", view: "client", label: "Home", icon: CalendarDays },

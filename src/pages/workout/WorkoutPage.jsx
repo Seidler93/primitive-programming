@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Dumbbell, Minus, PencilLine, Plus, Save } from "lucide-react";
 import { flexibleScheduleMode, maxFields, warmupPresets } from "../../app/config";
 import { ExerciseAutocomplete, SimilarExerciseButtons } from "../../components/exercise/ExerciseAutocomplete";
-import { saveUserWorkout } from "../../services/firebase";
+import { saveUserWorkout } from "../../db";
 import { metricWorkoutPages } from "./layouts";
 import {
   formatDate,
@@ -157,7 +157,7 @@ export function WorkoutPage({ workout, workoutKey, date, user, logs, setLogs, on
     }
   }, [date, hydratedDraftFor, maxes, requiredMaxes, user.uid, weightUnit, workoutKey]);
 
-  async function persist(payload = {}, stateOverrides = {}) {
+  async function persist(payload = {}, stateOverrides = {}, statusContext) {
     const workoutMeta = workout[0] ? {
       date,
       programId: workout[0].programId || "default",
@@ -179,11 +179,12 @@ export function WorkoutPage({ workout, workoutKey, date, user, logs, setLogs, on
     const next = { ...existing, ...workoutMeta, ...nextState, ...payload, updatedAt: new Date().toISOString() };
     setLogs({ ...logs, [logKey]: next });
     const result = await saveUserWorkout(user.uid, logKey, next);
-    onSaveStatus?.(result);
+    onSaveStatus?.(result, statusContext);
+    return result;
   }
 
   async function finishWorkout(payload = {}) {
-    await persist(payload);
+    await persist(payload, {}, { action: payload.completed ? "completed" : "saved" });
     onDone();
   }
 

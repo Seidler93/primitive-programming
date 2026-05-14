@@ -15,7 +15,7 @@ export function LoginPage({ onAuthed }) {
     setError("");
     try {
       const user = await login(email, password, mode);
-      onAuthed(user);
+      await onAuthed?.(user);
     } catch (err) {
       setError(err.message);
     }

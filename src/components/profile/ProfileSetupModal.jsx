@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { saveUserProfile } from "../../services/firebase";
+import { saveUserProfile } from "../../db";
 import {
   loadBodyMetrics,
   loadUserWeightUnit,
