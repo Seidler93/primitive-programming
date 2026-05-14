@@ -3,6 +3,13 @@ import { db, isDevUserId, localKey, withTimeout } from "../services/firebaseClie
 
 // Profile documents live under `users/{uid}/profile`.
 
+function normalizeUserPreferences(preferences = {}) {
+  return {
+    weightUnit: preferences.weightUnit === "lb" ? "lb" : "kg",
+    distanceUnit: preferences.distanceUnit === "mi" ? "mi" : "km",
+  };
+}
+
 export async function loadUserProfile(userId) {
   if (db && !isDevUserId(userId)) {
     try {
@@ -77,4 +84,44 @@ export async function saveUserMaxes(userId, maxes) {
   }
 
   return { synced: false, local: true };
+}
+
+export async function loadUserPreferences(userId) {
+  if (db && !isDevUserId(userId)) {
+    try {
+      const snapshot = await withTimeout(
+        getDoc(doc(db, "users", userId, "profile", "preferences")),
+        "User preferences request timed out.",
+      );
+      if (snapshot.exists()) {
+        return normalizeUserPreferences(snapshot.data());
+      }
+    } catch (error) {
+      console.warn("Falling back to local user preferences.", error);
+    }
+  }
+
+  try {
+    return normalizeUserPreferences(JSON.parse(localStorage.getItem(localKey(`preferences:${userId}`)) || "{}"));
+  } catch {
+    return normalizeUserPreferences();
+  }
+}
+
+export async function saveUserPreferences(userId, preferences) {
+  const normalizedPreferences = normalizeUserPreferences(preferences);
+  const payload = { ...normalizedPreferences, updatedAt: new Date().toISOString() };
+  localStorage.setItem(localKey(`preferences:${userId}`), JSON.stringify(normalizedPreferences));
+
+  if (db && !isDevUserId(userId)) {
+    try {
+      await setDoc(doc(db, "users", userId, "profile", "preferences"), payload, { merge: true });
+      return { synced: true, preferences: normalizedPreferences };
+    } catch (error) {
+      console.warn("Saved user preferences locally; cloud sync failed.", error);
+      return { synced: false, local: true, preferences: normalizedPreferences };
+    }
+  }
+
+  return { synced: false, local: true, preferences: normalizedPreferences };
 }

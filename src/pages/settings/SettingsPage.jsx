@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { ArrowLeft, Bell, ChevronRight, LogOut, PencilLine, Plus, Save, Settings } from "lucide-react";
 import { appVersion, bodyMetricFields, defaultBodyMetricSettings, settingsSections } from "../../app/config";
-import { saveUserProfile } from "../../db";
+import { saveUserPreferences, saveUserProfile } from "../../db";
 import { requestNotificationAccess } from "../../services/firebase";
 import { loadBodyMetricSettings, loadUserDistanceUnit, loadUserWeightUnit, saveBodyMetricSettings, saveUserDistanceUnit, saveUserWeightUnit } from "../../utils/appHelpers";
 
@@ -167,6 +167,7 @@ export function SettingsSectionPage({ section, user, isTrainer, serviceWorkerReg
     try {
       saveUserWeightUnit(user.uid, preferenceDraft.weightUnit);
       saveUserDistanceUnit(user.uid, preferenceDraft.distanceUnit);
+      await saveUserPreferences(user.uid, preferenceDraft);
       setWeightUnit(preferenceDraft.weightUnit);
       setDistanceUnit(preferenceDraft.distanceUnit);
       setPreferencesEditing(false);
@@ -202,6 +203,7 @@ export function SettingsSectionPage({ section, user, isTrainer, serviceWorkerReg
     };
     try {
       saveUserWeightUnit(user.uid, nextWeightUnit);
+      await saveUserPreferences(user.uid, { weightUnit: nextWeightUnit, distanceUnit });
       setWeightUnit(nextWeightUnit);
       if (bodyweight.trim()) {
         const entries = loadBodyMetrics(user.uid);

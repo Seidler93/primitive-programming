@@ -3,11 +3,12 @@ import {
   ensureUserDocument,
   isTrainerUser,
   loadUserMaxes as loadCloudUserMaxes,
+  loadUserPreferences,
   loadUserProfile,
   saveUserMaxes as saveCloudUserMaxes,
 } from "../db";
 import { logout, observeAuth } from "../services/firebase";
-import { mergeUserProfile, saveUserMaxes } from "../utils/appHelpers";
+import { mergeUserProfile, saveUserDistanceUnit, saveUserMaxes, saveUserWeightUnit } from "../utils/appHelpers";
 
 const AuthContext = createContext(null);
 
@@ -30,13 +31,16 @@ export function AuthProvider({ children }) {
       return null;
     }
 
-    const [profile, cloudMaxes, rootUser] = await Promise.all([
+    const [profile, cloudMaxes, preferences, rootUser] = await Promise.all([
       loadUserProfile(nextUser.uid),
       loadCloudUserMaxes(nextUser.uid),
+      loadUserPreferences(nextUser.uid),
       ensureUserDocument(nextUser),
     ]);
     saveUserMaxes(nextUser.uid, cloudMaxes);
-    const profiledUser = mergeUserProfile(nextUser, { ...rootUser, ...profile });
+    saveUserWeightUnit(nextUser.uid, preferences.weightUnit);
+    saveUserDistanceUnit(nextUser.uid, preferences.distanceUnit);
+    const profiledUser = mergeUserProfile(nextUser, { ...rootUser, ...profile, preferences });
     const nextTrainer = await isTrainerUser(nextUser);
     setUser(profiledUser);
     setIsTrainer(nextTrainer);
