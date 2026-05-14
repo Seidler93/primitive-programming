@@ -10,9 +10,7 @@ export function MetricWorkoutPage({
   notes,
   onAddWarmup,
   onCompleteWorkout,
-  onFinishWorkout,
-  onPersist,
-  setLoads,
+  onFinishWorkout,  setLoads,
   setNotes,
   title,
   warmups,
@@ -61,7 +59,6 @@ export function MetricWorkoutPage({
                 <select
                   value={typedValue(field)}
                   onChange={(event) => setTypedValue(field.key, event.target.value)}
-                  onBlur={onPersist}
                 >
                   <option value="">Select</option>
                   {field.options.map((option) => (
@@ -73,14 +70,12 @@ export function MetricWorkoutPage({
                   <input
                     value={typedValue(field)}
                     onChange={(event) => setTypedDistance(field, { value: event.target.value })}
-                    onBlur={onPersist}
                     placeholder={typedDistanceUnit(field) === "mi" ? "Miles" : "Kilometers"}
                     inputMode="decimal"
                   />
                   <select
                     value={typedDistanceUnit(field)}
                     onChange={(event) => setTypedDistance(field, { unit: event.target.value })}
-                    onBlur={onPersist}
                     aria-label={`${field.label} unit`}
                   >
                     <option value="mi">mi</option>
@@ -92,14 +87,12 @@ export function MetricWorkoutPage({
                   <input
                     value={typedTimeValue(field, "min")}
                     onChange={(event) => setTypedTime(field, "min", event.target.value)}
-                    onBlur={onPersist}
                     placeholder="Min"
                     inputMode="numeric"
                   />
                   <input
                     value={typedTimeValue(field, "sec")}
                     onChange={(event) => setTypedTime(field, "sec", event.target.value)}
-                    onBlur={onPersist}
                     placeholder="Sec"
                     inputMode="numeric"
                   />
@@ -108,7 +101,6 @@ export function MetricWorkoutPage({
                 <input
                   value={typedValue(field)}
                   onChange={(event) => setTypedValue(field.key, event.target.value)}
-                  onBlur={onPersist}
                   placeholder={field.placeholder}
                 />
               )}
@@ -119,7 +111,7 @@ export function MetricWorkoutPage({
       {warmups}
       <label className="notes-field">
         Session notes
-        <textarea value={notes} onChange={(event) => setNotes(event.target.value)} onBlur={onPersist} rows={3} />
+        <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} />
       </label>
       <button className="secondary" type="button" onClick={() => onFinishWorkout({})}>
         <Save size={18} />
@@ -132,3 +124,4 @@ export function MetricWorkoutPage({
     </>
   );
 }
+

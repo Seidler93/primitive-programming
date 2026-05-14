@@ -40,7 +40,9 @@ export function useToastNotifications(user) {
 
   function handleWorkoutSaveStatus(result, context = {}) {
     window.clearTimeout(saveTimerRef.current);
-    if (context.action === "completed") {
+    if (result?.pendingSync) {
+      setSaveMessage("Saved offline only. Will sync when connected.");
+    } else if (context.action === "completed") {
       setSaveMessage("Workout completed.");
     } else if (context.action === "saved") {
       setSaveMessage("Workout saved.");

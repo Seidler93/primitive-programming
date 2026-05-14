@@ -10,7 +10,7 @@ import { AuthProvider, useAuth } from "../context/AuthContext";
 import { MenuProvider } from "../context/MenuContext";
 import { TimerProvider } from "../context/TimerContext";
 import { importedProgram } from "../data/programData";
-import { deleteUserWorkout, loadCustomWorkouts, loadPrograms, loadProgramsForUser, loadUserWorkouts, saveUserActiveProgram, saveUserWorkout } from "../db";
+import { deleteUserWorkout, loadCustomWorkouts, loadPrograms, loadProgramsForUser, loadUserWorkouts, saveUserActiveProgram, saveUserWorkout, syncPendingUserWorkouts } from "../db";
 import { activateWaitingServiceWorker, registerAppServiceWorker } from "../services/pwa";
 import { appRouteUrl, applyActiveProgramDates, buildWorkoutDatesForProgram, calendarSections, flexibleProgramWorkoutGroups, groupByDate, groupWorkouts, isDevUser, loadWorkoutDraft, loadWorkoutScheduleOverrides, moveWorkoutDraft, readAppRoute, saveWorkoutDraft, saveWorkoutScheduleOverrides, shiftDate, workoutDateMapKey, workoutGroupKey, workoutLogKey } from "../utils/appHelpers";
 
@@ -215,8 +215,12 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    function updateOnlineStatus() {
-      setIsOnline(navigator.onLine);
+    async function updateOnlineStatus() {
+      const nextIsOnline = navigator.onLine;
+      setIsOnline(nextIsOnline);
+      if (nextIsOnline && user?.uid) {
+        await syncPendingUserWorkouts(user.uid);
+      }
     }
 
     window.addEventListener("online", updateOnlineStatus);
@@ -225,13 +229,18 @@ function AppContent() {
       window.removeEventListener("online", updateOnlineStatus);
       window.removeEventListener("offline", updateOnlineStatus);
     };
-  }, []);
+  }, [user?.uid]);
 
   useEffect(() => {
     if (isMobileViewport && view === "program-builder") {
       setView("client");
     }
   }, [isMobileViewport, view]);
+
+  useEffect(() => {
+    if (!user?.uid || !isOnline) return;
+    void syncPendingUserWorkouts(user.uid);
+  }, [isOnline, user?.uid]);
 
   const hasDefaultProgramAccess = useMemo(() => programs.some((program) => program.id === "default"), [programs]);
   const activeProgramIds = useMemo(() => new Set(programs

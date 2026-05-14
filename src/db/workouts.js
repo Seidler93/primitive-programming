@@ -24,6 +24,36 @@ function workoutRecordPayload(payload = {}) {
   };
 }
 
+function userWorkoutsLocalKey(userId) {
+  return localKey(`workouts:${userId}`);
+}
+
+function pendingWorkoutSyncLocalKey(userId) {
+  return localKey(`pending-workout-sync:${userId}`);
+}
+
+function loadLocalUserWorkouts(userId) {
+  return readJson(localStorage.getItem(userWorkoutsLocalKey(userId)), {});
+}
+
+function saveLocalUserWorkouts(userId, workouts) {
+  localStorage.setItem(userWorkoutsLocalKey(userId), JSON.stringify(workouts));
+}
+
+function loadPendingWorkoutSync(userId) {
+  return readJson(localStorage.getItem(pendingWorkoutSyncLocalKey(userId)), {});
+}
+
+function savePendingWorkoutSync(userId, pendingWorkouts) {
+  localStorage.setItem(pendingWorkoutSyncLocalKey(userId), JSON.stringify(pendingWorkouts));
+}
+
+function queuePendingWorkoutSync(userId, workoutId, payload) {
+  const pendingWorkouts = loadPendingWorkoutSync(userId);
+  pendingWorkouts[workoutId] = payload;
+  savePendingWorkoutSync(userId, pendingWorkouts);
+}
+
 export async function loadUserWorkouts(userId) {
   let workouts = {};
   if (db && !isDevUserId(userId)) {
@@ -38,33 +68,60 @@ export async function loadUserWorkouts(userId) {
     }
   }
 
-  const localWorkouts = readJson(localStorage.getItem(localKey(`workouts:${userId}`)), {});
+  const localWorkouts = loadLocalUserWorkouts(userId);
   return { ...localWorkouts, ...workouts };
 }
 
 export async function saveUserWorkout(userId, workoutId, payload) {
-  const workouts = await loadUserWorkouts(userId);
+  const workouts = loadLocalUserWorkouts(userId);
   const nextPayload = workoutRecordPayload({ ...(workouts[workoutId] || {}), ...payload });
   workouts[workoutId] = nextPayload;
-  localStorage.setItem(localKey(`workouts:${userId}`), JSON.stringify(workouts));
+  saveLocalUserWorkouts(userId, workouts);
 
   if (db && !isDevUserId(userId)) {
     try {
       await setDoc(doc(db, "users", userId, "workouts", workoutId), nextPayload, { merge: true });
+      const pendingWorkouts = loadPendingWorkoutSync(userId);
+      if (pendingWorkouts[workoutId]) {
+        delete pendingWorkouts[workoutId];
+        savePendingWorkoutSync(userId, pendingWorkouts);
+      }
       return { synced: true };
     } catch (error) {
       console.warn("Saved user workout locally; cloud sync failed.", error);
-      return { synced: false, local: true };
+      queuePendingWorkoutSync(userId, workoutId, nextPayload);
+      return { synced: false, local: true, pendingSync: true };
     }
   }
 
-  return { synced: false, local: true };
+  queuePendingWorkoutSync(userId, workoutId, nextPayload);
+  return { synced: false, local: true, pendingSync: true };
+}
+
+export async function syncPendingUserWorkouts(userId) {
+  if (!db || isDevUserId(userId)) return { synced: 0, remaining: Object.keys(loadPendingWorkoutSync(userId)).length };
+  const pendingWorkouts = loadPendingWorkoutSync(userId);
+  const remaining = { ...pendingWorkouts };
+  let synced = 0;
+
+  await Promise.all(Object.entries(pendingWorkouts).map(async ([workoutId, payload]) => {
+    try {
+      await setDoc(doc(db, "users", userId, "workouts", workoutId), payload, { merge: true });
+      delete remaining[workoutId];
+      synced += 1;
+    } catch (error) {
+      console.warn("Could not sync pending workout.", error);
+    }
+  }));
+
+  savePendingWorkoutSync(userId, remaining);
+  return { synced, remaining: Object.keys(remaining).length };
 }
 
 export async function deleteUserWorkout(userId, workoutId) {
   const workouts = await loadUserWorkouts(userId);
   delete workouts[workoutId];
-  localStorage.setItem(localKey(`workouts:${userId}`), JSON.stringify(workouts));
+  saveLocalUserWorkouts(userId, workouts);
 
   if (db && !isDevUserId(userId)) {
     try {

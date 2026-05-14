@@ -12,7 +12,6 @@ import {
   loadWorkoutDraft,
   needsMaxes,
   prescribedPreview,
-  saveWorkoutDraft,
   setRows,
   workoutLogKey,
 } from "../../utils/appHelpers";
@@ -109,6 +108,11 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
     String(value || "").split("\n").reduce((rows, line) => rows + Math.max(1, Math.ceil(line.length / 44)), 0),
   );
 
+  function stripCompletionFields(workoutRecord) {
+    const { completed, completedAt, status, ...rest } = workoutRecord;
+    return rest;
+  }
+
   useEffect(() => {
     const draft = loadWorkoutDraft(user.uid, date, workoutKey);
     setStarted(draft.started || workout.length === 0);
@@ -136,11 +140,6 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
   }, [date, user.uid, workout.length, workoutKey]);
 
   useEffect(() => {
-    if (hydratedDraftFor !== `${user.uid}:${date}:${workoutKey}`) return;
-    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises });
-  }, [customExercises, date, exerciseOverrides, hydratedDraftFor, loads, maxes, notes, programmedSetCounts, started, user.uid, warmupSetCounts, workoutKey]);
-
-  useEffect(() => {
     if (hydratedDraftFor !== `${user.uid}:${date}:${workoutKey}` || !requiredMaxes.length) return;
     const nextSavedMaxes = loadUserMaxes(user.uid);
     let changed = false;
@@ -158,11 +157,18 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
   }, [date, hydratedDraftFor, maxes, requiredMaxes, user.uid, weightUnit, workoutKey]);
 
   async function persist(payload = {}, stateOverrides = {}, statusContext) {
+    const payloadControlsCompletion = payload.completed === true || payload.status === "completed";
+    const payloadClearsCompletion = payload.completed === false || ["scheduled", "deleted", "moved"].includes(payload.status);
     const workoutMeta = workout[0] ? {
       date,
       programId: workout[0].programId || "default",
       programWeek: workout[0].week,
       workoutFocus: workout[0].focus,
+      workoutType: workout[0].workoutType,
+      scheduledPlaceholder: workout[0].scheduledPlaceholder,
+      phase: workout[0].phase,
+      week: workout[0].week,
+      focus: workout[0].focus,
       sourceDate: workout[0].sourceDate || workout[0].date,
       scheduleMode: workout[0].scheduleMode,
     } : { date };
@@ -176,15 +182,29 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
       customExercises,
       ...stateOverrides,
     };
-    const completed = payload.completed === true || payload.status === "completed";
+    const baseCompleted = existing.completed === true || existing.status === "completed";
+    const completed = payloadControlsCompletion || (baseCompleted && !payloadClearsCompletion);
     const completionPayload = completed ? {
       completed: true,
       completedAt: payload.completedAt || existing.completedAt || new Date().toISOString(),
       status: "completed",
     } : {};
     const next = { ...existing, ...workoutMeta, ...nextState, ...payload, ...completionPayload, updatedAt: new Date().toISOString() };
-    setWorkouts({ ...workouts, [logKey]: next });
-    const result = await saveUserWorkout(user.uid, logKey, next);
+    setWorkouts((current) => {
+      const currentWorkout = current[logKey];
+      const shouldPreserveCompleted = currentWorkout?.completed && !payloadClearsCompletion;
+      return {
+        ...current,
+        [logKey]: shouldPreserveCompleted ? {
+          ...next,
+          completed: true,
+          completedAt: currentWorkout.completedAt || next.completedAt || new Date().toISOString(),
+          status: "completed",
+        } : next,
+      };
+    });
+    const savePayload = statusContext?.action ? next : stripCompletionFields(next);
+    const result = await saveUserWorkout(user.uid, logKey, savePayload);
     onSaveStatus?.(result, statusContext);
     return result;
   }
@@ -211,8 +231,6 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
     setNewExerciseName("");
     setNewExerciseTracksWeight(true);
     setShowAddExercise(false);
-    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises: nextExercises });
-    void persist({}, { customExercises: nextExercises });
   }
 
   function addCardioExercise(event) {
@@ -228,8 +246,6 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
     setNewCardioType("metcon");
     setNewCardioDetails({});
     setShowAddCardio(false);
-    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises: nextExercises });
-    void persist({}, { customExercises: nextExercises });
   }
 
   function customExercisePayload({ name, cardioType = "", cardioDetails = {}, trackWeights = true, section = "accessory", reps = "" }) {
@@ -257,8 +273,6 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
     setNewWarmupName("");
     setNewWarmupTracksWeight(false);
     setShowAddWarmup(false);
-    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises: nextExercises });
-    void persist({}, { customExercises: nextExercises });
   }
 
   function addWarmupPreset(preset) {
@@ -268,8 +282,6 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
     ];
     setCustomExercises(nextExercises);
     setShowAddWarmup(false);
-    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises: nextExercises });
-    void persist({}, { customExercises: nextExercises });
   }
 
   function updateCustomExercise(exerciseId, updater) {
@@ -277,7 +289,6 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
       exercise.id === exerciseId ? updater(exercise) : exercise
     ));
     setCustomExercises(nextExercises);
-    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises: nextExercises });
   }
 
   function updateCustomSet(exerciseId, setId, patch) {
@@ -332,8 +343,6 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
 
   function persistExerciseOverrides(nextOverrides) {
     setExerciseOverrides(nextOverrides);
-    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides: nextOverrides, customExercises });
-    void persist({}, { exerciseOverrides: nextOverrides });
   }
 
   function updateProgrammedExercise(item, patch) {
@@ -350,8 +359,6 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
       exercise.id === exerciseId ? { ...exercise, ...patch } : exercise
     ));
     setCustomExercises(nextExercises);
-    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises: nextExercises });
-    void persist({}, { customExercises: nextExercises });
   }
 
   function updateCustomCardioDetails(exercise, patch) {
@@ -365,7 +372,6 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
 
   function saveExerciseEdit() {
     setOpenExerciseMenu("");
-    void persist();
   }
 
   function updateNewCardioDetails(patch) {
@@ -427,8 +433,6 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
     const nextExercises = customExercises.filter((exercise) => exercise.id !== exerciseId);
     setCustomExercises(nextExercises);
     setOpenExerciseMenu("");
-    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises: nextExercises });
-    void persist({}, { customExercises: nextExercises });
   }
 
   function addCustomSet(exerciseId) {
@@ -481,8 +485,6 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
       [item.id]: (warmupSetCounts[item.id] || 0) + 1,
     };
     setWarmupSetCounts(nextCounts);
-    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, warmupSetCounts: nextCounts, programmedSetCounts, customExercises });
-    void persist({}, { warmupSetCounts: nextCounts });
   }
 
   function removeWarmupSet(item) {
@@ -497,8 +499,6 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
     delete nextLoads[`${removedSetKey}:reps`];
     setWarmupSetCounts(nextCounts);
     setLoads(nextLoads);
-    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads: nextLoads, notes, warmupSetCounts: nextCounts, programmedSetCounts, customExercises });
-    void persist({}, { loads: nextLoads, warmupSetCounts: nextCounts });
   }
 
   function addProgrammedSet(item) {
@@ -507,8 +507,6 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
       [item.id]: programmedRows(item).length + 1,
     };
     setProgrammedSetCounts(nextCounts);
-    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, programmedSetCounts: nextCounts, customExercises });
-    void persist({}, { programmedSetCounts: nextCounts });
   }
 
   function removeProgrammedSet(item) {
@@ -518,8 +516,6 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
     const nextCounts = { ...programmedSetCounts, [item.id]: currentCount - 1 };
     if (nextCounts[item.id] <= baseCount) delete nextCounts[item.id];
     setProgrammedSetCounts(nextCounts);
-    saveWorkoutDraft(user.uid, date, workoutKey, { started, maxes, loads, notes, programmedSetCounts: nextCounts, customExercises });
-    void persist({}, { programmedSetCounts: nextCounts });
   }
 
   const metricWarmups = (
@@ -576,21 +572,18 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
                 <input
                   value={set.reps}
                   onChange={(event) => updateCustomSet(exercise.id, set.id, { reps: event.target.value })}
-                  onBlur={() => persist()}
                   placeholder="Prep"
                 />
                 {exercise.trackWeights && (
                   <input
                     value={set.weight}
                     onChange={(event) => updateCustomSet(exercise.id, set.id, { weight: event.target.value })}
-                    onBlur={() => persist()}
                     placeholder="Weight"
                   />
                 )}
                 <input
                   checked={set.done}
                   onChange={(event) => updateCustomSet(exercise.id, set.id, { done: event.target.checked })}
-                  onBlur={() => persist()}
                   type="checkbox"
                 />
               </label>
@@ -649,7 +642,6 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
             disabled={missingMaxes.length > 0}
             onClick={() => {
               setStarted(true);
-              saveWorkoutDraft(user.uid, date, workoutKey, { started: true, maxes, loads, notes, warmupSetCounts, programmedSetCounts, exerciseOverrides, customExercises });
             }}
           >
             <Dumbbell size={18} />
@@ -679,7 +671,6 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
               onAddWarmup={() => setShowAddWarmup(true)}
               onCompleteWorkout={finishWorkout}
               onFinishWorkout={finishWorkout}
-              onPersist={persist}
               setLoads={setLoads}
               setNotes={setNotes}
               title={metricWorkoutTitle}
@@ -749,21 +740,18 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
                       <input
                         value={set.reps}
                         onChange={(event) => updateCustomSet(exercise.id, set.id, { reps: event.target.value })}
-                        onBlur={() => persist()}
                         placeholder="Reps"
                       />
                       {exercise.trackWeights && (
                         <input
                           value={set.weight}
                           onChange={(event) => updateCustomSet(exercise.id, set.id, { weight: event.target.value })}
-                          onBlur={() => persist()}
                           placeholder="Weight"
                         />
                       )}
                       <input
                         checked={set.done}
                         onChange={(event) => updateCustomSet(exercise.id, set.id, { done: event.target.checked })}
-                        onBlur={() => persist()}
                         type="checkbox"
                       />
                     </label>
@@ -853,19 +841,16 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
                       <input
                         value={loads[set.repsKey] || ""}
                         onChange={(event) => setLoads({ ...loads, [set.repsKey]: event.target.value })}
-                        onBlur={() => persist()}
                         placeholder={set.label}
                       />
                       <input
                         value={loads[set.key] || ""}
                         onChange={(event) => setLoads({ ...loads, [set.key]: event.target.value })}
-                        onBlur={() => persist()}
                         placeholder="Weight"
                       />
                       <input
                         checked={Boolean(loads[`${set.key}:done`])}
                         onChange={(event) => setLoads({ ...loads, [`${set.key}:done`]: event.target.checked })}
-                        onBlur={() => persist()}
                         type="checkbox"
                       />
                     </label>
@@ -875,21 +860,18 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
                       <input
                         value={loads[`${set.key}:reps`] ?? set.reps}
                         onChange={(event) => setLoads({ ...loads, [`${set.key}:reps`]: event.target.value })}
-                        onBlur={() => persist()}
                         placeholder="Reps"
                       />
                       {displayItem.trackWeights !== false && (
                         <input
                           value={loads[set.key] ?? (set.key.endsWith(":1") ? loads[item.id] || "" : "")}
                           onChange={(event) => setLoads({ ...loads, [set.key]: event.target.value })}
-                          onBlur={() => persist()}
                           placeholder={prescribedPreview(displayItem, maxes, weightUnit) || "Actual"}
                         />
                       )}
                       <input
                         checked={Boolean(loads[`${set.key}:done`])}
                         onChange={(event) => setLoads({ ...loads, [`${set.key}:done`]: event.target.checked })}
-                        onBlur={() => persist()}
                         type="checkbox"
                       />
                     </label>
@@ -963,21 +945,18 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
                       <input
                         value={set.reps}
                         onChange={(event) => updateCustomSet(exercise.id, set.id, { reps: event.target.value })}
-                        onBlur={() => persist()}
                         placeholder="Reps"
                       />
                       {exercise.trackWeights && (
                         <input
                           value={set.weight}
                           onChange={(event) => updateCustomSet(exercise.id, set.id, { weight: event.target.value })}
-                          onBlur={() => persist()}
                           placeholder="Weight"
                         />
                       )}
                       <input
                         checked={set.done}
                         onChange={(event) => updateCustomSet(exercise.id, set.id, { done: event.target.checked })}
-                        onBlur={() => persist()}
                         type="checkbox"
                       />
                     </label>
@@ -1082,7 +1061,6 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
                         <input
                           value={exercise.cardioDetails?.score || ""}
                           onChange={(event) => updateCustomCardioDetails(exercise, { score: event.target.value })}
-                          onBlur={() => persist()}
                           placeholder="Time, rounds, reps, distance..."
                         />
                       </label>
@@ -1099,7 +1077,7 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
           </button>
           <label className="notes-field">
             Session notes
-            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} onBlur={() => persist()} rows={3} />
+            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} />
           </label>
           <button className="secondary" type="button" onClick={() => finishWorkout({})}>
             <Save size={18} />
@@ -1237,3 +1215,4 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
     </section>
   );
 }
+
