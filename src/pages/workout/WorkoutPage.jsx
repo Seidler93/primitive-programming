@@ -191,7 +191,7 @@ export function WorkoutPage({ workout, workoutKey, date, user, logs, setLogs, on
 
   async function finishWorkout(payload = {}) {
     await persist(payload, {}, { action: payload.completed ? "completed" : "saved" });
-    onDone();
+    onDone?.();
   }
 
   function addCustomExercise(event) {
