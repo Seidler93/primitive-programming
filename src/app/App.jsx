@@ -36,6 +36,7 @@ function AppContent() {
     user,
   } = useAuth();
   const [workouts, setWorkouts] = useState({});
+  const [isLoadingWorkouts, setIsLoadingWorkouts] = useState(false);
   const [athleteProgressWorkouts, setAthleteProgressWorkouts] = useState({});
   const [customWorkouts, setCustomWorkouts] = useState([]);
   const [programs, setPrograms] = useState([]);
@@ -66,6 +67,7 @@ function AppContent() {
 
   function clearAppData() {
     setWorkouts({});
+    setIsLoadingWorkouts(false);
     setAthleteProgressWorkouts({});
     setCustomWorkouts([]);
     setPrograms([]);
@@ -168,6 +170,7 @@ function AppContent() {
       return undefined;
     }
     let active = true;
+    setIsLoadingWorkouts(true);
     loadAuthenticatedUserData(user, isTrainer).then((nextData) => {
       if (!active) return;
       setWorkouts(nextData.workouts);
@@ -176,6 +179,10 @@ function AppContent() {
       setWorkoutScheduleOverrides(nextData.workoutScheduleOverrides);
       setPrograms(nextData.programs);
       setProgramWorkouts(nextData.programWorkouts);
+      setIsLoadingWorkouts(false);
+    }).catch((error) => {
+      console.warn("Failed to load authenticated user data.", error);
+      if (active) setIsLoadingWorkouts(false);
     });
     return () => {
       active = false;
@@ -551,6 +558,7 @@ function AppContent() {
               handleProfileSaved={handleProfileSaved}
               handleProgramWorkoutCreated={handleProgramWorkoutCreated}
               handleWorkoutSaveStatus={handleWorkoutSaveStatus}
+              isLoadingWorkouts={isLoadingWorkouts}
               isTrainer={isTrainer}
               workouts={workouts}
               moveSelectedWorkout={moveSelectedWorkout}

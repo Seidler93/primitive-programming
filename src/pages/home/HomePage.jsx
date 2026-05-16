@@ -3,6 +3,7 @@ import { CalendarStrip } from "./CalendarStrip";
 
 export function HomePage({
   calendarMonths,
+  isLoadingWorkouts,
   workouts,
   onOpenWorkoutList,
   onShowMoreMonths,
@@ -13,8 +14,8 @@ export function HomePage({
   return (
     <>
       <div className="today-row">
-        <button className="primary" type="button" onClick={() => onOpenWorkoutList(todayTarget)}>
-          View today's workout
+        <button className="primary" type="button" onClick={() => onOpenWorkoutList(todayTarget)} disabled={isLoadingWorkouts}>
+          {isLoadingWorkouts ? "Loading workouts" : "View today's workout"}
         </button>
       </div>
       <CalendarStrip

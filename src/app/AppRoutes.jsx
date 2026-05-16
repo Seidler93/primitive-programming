@@ -28,6 +28,7 @@ export function AppRoutes({
   handleProfileSaved,
   handleProgramWorkoutCreated,
   handleWorkoutSaveStatus,
+  isLoadingWorkouts,
   isTrainer,
   workouts,
   moveSelectedWorkout,
@@ -118,6 +119,7 @@ export function AppRoutes({
           workouts={workouts}
           onOpenWorkoutList={openWorkoutList}
           onShowMoreMonths={() => setVisibleCalendarMonths((count) => count + 3)}
+          isLoadingWorkouts={isLoadingWorkouts}
           selectedDate={selectedDate}
           todayTarget={todayTarget}
           workoutsByDate={workoutsByDate}
