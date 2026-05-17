@@ -4,5 +4,6 @@ export * from "./notifications";
 export * from "./profile";
 export * from "./progress";
 export * from "./programs";
+export * from "./social";
 export * from "./users";
 export * from "./workouts";

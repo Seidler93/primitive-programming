@@ -1,6 +1,6 @@
 import { arrayUnion, collection, doc, getDoc, getDocs, setDoc } from "firebase/firestore";
 import { db, defaultProgramAccess, hasFirebaseConfig, isDevUserId, localKey, readJson, withTimeout } from "../services/firebaseClient";
-import { normalizeActivePrograms, normalizeProgramAccess, userProgramsLocalKey } from "./helpers";
+import { normalizeActivePrograms, normalizeConversations, normalizeFriends, normalizeProgramAccess, userProgramsLocalKey } from "./helpers";
 
 // Root user document and user access helpers.
 
@@ -17,6 +17,7 @@ export async function ensureUserDocument(user, defaults = {}) {
       uid: user.uid,
       email: user.email || "",
       displayName: user.displayName || "",
+      photoURL: user.photoURL || localProfile.photoURL || "",
       role,
       updatedAt: new Date().toISOString(),
     };
@@ -27,6 +28,8 @@ export async function ensureUserDocument(user, defaults = {}) {
         payload.programs = [];
         payload.activePrograms = [];
         payload.workoutTemplates = [];
+        payload.friends = [];
+        payload.conversations = [];
         payload.createdAt = new Date().toISOString();
       }
       await setDoc(doc(db, "users", user.uid), payload, { merge: true });
@@ -42,6 +45,8 @@ export async function ensureUserDocument(user, defaults = {}) {
     programs: normalizeProgramAccess(rootData.programs || localProgramIds),
     activePrograms: normalizeActivePrograms(rootData.activePrograms),
     workoutTemplates: Array.isArray(rootData.workoutTemplates) ? rootData.workoutTemplates.slice(0, 10) : [],
+    friends: normalizeFriends(rootData.friends),
+    conversations: normalizeConversations(rootData.conversations),
   };
 }
 

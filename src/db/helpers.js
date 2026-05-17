@@ -10,6 +10,10 @@ export function communitiesLocalKey() {
   return localKey("communities");
 }
 
+export function userSocialLocalKey(userId) {
+  return localKey(`social:${userId}`);
+}
+
 export function userActiveProgramsLocalKey(userId) {
   return localKey(`active-programs:${userId}`);
 }
@@ -41,6 +45,59 @@ export function communityPayload(payload = {}) {
     memberCount: memberIds.length,
     updatedAt: new Date().toISOString(),
   };
+}
+
+export function normalizeFriend(friend = {}) {
+  const userId = String(friend.userId || friend.uid || "").trim();
+  const name = String(friend.name || friend.displayName || "").trim();
+  const photoURL = String(friend.photoURL || "").trim();
+  if (!userId || !name) return null;
+  return { userId, name, photoURL };
+}
+
+export function normalizeFriends(friends) {
+  if (!Array.isArray(friends)) return [];
+  const byId = new Map();
+  friends.forEach((friend) => {
+    const normalized = normalizeFriend(friend);
+    if (normalized) byId.set(normalized.userId, normalized);
+  });
+  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function normalizeMessage(message = {}) {
+  const userId = String(message.userId || "").trim();
+  const text = String(message.message || "").trim();
+  if (!userId || !text) return null;
+  return {
+    userId,
+    message: text,
+    sentAt: message.sentAt || new Date().toISOString(),
+  };
+}
+
+export function normalizeConversation(conversation = {}) {
+  const id = String(conversation.id || conversation.convoId || "").trim();
+  const users = Array.isArray(conversation.users) ? [...new Set(conversation.users.filter(Boolean))] : [];
+  if (!id || users.length < 2) return null;
+  return {
+    id,
+    users,
+    messages: Array.isArray(conversation.messages)
+      ? conversation.messages.map(normalizeMessage).filter(Boolean)
+      : [],
+    updatedAt: conversation.updatedAt || new Date().toISOString(),
+  };
+}
+
+export function normalizeConversations(conversations) {
+  if (!Array.isArray(conversations)) return [];
+  const byId = new Map();
+  conversations.forEach((conversation) => {
+    const normalized = normalizeConversation(conversation);
+    if (normalized) byId.set(normalized.id, normalized);
+  });
+  return [...byId.values()].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
 }
 
 export function normalizeProgramAccess(programs) {

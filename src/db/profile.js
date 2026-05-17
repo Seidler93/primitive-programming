@@ -38,6 +38,12 @@ export async function saveUserProfile(userId, profile) {
   if (db && !isDevUserId(userId)) {
     try {
       await setDoc(doc(db, "users", userId, "profile", "details"), payload, { merge: true });
+      await setDoc(doc(db, "users", userId), {
+        displayName: nextLocalProfile.displayName || "",
+        email: nextLocalProfile.email || "",
+        photoURL: nextLocalProfile.photoURL || "",
+        updatedAt: payload.updatedAt,
+      }, { merge: true });
       return nextLocalProfile;
     } catch (error) {
       console.warn("Falling back to local user profile.", error);

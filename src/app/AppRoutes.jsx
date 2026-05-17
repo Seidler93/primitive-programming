@@ -2,6 +2,7 @@ import React from "react";
 import { AthletesPage } from "../pages/athletes/AthletesPage";
 import { CommunityPage } from "../pages/community/CommunityPage";
 import { FoodLogPage } from "../pages/food-log/FoodLogPage";
+import { FriendsPage } from "../pages/friends/FriendsPage";
 import { DayView } from "../pages/home/day-view/DayView";
 import { HomePage } from "../pages/home/HomePage";
 import { MessagesPage } from "../pages/messages/MessagesPage";
@@ -82,8 +83,10 @@ export function AppRoutes({
         <StorePage />
       ) : view === "community" ? (
         <CommunityPage user={user} />
+      ) : view === "friends" ? (
+        <FriendsPage user={user} />
       ) : view === "messages" ? (
-        <MessagesPage />
+        <MessagesPage user={user} />
       ) : view === "news" ? (
         <NewsPage />
       ) : view === "food-log" ? (

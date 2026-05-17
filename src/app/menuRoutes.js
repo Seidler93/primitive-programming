@@ -1,10 +1,11 @@
-import { CalendarDays, ClipboardList, Dumbbell, Flame, MessageCircle, Newspaper, PersonStanding, Settings, ShoppingBag, TrendingUp, Trophy, Utensils, UserRound, UsersRound, } from "lucide-react";
+import { CalendarDays, ClipboardList, Dumbbell, Flame, MessageCircle, Newspaper, PersonStanding, Settings, ShoppingBag, TrendingUp, Trophy, UserPlus, Utensils, UserRound, UsersRound, } from "lucide-react";
 
 export const menuRoutes = [
   { id: "home", view: "client", label: "Home", icon: CalendarDays },
   { id: "profile", view: "profile", label: "Profile", icon: UserRound },
   { id: "store", view: "store", label: "Store", icon: ShoppingBag },
   { id: "community", view: "community", label: "Communities", icon: UsersRound },
+  { id: "friends", view: "friends", label: "Friends", icon: UserPlus },
   { id: "messages", view: "messages", label: "Messages", icon: MessageCircle },
   { id: "news", view: "news", label: "News", icon: Newspaper },
   { id: "programs", view: "programs", label: "Programs", icon: ClipboardList },
