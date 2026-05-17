@@ -2206,17 +2206,20 @@ select:focus {
 
 .messages-inbox-panel {
   position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 18px;
   width: min(720px, calc(100% - 32px));
-  min-height: min(740px, calc(100dvh - 116px));
-  padding-bottom: 88px;
-  background: #050407;
+  min-height: calc(100dvh - 92px);
+  margin: 0 auto;
+  padding: 14px 0 86px;
 }
 
 .messages-inbox-header {
   display: flex;
   align-items: center;
-  justify-content: center;
-  min-height: 40px;
+  justify-content: flex-start;
+  min-height: 34px;
 }
 
 .messages-inbox-header .section-heading {
@@ -2224,7 +2227,10 @@ select:focus {
 }
 
 .messages-inbox-shell {
+  display: grid;
+  align-content: start;
   min-height: 0;
+  overflow: auto;
 }
 
 .conversation-list,
@@ -2238,7 +2244,7 @@ select:focus {
 .conversation-list {
   display: grid;
   align-content: start;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .messages-inbox-list {
@@ -2329,15 +2335,19 @@ select:focus {
 }
 
 .messages-bottom-bar {
-  position: sticky;
-  bottom: 0;
+  position: fixed;
+  left: 50%;
+  right: auto;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  z-index: 10;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
-  margin-top: auto;
-  padding-top: 14px;
-  background: linear-gradient(180deg, rgba(5, 4, 7, 0), #050407 34%);
+  width: min(720px, calc(100% - 32px));
+  padding: 10px 0 0;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, rgba(11, 9, 16, 0), #0b0910 42%);
 }
 
 .messages-search-field {

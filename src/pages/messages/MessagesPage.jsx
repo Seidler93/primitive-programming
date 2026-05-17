@@ -115,7 +115,7 @@ export function MessagesPage({ user }) {
   }
 
   return (
-    <section className="programs-panel messages-panel messages-inbox-panel">
+    <section className="messages-panel messages-inbox-panel">
       <div className="messages-inbox-header">
         <div className="section-heading">
           <MessageCircle size={20} />
