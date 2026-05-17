@@ -8,6 +8,7 @@ import { ProfileSetupModal } from "../components/profile/ProfileSetupModal";
 import { defaultSelectedDate, flexibleScheduleMode } from "./config";
 import { AuthProvider, useAuth } from "../context/AuthContext";
 import { MenuProvider } from "../context/MenuContext";
+import { NotificationProvider } from "../context/NotificationContext";
 import { TimerProvider } from "../context/TimerContext";
 import { importedProgram } from "../data/programData";
 import { deleteUserWorkout, loadCustomWorkouts, loadPrograms, loadProgramsForUser, loadUserWorkouts, saveUserActiveProgram, saveUserWorkout, syncPendingUserWorkouts } from "../db";
@@ -531,8 +532,9 @@ function AppContent() {
   if (!user) return <LoginPage onAuthed={hydrateUser} />;
 
   return (
-      <MenuProvider isMobileViewport={isMobileViewport} isTrainer={isTrainer} onOpenView={setView}>
-        <TimerProvider>
+      <NotificationProvider user={user}>
+        <MenuProvider isMobileViewport={isMobileViewport} isTrainer={isTrainer} onOpenView={setView}>
+          <TimerProvider>
           <AppShell
             view={view}
             onStartDaySwipe={startDaySwipe}
@@ -586,7 +588,8 @@ function AppContent() {
               handleLogout={handleAppLogout}
             />
           </AppShell>
-        </TimerProvider>
-      </MenuProvider>
+          </TimerProvider>
+        </MenuProvider>
+      </NotificationProvider>
   );
 }

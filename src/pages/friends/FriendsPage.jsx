@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { MessageCircle, Plus, Search, UserPlus, UserRound } from "lucide-react";
-import { addUserFriend, ensureConversation, loadUserFriends, searchFriendUsers } from "../../db";
+import { acceptFriendInvite, declineFriendInvite, ensureConversation, loadUserFriends, searchFriendUsers, sendFriendInvite } from "../../db";
+import { useNotifications } from "../../context/NotificationContext";
 
 export function FriendsPage({ user }) {
   const [friends, setFriends] = useState([]);
@@ -11,6 +12,9 @@ export function FriendsPage({ user }) {
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [addingUserId, setAddingUserId] = useState("");
+  const [handlingInviteId, setHandlingInviteId] = useState("");
+  const { notifications, refreshNotifications } = useNotifications();
+  const friendInvites = notifications.filter((notification) => notification.type === "friend-invite" && notification.status !== "read");
 
   async function refreshFriends() {
     if (!user?.uid) return;
@@ -73,18 +77,45 @@ export function FriendsPage({ user }) {
     if (!friend?.userId || !friend?.name) return;
     try {
       setAddingUserId(friend.userId);
-      const result = await addUserFriend(user.uid, {
+      const result = await sendFriendInvite(user, {
         userId: friend.userId,
         name: friend.name,
         photoURL: friend.photoURL,
       });
       closeAddFriend();
-      setFriendMessage(result.synced ? "Friend added." : "Friend added on this device.");
+      setFriendMessage(result.synced ? "Friend invite sent." : "Friend invite saved on this device.");
+      await refreshNotifications();
       await refreshFriends();
     } catch (error) {
-      setFriendMessage(error.message || "Could not add friend.");
+      setFriendMessage(error.message || "Could not send friend invite.");
     } finally {
       setAddingUserId("");
+    }
+  }
+
+  async function acceptInvite(invite) {
+    try {
+      setHandlingInviteId(invite.id);
+      const result = await acceptFriendInvite(user, invite);
+      setFriendMessage(result.synced ? "Friend added." : "Friend added on this device.");
+      await Promise.all([refreshFriends(), refreshNotifications()]);
+    } catch (error) {
+      setFriendMessage(error.message || "Could not accept friend invite.");
+    } finally {
+      setHandlingInviteId("");
+    }
+  }
+
+  async function declineInvite(invite) {
+    try {
+      setHandlingInviteId(invite.id);
+      await declineFriendInvite(user.uid, invite.id);
+      setFriendMessage("Friend invite dismissed.");
+      await refreshNotifications();
+    } catch (error) {
+      setFriendMessage(error.message || "Could not dismiss friend invite.");
+    } finally {
+      setHandlingInviteId("");
     }
   }
 
@@ -112,6 +143,31 @@ export function FriendsPage({ user }) {
         </div>
       </div>
       {friendMessage && <p className="empty-list-copy">{friendMessage}</p>}
+      {friendInvites.length > 0 && (
+        <div className="friend-invite-list" aria-label="Friend invites">
+          {friendInvites.map((invite) => (
+            <article className="friend-invite-card" key={invite.id}>
+              <div className="friend-summary">
+                <span className="friend-avatar">
+                  {invite.actorPhotoURL ? <img src={invite.actorPhotoURL} alt="" /> : <UserRound size={22} />}
+                </span>
+                <div>
+                  <h3>{invite.actorName || "Friend invite"}</h3>
+                  <p>{invite.body || "Sent you a friend invite."}</p>
+                </div>
+              </div>
+              <div className="friend-invite-actions">
+                <button className="secondary" type="button" onClick={() => declineInvite(invite)} disabled={handlingInviteId === invite.id}>
+                  Decline
+                </button>
+                <button className="primary" type="button" onClick={() => acceptInvite(invite)} disabled={handlingInviteId === invite.id}>
+                  Accept
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
       {loading ? (
         <p className="empty-list-copy">Loading friends...</p>
       ) : friends.length ? (
@@ -161,7 +217,7 @@ export function FriendsPage({ user }) {
                     </span>
                     <strong>{result.name}</strong>
                     <button className="secondary" type="button" onClick={() => addFriendFromResult(result)} disabled={addingUserId === result.userId}>
-                      {addingUserId === result.userId ? "Adding..." : "Add"}
+                      {addingUserId === result.userId ? "Sending..." : "Invite"}
                     </button>
                   </div>
                 ))

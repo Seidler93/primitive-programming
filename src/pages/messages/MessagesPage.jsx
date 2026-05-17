@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight, MessageCircle, Plus, Search, Send, UserRound } from "lucide-react";
-import { ensureConversation, loadUserConversations, loadUserFriends, sendConversationMessage } from "../../db";
+import { ensureConversation, loadUserConversations, loadUserFriends, markConversationRead, sendConversationMessage } from "../../db";
+import { useNotifications } from "../../context/NotificationContext";
 
 export function MessagesPage({ user }) {
   const [conversations, setConversations] = useState([]);
@@ -12,6 +13,7 @@ export function MessagesPage({ user }) {
   const [selectedConversationId, setSelectedConversationId] = useState("");
   const [messageText, setMessageText] = useState("");
   const [messageStatus, setMessageStatus] = useState("");
+  const { refreshNotifications } = useNotifications();
 
   const friendById = useMemo(() => new Map(friends.map((friend) => [friend.userId, friend])), [friends]);
   const selectedConversation = conversations.find((conversation) => conversation.id === selectedConversationId);
@@ -81,6 +83,22 @@ export function MessagesPage({ user }) {
     return date.toLocaleDateString([], { month: "short", day: "numeric" });
   }
 
+  function unreadCount(conversation) {
+    const readAt = conversation.readBy?.[user?.uid] || "";
+    return conversation.messages.filter((message) => (
+      message.userId !== user?.uid
+      && (!readAt || String(message.sentAt).localeCompare(String(readAt)) > 0)
+    )).length;
+  }
+
+  async function openConversation(conversation) {
+    setSelectedConversationId(conversation.id);
+    if (unreadCount(conversation) > 0) {
+      await markConversationRead(user.uid, conversation.id);
+      await Promise.all([refreshMessages(), refreshNotifications()]);
+    }
+  }
+
   async function startConversation(friend) {
     try {
       setCreatingUserId(friend.userId);
@@ -88,6 +106,7 @@ export function MessagesPage({ user }) {
       setMessageStatus(result.synced ? "Conversation ready." : "Conversation created on this device.");
       setShowCreateConversation(false);
       await refreshMessages();
+      await refreshNotifications();
     } catch (error) {
       setMessageStatus(error.message || "Could not start conversation.");
     } finally {
@@ -109,13 +128,14 @@ export function MessagesPage({ user }) {
       setMessageText("");
       setMessageStatus(result.synced ? "Message sent." : "Message saved on this device.");
       await refreshMessages();
+      await refreshNotifications();
     } catch (error) {
       setMessageStatus(error.message || "Could not send message.");
     }
   }
 
   return (
-    <section className="programs-panel messages-panel messages-inbox-panel">
+    <section className="messages-panel messages-inbox-panel">
       <div className="messages-inbox-header">
         <div className="section-heading">
           <MessageCircle size={20} />
@@ -132,8 +152,9 @@ export function MessagesPage({ user }) {
               const title = conversationTitle(conversation);
               const photoURL = conversationPhoto(conversation);
               const latestMessage = conversation.messages.at(-1)?.message || "No messages yet";
+              const unread = unreadCount(conversation);
               return (
-                <button className="conversation-button message-preview-row" type="button" key={conversation.id} onClick={() => setSelectedConversationId(conversation.id)}>
+                <button className="conversation-button message-preview-row" type="button" key={conversation.id} onClick={() => openConversation(conversation)}>
                   <span className="friend-avatar message-avatar">
                     {photoURL ? <img src={photoURL} alt="" /> : <UserRound size={22} />}
                   </span>
@@ -143,6 +164,7 @@ export function MessagesPage({ user }) {
                   </span>
                   <span className="message-preview-meta">
                     {activityLabel(conversation) && <span>{activityLabel(conversation)}</span>}
+                    {unread > 0 && <span className="message-unread-badge">{unread > 99 ? "99+" : unread}</span>}
                     <ChevronRight size={18} />
                   </span>
                 </button>

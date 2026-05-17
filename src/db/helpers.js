@@ -14,6 +14,10 @@ export function userSocialLocalKey(userId) {
   return localKey(`social:${userId}`);
 }
 
+export function userNotificationsLocalKey(userId) {
+  return localKey(`notifications:${userId}`);
+}
+
 export function userActiveProgramsLocalKey(userId) {
   return localKey(`active-programs:${userId}`);
 }
@@ -55,6 +59,35 @@ export function normalizeFriend(friend = {}) {
   return { userId, name, photoURL };
 }
 
+export function normalizeNotification(notification = {}) {
+  const id = String(notification.id || "").trim();
+  const type = String(notification.type || "").trim();
+  if (!id || !type) return null;
+  return {
+    id,
+    type,
+    title: String(notification.title || "").trim(),
+    body: String(notification.body || "").trim(),
+    status: String(notification.status || "unread").trim(),
+    createdAt: notification.createdAt || new Date().toISOString(),
+    readAt: notification.readAt || "",
+    actorUserId: String(notification.actorUserId || "").trim(),
+    actorName: String(notification.actorName || "").trim(),
+    actorPhotoURL: String(notification.actorPhotoURL || "").trim(),
+    targetId: String(notification.targetId || "").trim(),
+  };
+}
+
+export function normalizeNotifications(notifications) {
+  if (!Array.isArray(notifications)) return [];
+  const byId = new Map();
+  notifications.forEach((notification) => {
+    const normalized = normalizeNotification(notification);
+    if (normalized) byId.set(normalized.id, normalized);
+  });
+  return [...byId.values()].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+}
+
 export function normalizeFriends(friends) {
   if (!Array.isArray(friends)) return [];
   const byId = new Map();
@@ -86,6 +119,9 @@ export function normalizeConversation(conversation = {}) {
     messages: Array.isArray(conversation.messages)
       ? conversation.messages.map(normalizeMessage).filter(Boolean)
       : [],
+    readBy: conversation.readBy && typeof conversation.readBy === "object" && !Array.isArray(conversation.readBy)
+      ? conversation.readBy
+      : {},
     updatedAt: conversation.updatedAt || new Date().toISOString(),
   };
 }

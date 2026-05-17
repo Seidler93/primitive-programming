@@ -1,6 +1,7 @@
 import { collection, doc, getDoc, getDocs, setDoc } from "firebase/firestore";
 import { db, isDevUserId, readJson, withTimeout } from "../services/firebaseClient";
 import { normalizeConversation, normalizeConversations, normalizeFriend, normalizeFriends, userSocialLocalKey } from "./helpers";
+import { addUserNotification, dismissUserNotification } from "./notifications";
 
 function socialFromData(data = {}) {
   return {
@@ -90,8 +91,50 @@ export async function addUserFriend(userId, friend) {
   };
 }
 
+export async function sendFriendInvite(user, friend) {
+  const normalizedFriend = normalizeFriend(friend);
+  if (!user?.uid || !normalizedFriend) throw new Error("Friend name and user ID are required.");
+  const actorName = String(user.displayName || user.email || "Someone").trim();
+  const notificationId = `friend-invite:${user.uid}:${Date.now()}`;
+  return addUserNotification(normalizedFriend.userId, {
+    id: notificationId,
+    type: "friend-invite",
+    title: "Friend invite",
+    body: `${actorName} sent you a friend invite.`,
+    actorUserId: user.uid,
+    actorName,
+    actorPhotoURL: user.photoURL || "",
+    targetId: user.uid,
+  });
+}
+
+export async function acceptFriendInvite(user, notification) {
+  if (!user?.uid || !notification?.actorUserId) throw new Error("Friend invite is missing sender details.");
+  const friend = normalizeFriend({
+    userId: notification.actorUserId,
+    name: notification.actorName || notification.actorUserId,
+    photoURL: notification.actorPhotoURL || "",
+  });
+  const requesterFriend = normalizeFriend({
+    userId: user.uid,
+    name: user.displayName || user.email || user.uid,
+    photoURL: user.photoURL || "",
+  });
+  const result = await addUserFriend(user.uid, friend);
+  await Promise.all([
+    addUserFriend(notification.actorUserId, requesterFriend),
+    dismissUserNotification(user.uid, notification.id),
+  ]);
+  return result;
+}
+
+export async function declineFriendInvite(userId, notificationId) {
+  if (!userId || !notificationId) return { synced: false };
+  return dismissUserNotification(userId, notificationId);
+}
+
 function normalizeSearchableUser(userId, data = {}) {
-  const displayName = String(data.displayName || data.profileName || data.name || "").trim();
+  const displayName = String(data.displayName || data.profileName || data.name || data.email || userId || "").trim();
   const email = String(data.email || "").trim().toLowerCase();
   const photoURL = String(data.photoURL || "").trim();
   if (!userId || !displayName) return null;
@@ -99,7 +142,15 @@ function normalizeSearchableUser(userId, data = {}) {
     userId,
     name: displayName,
     photoURL,
-    searchText: `${displayName.toLowerCase()} ${email}`,
+    email,
+    searchText: [
+      displayName,
+      data.displayName,
+      data.profileName,
+      data.name,
+      email,
+      userId,
+    ].filter(Boolean).join(" ").toLowerCase(),
   };
 }
 
@@ -110,22 +161,22 @@ export async function searchFriendUsers(query, currentUserId) {
   if (db) {
     try {
       const snapshot = await withTimeout(getDocs(collection(db, "users")), "User search request timed out.");
-      const matches = snapshot.docs
-        .map((userDoc) => normalizeSearchableUser(userDoc.id, userDoc.data()))
-        .filter((item) => item && item.userId !== currentUserId && item.searchText.includes(searchTerm))
-        .slice(0, 12);
-      const enrichedMatches = await withTimeout(Promise.all(matches.map(async (match) => {
-        if (match.photoURL) return match;
-        const profileSnapshot = await getDoc(doc(db, "users", match.userId, "profile", "details"));
+      const searchableUsers = await withTimeout(Promise.all(snapshot.docs.map(async (userDoc) => {
+        const rootData = userDoc.data();
+        const profileSnapshot = await getDoc(doc(db, "users", userDoc.id, "profile", "details"));
         const profileData = profileSnapshot.exists() ? profileSnapshot.data() : {};
-        return {
-          ...match,
-          name: profileData.displayName || match.name,
-          photoURL: profileData.photoURL || match.photoURL,
-        };
+        return normalizeSearchableUser(userDoc.id, {
+          ...rootData,
+          ...profileData,
+          displayName: profileData.displayName || rootData.displayName,
+          email: profileData.email || rootData.email,
+          photoURL: profileData.photoURL || rootData.photoURL,
+        });
       })), "User profile search request timed out.");
 
-      return enrichedMatches
+      return searchableUsers
+        .filter((item) => item && item.userId !== currentUserId && item.searchText.includes(searchTerm))
+        .slice(0, 12)
         .map(({ searchText, ...safeUser }) => safeUser);
     } catch (error) {
       console.warn("User search failed.", error);
@@ -217,6 +268,9 @@ export async function ensureConversation(userId, friendUserId) {
     id,
     users,
     messages: [],
+    readBy: {
+      [userId]: new Date().toISOString(),
+    },
     updatedAt: new Date().toISOString(),
   });
   return saveConversationForUsers(conversation);
@@ -242,6 +296,10 @@ export async function sendConversationMessage(userId, conversationId, message) {
         sentAt: new Date().toISOString(),
       },
     ],
+    readBy: {
+      ...(conversation.readBy || {}),
+      [userId]: new Date().toISOString(),
+    },
     updatedAt: new Date().toISOString(),
   });
   const result = await saveConversationForUsers(nextConversation);
@@ -254,4 +312,19 @@ export async function sendConversationMessage(userId, conversationId, message) {
     ...result,
     conversations: nextConversations,
   };
+}
+
+export async function markConversationRead(userId, conversationId) {
+  if (!userId || !conversationId) return { synced: false };
+  const conversations = await loadUserConversations(userId);
+  const conversation = conversations.find((item) => item.id === conversationId);
+  if (!conversation) return { synced: false };
+  const nextConversation = normalizeConversation({
+    ...conversation,
+    readBy: {
+      ...(conversation.readBy || {}),
+      [userId]: new Date().toISOString(),
+    },
+  });
+  return saveConversationForUsers(nextConversation);
 }

@@ -15,8 +15,40 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/trainers/$(request.auth.uid));
     }
 
+    function onlyNotificationFieldsChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(["notifications", "updatedAt"]);
+    }
+
+    function appendingNotification() {
+      return signedIn()
+        && onlyNotificationFieldsChanged()
+        && request.resource.data.notifications is list
+        && request.resource.data.notifications.size() >= (resource.data.notifications is list ? resource.data.notifications.size() : 0);
+    }
+
+    function appendingFriend() {
+      return signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["friends", "updatedAt"])
+        && request.resource.data.friends is list
+        && request.resource.data.friends.size() >= (resource.data.friends is list ? resource.data.friends.size() : 0);
+    }
+
     match /users/{userId} {
+      allow read: if signedIn();
+      allow create, delete: if isOwner(userId) || isTrainer();
+      allow update: if isOwner(userId) || isTrainer() || appendingNotification() || appendingFriend();
+    }
+
+    match /users/{userId}/conversations/{conversationId} {
       allow read, write: if isOwner(userId) || isTrainer();
+      allow create, update: if signedIn()
+        && request.resource.data.users is list
+        && request.resource.data.users.hasAll([request.auth.uid, userId]);
+    }
+
+    match /users/{userId}/profile/{profileDoc} {
+      allow read: if signedIn();
+      allow write: if isOwner(userId) || isTrainer();
     }
 
     match /users/{userId}/{document=**} {

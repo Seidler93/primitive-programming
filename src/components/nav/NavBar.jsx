@@ -2,17 +2,20 @@ import React from "react";
 import { Clock, Dumbbell, Menu, UserRound } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useMenu } from "../../context/MenuContext";
+import { useNotifications } from "../../context/NotificationContext";
 import { useTimer } from "../../context/TimerContext";
 
 export function NavBar({ onBrandClick, onProfileClick }) {
   const { user } = useAuth();
   const { showMenu } = useMenu();
+  const { total } = useNotifications();
   const { handleTimerClick, startTimerPress, stopTimerPress, timerLabel, timerRunning } = useTimer();
 
   return (
     <nav className="top-nav">
       <button className="nav-button nav-icon menu-button" type="button" onClick={showMenu} aria-label="Open menu" title="Menu">
         <Menu size={19} />
+        {total > 0 && <span className="notification-badge">{total > 99 ? "99+" : total}</span>}
       </button>
       <button className="nav-brand" type="button" onClick={onBrandClick} aria-label="Go to home" title="Home">
         <Dumbbell size={22} />

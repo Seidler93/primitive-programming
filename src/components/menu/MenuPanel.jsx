@@ -1,6 +1,7 @@
 import React from "react";
 import { ArrowDown, ArrowUp, Dumbbell, Eye, EyeOff, GripVertical } from "lucide-react";
 import { useMenu } from "../../context/MenuContext";
+import { useNotifications } from "../../context/NotificationContext";
 
 export function MenuPanel() {
   const {
@@ -16,6 +17,7 @@ export function MenuPanel() {
     stopMenuButtonPress,
     toggleMenuButtonHidden,
   } = useMenu();
+  const { counts } = useNotifications();
 
   return (
     <div
@@ -58,6 +60,7 @@ export function MenuPanel() {
                 {menuEditMode && <GripVertical className="menu-drag-icon" size={16} />}
                 <Icon size={18} />
                 <span>{item.label}</span>
+                {counts[item.id] > 0 && <span className="notification-dot" aria-label={`${counts[item.id]} notifications`}>{counts[item.id] > 99 ? "99+" : counts[item.id]}</span>}
               </button>
               {menuEditMode && (
                 <div className="menu-edit-controls" aria-label={`${item.label} menu controls`}>

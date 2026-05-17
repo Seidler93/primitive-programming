@@ -335,6 +335,31 @@ select:focus {
 
 .menu-button {
   flex: 0 0 auto;
+  position: relative;
+}
+
+.notification-badge,
+.notification-dot,
+.message-unread-badge {
+  min-width: 20px;
+  height: 20px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 6px;
+  color: #fff;
+  background: #ef4444;
+  border: 2px solid #0f0b15;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.notification-badge {
+  position: absolute;
+  top: -7px;
+  right: -7px;
 }
 
 .nav-menu-backdrop {
@@ -420,6 +445,7 @@ select:focus {
 }
 
 .menu-link {
+  position: relative;
   min-height: 44px;
   width: 100%;
   display: flex;
@@ -437,6 +463,17 @@ select:focus {
 .menu-link span {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.menu-link .notification-dot {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-color: #18111f;
+  font-size: 0.68rem;
 }
 
 .menu-drag-icon {
@@ -2130,6 +2167,39 @@ select:focus {
   min-height: 132px;
 }
 
+.friend-invite-list {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.friend-invite-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  background: #18111f;
+  border: 1px solid #4f2730;
+  border-radius: 8px;
+}
+
+.friend-invite-card h3,
+.friend-invite-card p {
+  margin: 0;
+}
+
+.friend-invite-card p {
+  color: #b9a9c9;
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+
+.friend-invite-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .friend-summary,
 .friend-search-result {
   display: grid;
@@ -2206,17 +2276,20 @@ select:focus {
 
 .messages-inbox-panel {
   position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 18px;
   width: min(720px, calc(100% - 32px));
-  min-height: min(740px, calc(100dvh - 116px));
-  padding-bottom: 88px;
-  background: #050407;
+  min-height: calc(100dvh - 92px);
+  margin: 0 auto;
+  padding: 14px 0 86px;
 }
 
 .messages-inbox-header {
   display: flex;
   align-items: center;
-  justify-content: center;
-  min-height: 40px;
+  justify-content: flex-start;
+  min-height: 34px;
 }
 
 .messages-inbox-header .section-heading {
@@ -2224,7 +2297,10 @@ select:focus {
 }
 
 .messages-inbox-shell {
+  display: grid;
+  align-content: start;
   min-height: 0;
+  overflow: auto;
 }
 
 .conversation-list,
@@ -2238,7 +2314,7 @@ select:focus {
 .conversation-list {
   display: grid;
   align-content: start;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .messages-inbox-list {
@@ -2328,16 +2404,25 @@ select:focus {
   color: #6f6574;
 }
 
+.message-unread-badge {
+  min-width: 22px;
+  border-color: #0b0910;
+}
+
 .messages-bottom-bar {
-  position: sticky;
-  bottom: 0;
+  position: fixed;
+  left: 50%;
+  right: auto;
+  bottom: max(27px, calc(env(safe-area-inset-bottom) + 15px));
+  z-index: 10;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
-  margin-top: auto;
-  padding-top: 14px;
-  background: linear-gradient(180deg, rgba(5, 4, 7, 0), #050407 34%);
+  width: min(720px, calc(100% - 32px));
+  padding: 10px 0 0;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, rgba(11, 9, 16, 0), #0b0910 42%);
 }
 
 .messages-search-field {

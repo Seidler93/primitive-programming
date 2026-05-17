@@ -30,6 +30,7 @@ export async function ensureUserDocument(user, defaults = {}) {
         payload.workoutTemplates = [];
         payload.friends = [];
         payload.conversations = [];
+        payload.notifications = [];
         payload.createdAt = new Date().toISOString();
       }
       await setDoc(doc(db, "users", user.uid), payload, { merge: true });
