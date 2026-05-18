@@ -373,7 +373,7 @@ select:focus {
   width: min(calc(100% - 28px), 520px);
   min-height: 62px;
   display: grid;
-  grid-template-columns: 72px repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr)) 72px;
   gap: 6px;
   padding: 8px;
   background: rgba(15, 11, 21, 0.94);
@@ -3586,7 +3586,7 @@ select:focus {
   .bottom-nav {
     bottom: max(10px, calc(env(safe-area-inset-bottom) + 8px));
     width: min(calc(100% - 20px), 420px);
-    grid-template-columns: 58px repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr)) 58px;
   }
 
   .bottom-nav-button {
