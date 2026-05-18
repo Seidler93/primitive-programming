@@ -5,6 +5,7 @@ import { useToastNotifications } from "../components/notifications/useToastNotif
 import { BootPage } from "../pages/boot/BootPage";
 import { LoginPage } from "../pages/login/LoginPage";
 import { ProfileSetupModal } from "../components/profile/ProfileSetupModal";
+import { WorkoutAddModal } from "../components/workout/WorkoutAddModal";
 import { defaultSelectedDate, flexibleScheduleMode } from "./config";
 import { AuthProvider, useAuth } from "../context/AuthContext";
 import { MenuProvider } from "../context/MenuContext";
@@ -54,6 +55,7 @@ function AppContent() {
     typeof window === "undefined" ? false : window.matchMedia("(max-width: 760px)").matches
   ));
   const [visibleCalendarMonths, setVisibleCalendarMonths] = useState(3);
+  const [quickAddWorkoutDate, setQuickAddWorkoutDate] = useState("");
   const routeWritePending = useRef(false);
   const { handleWorkoutSaveStatus, notificationMessage, saveMessage } = useToastNotifications(user);
 
@@ -151,8 +153,12 @@ function AppContent() {
   }
 
   async function refreshCustomWorkouts() {
+    const nextLogs = user?.uid ? await loadUserWorkouts(user.uid) : {};
     const nextPrograms = isTrainer || isDevUser(user?.uid) ? await loadPrograms() : user ? await loadProgramsForUser(user) : [];
     const programWorkoutState = await loadProgramWorkoutState(user, nextPrograms);
+    setWorkouts(nextLogs);
+    setAthleteProgressWorkouts(isTrainer ? await loadUserWorkouts("dev-athlete") : nextLogs);
+    setCustomWorkouts(getScheduledWorkouts(nextLogs));
     setPrograms(programWorkoutState.programs);
     setProgramWorkouts(programWorkoutState.workouts);
   }
@@ -328,7 +334,7 @@ function AppContent() {
 
   function startDaySwipe(event) {
     if (view !== "workout-list" || event.pointerType === "mouse") return;
-    if (event.target.closest(".top-nav, .modal-backdrop, .modal-panel")) return;
+    if (event.target.closest(".top-nav, .bottom-nav, .modal-backdrop, .modal-panel")) return;
     setDaySwipeStart({ x: event.clientX, y: event.clientY });
   }
 
@@ -356,7 +362,11 @@ function AppContent() {
     setView("workout");
   }
 
-  async function openBlankWorkout(workoutType = "strength") {
+  function openTodayWorkoutModal() {
+    setQuickAddWorkoutDate(today);
+  }
+
+  async function openBlankWorkout(workoutType = "strength", workoutDate = selectedDate) {
     const workoutTypeLabels = {
       strength: "Strength Workout",
       running: "Running",
@@ -368,8 +378,8 @@ function AppContent() {
     };
     const workoutTitle = workoutTypeLabels[workoutType] || "Workout";
     const scheduledWorkout = {
-      id: `scheduled-${selectedDate}-${Date.now()}`,
-      date: selectedDate,
+      id: `scheduled-${workoutDate}-${Date.now()}`,
+      date: workoutDate,
       focus: workoutTitle,
       exercise: "",
       prescription: "",
@@ -377,15 +387,15 @@ function AppContent() {
       notes: "",
       programId: "default",
       workoutType,
-      day: new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date(`${selectedDate}T12:00:00`)),
+      day: new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date(`${workoutDate}T12:00:00`)),
       phase: workoutTitle,
       week: "Custom",
       scheduledPlaceholder: true,
       createdAt: new Date().toISOString(),
     };
     const nextWorkoutKey = workoutGroupKey(scheduledWorkout);
-    const logKey = workoutLogKey(selectedDate, nextWorkoutKey);
-    const isFutureWorkout = selectedDate > today;
+    const logKey = workoutLogKey(workoutDate, nextWorkoutKey);
+    const isFutureWorkout = workoutDate > today;
     const nextWorkoutLog = {
       ...scheduledWorkout,
       status: "scheduled",
@@ -400,8 +410,9 @@ function AppContent() {
       },
     }));
     if (!isFutureWorkout && user?.uid) {
-      saveWorkoutDraft(user.uid, selectedDate, nextWorkoutKey, { started: true });
+      saveWorkoutDraft(user.uid, workoutDate, nextWorkoutKey, { started: true });
     }
+    setSelectedDate(workoutDate);
     setSelectedWorkoutKey(nextWorkoutKey);
     setView("workout");
     await saveUserWorkout(user.uid, logKey, nextWorkoutLog);
@@ -540,7 +551,9 @@ function AppContent() {
             onStartDaySwipe={startDaySwipe}
             onFinishDaySwipe={finishDaySwipe}
             onStopDaySwipe={() => setDaySwipeStart(null)}
+            onAddWorkoutClick={openTodayWorkoutModal}
             onBrandClick={() => setView("client")}
+            onOpenView={setView}
             onProfileClick={() => setView("profile")}
             isOnline={isOnline}
             saveMessage={saveMessage}
@@ -548,6 +561,14 @@ function AppContent() {
           >
             {showProfileSetup && (
               <ProfileSetupModal user={user} onComplete={handleProfileSetupComplete} />
+            )}
+
+            {quickAddWorkoutDate && (
+              <WorkoutAddModal
+                date={quickAddWorkoutDate}
+                onAddWorkout={(workoutType) => openBlankWorkout(workoutType, quickAddWorkoutDate)}
+                onClose={() => setQuickAddWorkoutDate("")}
+              />
             )}
 
             <AppRoutes

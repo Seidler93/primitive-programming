@@ -1,5 +1,6 @@
 import React from "react";
 import { MenuPanel } from "../menu/MenuPanel";
+import { BottomNav } from "../nav/BottomNav";
 import { NavBar } from "../nav/NavBar";
 import { NotificationToasts } from "../notifications/NotificationToasts";
 import { TimerSettingsModal } from "../nav/TimerSettingsModal";
@@ -10,8 +11,10 @@ export function AppShell({
   children,
   isOnline,
   notificationMessage,
+  onAddWorkoutClick,
   onBrandClick,
   onFinishDaySwipe,
+  onOpenView,
   onProfileClick,
   onStartDaySwipe,
   onStopDaySwipe,
@@ -44,6 +47,14 @@ export function AppShell({
         notificationMessage={notificationMessage}
         saveMessage={saveMessage}
       />
+
+      {view === "client" && (
+        <BottomNav
+          onAddWorkout={onAddWorkoutClick}
+          onOpenView={onOpenView}
+          view={view}
+        />
+      )}
     </main>
   );
 }

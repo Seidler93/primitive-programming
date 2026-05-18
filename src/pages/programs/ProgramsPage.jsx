@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { CalendarDays, ChevronRight, ClipboardList, Eye, Minus } from "lucide-react";
 import { defaultSelectedDate, flexibleScheduleMode } from "../../app/config";
-import { loadAthletes, removeUserActiveProgram, saveUserActiveProgram } from "../../db";
-import { applyActiveProgramDates, buildWorkoutDatesForProgram, formatDate, programDayGroups, progressSummary } from "../../utils/appHelpers";
+import { deleteUserWorkout, loadAthletes, removeUserActiveProgram, saveUserActiveProgram, saveUserWorkout } from "../../db";
+import { applyActiveProgramDates, buildWorkoutDatesForProgram, formatDate, groupWorkouts, logDateFromKey, programDayGroups, progressSummary } from "../../utils/appHelpers";
 import { ProgramWorkoutViewer } from "./ProgramWorkoutViewer";
 
 export function ProgramsPage({ user, isTrainer, programs, programWorkouts, workouts, onProgramStarted }) {
@@ -62,10 +62,14 @@ export function ProgramsPage({ user, isTrainer, programs, programWorkouts, worko
     setStatusMessage("");
   }
 
-  function activeProgramPayload(program, selectedStartDate, selectedScheduleMode) {
-    const nextProgramWorkouts = programWorkouts
+  function programWorkoutItems(program) {
+    return programWorkouts
       .filter((item) => !item.scheduledPlaceholder && (item.programId || "default") === program.id && item.date)
       .sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  function activeProgramPayload(program, selectedStartDate, selectedScheduleMode) {
+    const nextProgramWorkouts = programWorkoutItems(program);
     const scheduled = selectedScheduleMode !== flexibleScheduleMode;
     return {
       id: program.id,
@@ -77,11 +81,70 @@ export function ProgramsPage({ user, isTrainer, programs, programWorkouts, worko
     };
   }
 
+  async function createUserProgramWorkouts(userId, program, activeProgram, selectedScheduleMode) {
+    const sourceWorkouts = programWorkoutItems(program);
+    if (!userId || !sourceWorkouts.length) return;
+
+    const scheduledWorkouts = activeProgram.scheduled
+      ? applyActiveProgramDates(sourceWorkouts, [{ ...program, activeProgram }])
+      : sourceWorkouts;
+    const createdAt = new Date().toISOString();
+    const scheduleMode = activeProgram.scheduled ? "fixed" : selectedScheduleMode;
+
+    await Promise.all(groupWorkouts(scheduledWorkouts).map((group) => {
+      const firstItem = group.items[0] || {};
+      const workoutRecord = {
+        date: group.date,
+        programId: group.programId,
+        programWeek: group.week,
+        week: group.week,
+        workoutFocus: group.title,
+        focus: group.title,
+        workoutType: firstItem.workoutType || "strength",
+        phase: group.phase,
+        sourceDate: firstItem.sourceDate || firstItem.date,
+        scheduleMode,
+        status: "scheduled",
+        completed: false,
+        completedAt: null,
+        createdAt,
+        items: group.items.map((item) => ({
+          ...item,
+          date: group.date,
+          sourceDate: item.sourceDate || item.date,
+          scheduleMode,
+        })),
+      };
+
+      return saveUserWorkout(userId, group.date, workoutRecord);
+    }));
+  }
+
+  async function removeCancelableProgramWorkouts(userId, program) {
+    const programStartDate = program.activeProgram?.startDate || program.startDate;
+    if (!userId || !program?.id || !programStartDate) return;
+
+    const workoutIds = Object.entries(workouts)
+      .filter(([workoutId, workout]) => {
+        const workoutDate = workout?.date || logDateFromKey(workoutId);
+        return (workout?.programId || "default") === program.id
+          && workoutDate > programStartDate
+          && workout?.status !== "in-progress";
+      })
+      .map(([workoutId]) => workoutId);
+
+    for (const workoutId of workoutIds) {
+      await deleteUserWorkout(userId, workoutId);
+    }
+  }
+
   async function startProgram(program, event) {
     event.preventDefault();
     if (!user?.uid || !program?.id || !programStartDate) return;
 
-    await saveUserActiveProgram(user.uid, activeProgramPayload(program, programStartDate, programScheduleMode));
+    const activeProgram = activeProgramPayload(program, programStartDate, programScheduleMode);
+    await saveUserActiveProgram(user.uid, activeProgram);
+    await createUserProgramWorkouts(user.uid, program, activeProgram, programScheduleMode);
     setStatusMessage(`${program.name} started.`);
     setActivePanel("");
     setProgramStartDate(defaultSelectedDate);
@@ -93,7 +156,9 @@ export function ProgramsPage({ user, isTrainer, programs, programWorkouts, worko
     event.preventDefault();
     if (!assignAthleteId || !program?.id || !assignStartDate) return;
 
-    await saveUserActiveProgram(assignAthleteId, activeProgramPayload(program, assignStartDate, assignScheduleMode));
+    const activeProgram = activeProgramPayload(program, assignStartDate, assignScheduleMode);
+    await saveUserActiveProgram(assignAthleteId, activeProgram);
+    await createUserProgramWorkouts(assignAthleteId, program, activeProgram, assignScheduleMode);
     const athlete = athleteOptions.find((item) => item.uid === assignAthleteId);
     setStatusMessage(`${program.name} assigned to ${athlete?.displayName || athlete?.email || "athlete"}.`);
     setActivePanel("");
@@ -104,6 +169,7 @@ export function ProgramsPage({ user, isTrainer, programs, programWorkouts, worko
 
   async function quitProgram(program) {
     if (!user?.uid || !program?.id) return;
+    await removeCancelableProgramWorkouts(user.uid, program);
     await removeUserActiveProgram(user.uid, program.id);
     setExpandedProgramId("");
     setActivePanel("");

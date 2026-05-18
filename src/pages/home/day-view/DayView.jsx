@@ -1,27 +1,11 @@
 import React, { useState } from "react";
-import { ArrowLeft, Bike, Bot, CalendarDays, CheckCircle2, Dumbbell, Footprints, Play, Plus, Save, ShipWheel, Trash2, Volleyball, Waves } from "lucide-react";
+import { ArrowLeft, CalendarDays, CheckCircle2, Dumbbell, Play, Plus, Trash2 } from "lucide-react";
+import { WorkoutAddModal } from "../../../components/workout/WorkoutAddModal";
 import { importedProgramMeta } from "../../../data/programData";
 import { formatDate, loadWorkoutDraft, shiftDate, workoutExerciseCount, workoutLogKey } from "../../../utils/appHelpers";
 
-const workoutTypeOptions = [
-  { id: "strength", label: "Strength workout", icon: Dumbbell },
-  { id: "running", label: "Running", icon: Footprints },
-  { id: "swimming", label: "Swimming", icon: Waves },
-  { id: "biking", label: "Biking", icon: Bike },
-  { id: "rowing", label: "Rowing", icon: ShipWheel },
-  { id: "walking", label: "Walking", icon: Footprints },
-  { id: "sport", label: "Sport", icon: Volleyball },
-];
-
-const workoutSourceOptions = [
-  { id: "saved", label: "Saved workout", copy: "Reuse one of your saved workout templates.", disabled: true, icon: Save },
-  { id: "generated", label: "Generate workout", copy: "Build a workout from goals, maxes, and recent training.", disabled: true, icon: Bot },
-];
-
 export function DayView({ date, user, workoutGroups, workouts, programs, onOpenWorkout, onAddWorkout, onChangeDate, onMoveWorkout, onDeleteWorkout }) {
   const [showAddWorkoutOptions, setShowAddWorkoutOptions] = useState(false);
-  const [selectedWorkoutType, setSelectedWorkoutType] = useState("strength");
-  const [isSchedulingWorkout, setIsSchedulingWorkout] = useState(false);
   const [expandedWorkoutKey, setExpandedWorkoutKey] = useState("");
   const [moveWorkoutKey, setMoveWorkoutKey] = useState("");
   const [moveDate, setMoveDate] = useState(date);
@@ -156,43 +140,7 @@ export function DayView({ date, user, workoutGroups, workouts, programs, onOpenW
         <p className="empty-list-copy">No workouts are scheduled for this day.</p>
       )}
       {showAddWorkoutOptions && (
-        <div className="modal-backdrop" role="presentation">
-          <div className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="add-workout-title">
-            <div>
-              <p className="eyebrow">{formatDate(date)}</p>
-              <h2 id="add-workout-title">Add workout</h2>
-            </div>
-            <div className="choice-list" role="tablist" aria-label="Workout add options">
-              {workoutTypeOptions.map((option) => (
-                <button className={selectedWorkoutType === option.id ? "choice-button workout-type-choice active" : "choice-button workout-type-choice"} type="button" key={option.id} onClick={() => setSelectedWorkoutType(option.id)}>
-                  <option.icon size={18} />
-                  <strong>{option.label}</strong>
-                </button>
-              ))}
-              {workoutSourceOptions.map((option) => (
-                <button className="choice-button" type="button" key={option.id} disabled={option.disabled}>
-                  <option.icon size={18} />
-                  <strong>{option.label}</strong>
-                  <span>{option.copy}</span>
-                </button>
-              ))}
-            </div>
-            <button className="primary" type="button" disabled={isSchedulingWorkout} onClick={async () => {
-              try {
-                setIsSchedulingWorkout(true);
-                setShowAddWorkoutOptions(false);
-                await onAddWorkout(selectedWorkoutType);
-              } finally {
-                setIsSchedulingWorkout(false);
-              }
-            }}>
-              {isFutureDate ? "Schedule workout" : "Start workout"}
-            </button>
-            <button className="text-button" type="button" onClick={() => setShowAddWorkoutOptions(false)}>
-              Cancel
-            </button>
-          </div>
-        </div>
+        <WorkoutAddModal date={date} onAddWorkout={onAddWorkout} onClose={() => setShowAddWorkoutOptions(false)} />
       )}
     </section>
   );

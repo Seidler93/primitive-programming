@@ -265,6 +265,7 @@ select:focus {
 
 .app-shell {
   min-height: 100vh;
+  padding-bottom: 96px;
   background: #0b0910;
 }
 
@@ -284,6 +285,66 @@ select:focus {
   padding: 0 clamp(16px, 5vw, 56px);
   color: #fff;
   background: #0f0b15;
+}
+
+.bottom-nav {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 8;
+  width: min(calc(100% - 28px), 520px);
+  min-height: 62px;
+  display: grid;
+  grid-template-columns: 72px repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px;
+  background: rgba(15, 11, 21, 0.94);
+  border: 1px solid #33243f;
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.38);
+  transform: translateX(-50%);
+  backdrop-filter: blur(14px);
+}
+
+.bottom-nav-button {
+  min-width: 0;
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 8px;
+  color: #b9a9c9;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.bottom-nav-button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bottom-nav-button:hover,
+.bottom-nav-button:focus-visible,
+.bottom-nav-button.active {
+  color: #fff;
+  background: #241832;
+  outline: none;
+}
+
+.bottom-nav-add {
+  color: #fff;
+  background: #8b5cf6;
+}
+
+.bottom-nav-add:hover,
+.bottom-nav-add:focus-visible {
+  background: #7c3aed;
 }
 
 .nav-brand,
@@ -3353,6 +3414,19 @@ select:focus {
 
   .top-nav {
     padding-block: 12px;
+  }
+
+  .bottom-nav {
+    bottom: 20px;
+    width: min(calc(100% - 20px), 420px);
+    grid-template-columns: 58px repeat(3, minmax(0, 1fr));
+  }
+
+  .bottom-nav-button {
+    flex-direction: column;
+    gap: 3px;
+    padding: 0 4px;
+    font-size: 0.64rem;
   }
 
   .table-head {
