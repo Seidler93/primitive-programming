@@ -16,32 +16,6 @@ export function MenuProvider({ children, isMobileViewport, isTrainer, onOpenView
   const menuLongPressTimer = useRef(null);
 
   useEffect(() => {
-    if (!showNavMenu || typeof document === "undefined" || typeof window === "undefined") return undefined;
-
-    const scrollY = window.scrollY;
-    const body = document.body;
-    const previousStyles = {
-      overflow: body.style.overflow,
-      position: body.style.position,
-      top: body.style.top,
-      width: body.style.width,
-    };
-
-    body.style.overflow = "hidden";
-    body.style.position = "fixed";
-    body.style.top = `-${scrollY}px`;
-    body.style.width = "100%";
-
-    return () => {
-      body.style.overflow = previousStyles.overflow;
-      body.style.position = previousStyles.position;
-      body.style.top = previousStyles.top;
-      body.style.width = previousStyles.width;
-      window.scrollTo(0, scrollY);
-    };
-  }, [showNavMenu]);
-
-  useEffect(() => {
     saveMenuButtonPreferences(menuButtonPreferences);
   }, [menuButtonPreferences]);
 

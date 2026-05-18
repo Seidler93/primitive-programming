@@ -40,7 +40,9 @@ export function AppShell({
 
       {showTimerSettings && <TimerSettingsModal />}
 
-      {children}
+      <div className="app-scroll-area">
+        {children}
+      </div>
 
       <NotificationToasts
         isOnline={isOnline}
