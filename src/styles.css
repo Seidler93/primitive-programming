@@ -373,7 +373,7 @@ select:focus {
   width: min(calc(100% - 28px), 520px);
   min-height: 62px;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) 72px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
   padding: 8px;
   background: rgba(15, 11, 21, 0.94);
@@ -399,6 +399,12 @@ select:focus {
   font-size: 0.72rem;
   font-weight: 850;
   cursor: pointer;
+}
+
+.bottom-nav-button svg {
+  width: 21px;
+  height: 21px;
+  flex: 0 0 21px;
 }
 
 .bottom-nav-button span {
@@ -3586,7 +3592,7 @@ select:focus {
   .bottom-nav {
     bottom: max(10px, calc(env(safe-area-inset-bottom) + 8px));
     width: min(calc(100% - 20px), 420px);
-    grid-template-columns: repeat(3, minmax(0, 1fr)) 58px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .bottom-nav-button {
