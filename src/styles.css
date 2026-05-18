@@ -3374,7 +3374,8 @@ select:focus {
 
 .notification-toast,
 .sync-toast,
-.connection-banner {
+.connection-banner,
+.console-failure-toast {
   position: fixed;
   right: 18px;
   z-index: 30;
@@ -3404,6 +3405,37 @@ select:focus {
   bottom: 18px;
   background: #2b2112;
   border: 1px solid #8a6424;
+}
+
+.console-failure-toast {
+  bottom: 82px;
+  background: #2b1219;
+  border: 1px solid #8a2f42;
+}
+
+.console-failure-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.console-copy-button {
+  min-height: 34px;
+  flex: 0 0 auto;
+  padding: 0 11px;
+  color: #ffd2dc;
+  background: #44202a;
+}
+
+.console-failure-toast pre {
+  max-height: 180px;
+  margin: 12px 0 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #ffd8df;
+  font: 0.78rem/1.45 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
 }
 
 @media (max-width: 760px) {
