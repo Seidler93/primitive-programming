@@ -290,7 +290,7 @@ select:focus {
 .bottom-nav {
   position: fixed;
   left: 50%;
-  bottom: 24px;
+  bottom: 34px;
   z-index: 8;
   width: min(calc(100% - 28px), 520px);
   min-height: 62px;
@@ -3449,7 +3449,7 @@ select:focus {
   }
 
   .bottom-nav {
-    bottom: 20px;
+    bottom: 30px;
     width: min(calc(100% - 20px), 420px);
     grid-template-columns: 58px repeat(3, minmax(0, 1fr));
   }
