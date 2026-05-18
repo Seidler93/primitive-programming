@@ -3122,43 +3122,80 @@ select:focus {
 .settings-panel {
   min-height: min(520px, calc(100vh - 116px));
   align-content: start;
+  gap: 16px;
+}
+
+.settings-avatar {
+  width: 52px;
+  height: 52px;
+}
+
+.settings-header-detail {
+  margin: 5px 0 0;
+  color: #b9a9c9;
+  font-size: 0.9rem;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.settings-group-list {
+  display: grid;
+  gap: 14px;
+}
+
+.settings-group {
+  display: grid;
+  gap: 7px;
+}
+
+.settings-group h3 {
+  margin: 0;
+  color: #b9a9c9;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
 }
 
 .settings-option-list {
   display: grid;
-  gap: 10px;
-}
-
-.redeem-code-button {
-  justify-self: stretch;
-}
-
-.settings-option {
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  min-height: 68px;
-  padding: 12px 14px;
-  color: #f3eefb;
-  text-align: left;
+  overflow: hidden;
   background: #14101a;
   border: 1px solid #3a2948;
   border-radius: 8px;
 }
 
+.settings-option {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 9px 12px;
+  color: #f3eefb;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #2c2136;
+  border-radius: 0;
+}
+
+.settings-option:last-child {
+  border-bottom: 0;
+}
+
 .settings-option:hover,
 .settings-option:focus-visible {
   background: #201728;
-  border-color: #7c5aa0;
+  outline: 0;
 }
 
 .settings-option-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
+  width: 34px;
+  height: 34px;
   color: #f3eefb;
   background: #251b2f;
   border: 1px solid #49335d;
@@ -3171,13 +3208,13 @@ select:focus {
 }
 
 .settings-option strong {
-  font-size: 1rem;
+  font-size: 0.94rem;
 }
 
 .settings-option small {
-  margin-top: 3px;
+  margin-top: 2px;
   color: #b9a9c9;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-weight: 800;
 }
 
@@ -3223,15 +3260,15 @@ select:focus {
 
 .settings-actions {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   justify-content: stretch;
 }
 
 .profile-settings-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  padding: 14px;
+  gap: 12px;
+  padding: 12px;
   background: #14101a;
   border: 1px solid #3a2948;
   border-radius: 8px;
@@ -3257,20 +3294,21 @@ select:focus {
 .settings-preferences,
 .settings-metrics {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .settings-preference-form {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .settings-block {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 14px;
+  gap: 12px;
+  min-height: 58px;
+  padding: 11px 12px;
   background: #14101a;
   border: 1px solid #3a2948;
   border-radius: 8px;
@@ -3306,13 +3344,13 @@ select:focus {
 
 .settings-block h3 {
   color: #f3eefb;
-  font-size: 1rem;
+  font-size: 0.95rem;
 }
 
 .settings-block p:not(.eyebrow) {
-  margin-top: 4px;
+  margin-top: 3px;
   color: #b9a9c9;
-  font-size: 0.9rem;
+  font-size: 0.84rem;
 }
 
 .settings-block .primary,

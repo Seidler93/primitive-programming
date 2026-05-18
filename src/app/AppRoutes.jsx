@@ -66,7 +66,7 @@ export function AppRoutes({
       ) : view === "progress" ? (
         <GoalsPage user={user} workouts={workouts} onSaveMaxes={syncUserMaxes} />
       ) : view === "settings" ? (
-        <SettingsPage onOpenSection={(section) => setView(`settings-${section}`)} />
+        <SettingsPage user={user} isTrainer={isTrainer} onOpenSection={(section) => setView(`settings-${section}`)} />
       ) : view.startsWith("settings-") ? (
         <SettingsSectionPage
           isTrainer={isTrainer}

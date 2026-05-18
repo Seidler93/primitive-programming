@@ -1,14 +1,30 @@
 import React, { useState } from "react";
-import { ArrowLeft, Bell, ChevronRight, LogOut, PencilLine, Plus, Save, Settings } from "lucide-react";
+import { ArrowLeft, Bell, ChevronRight, LogOut, PencilLine, Plus, Save, Settings, Ticket } from "lucide-react";
 import { appVersion, bodyMetricFields, defaultBodyMetricSettings, settingsSections } from "../../app/config";
 import { saveUserPreferences, saveUserProfile } from "../../db";
 import { requestNotificationAccess } from "../../services/firebase";
-import { loadBodyMetricSettings, loadUserDistanceUnit, loadUserWeightUnit, saveBodyMetricSettings, saveUserDistanceUnit, saveUserWeightUnit } from "../../utils/appHelpers";
+import { loadBodyMetricSettings, loadBodyMetrics, loadUserDistanceUnit, loadUserWeightUnit, saveBodyMetricSettings, saveBodyMetrics, saveUserDistanceUnit, saveUserWeightUnit } from "../../utils/appHelpers";
 
-export function SettingsPage({ onOpenSection }) {
+const settingsGroups = [
+  {
+    title: "Account",
+    items: ["account"],
+  },
+  {
+    title: "Preferences",
+    items: ["preferences", "metrics"],
+  },
+  {
+    title: "App",
+    items: ["updates"],
+  },
+];
+
+export function SettingsPage({ user, isTrainer, onOpenSection }) {
   const [showRedeemCode, setShowRedeemCode] = useState(false);
   const [redeemCode, setRedeemCode] = useState("");
   const [redeemMessage, setRedeemMessage] = useState("");
+  const sectionMap = Object.fromEntries(settingsSections.map((section) => [section.id, section]));
 
   function redeemAccessCode(event) {
     event.preventDefault();
@@ -20,40 +36,56 @@ export function SettingsPage({ onOpenSection }) {
   return (
     <section className="profile-panel settings-panel">
       <div className="profile-header">
-        <span className="profile-avatar">
+        <span className="profile-avatar settings-avatar">
           <Settings size={34} />
         </span>
         <div>
-          <p className="eyebrow">Profile settings</p>
-          <h2>Settings</h2>
+          <p className="eyebrow">{isTrainer ? "Coach account" : "Athlete account"}</p>
+          <h2>{user?.displayName || user?.email || "Settings"}</h2>
+          {user?.email && <p className="settings-header-detail">{user.email}</p>}
         </div>
       </div>
 
-      <div className="settings-option-list" aria-label="Settings options">
-        {settingsSections.map((section) => {
-          const SectionIcon = section.icon;
-          return (
-            <button className="settings-option" type="button" key={section.id} onClick={() => onOpenSection(section.id)}>
-              <span className="settings-option-icon">
-                <SectionIcon size={19} />
-              </span>
-              <span>
-                <strong>{section.title}</strong>
-                <small>{section.eyebrow}</small>
-              </span>
-              <ChevronRight size={18} />
-            </button>
-          );
-        })}
+      <div className="settings-group-list" aria-label="Settings options">
+        {settingsGroups.map((group) => (
+          <div className="settings-group" key={group.title}>
+            <h3>{group.title}</h3>
+            <div className="settings-option-list">
+              {group.items.map((sectionId) => {
+                const section = sectionMap[sectionId];
+                const SectionIcon = section.icon;
+                return (
+                  <button className="settings-option" type="button" key={section.id} onClick={() => onOpenSection(section.id)}>
+                    <span className="settings-option-icon">
+                      <SectionIcon size={18} />
+                    </span>
+                    <span>
+                      <strong>{section.title}</strong>
+                      <small>{section.eyebrow}</small>
+                    </span>
+                    <ChevronRight size={17} />
+                  </button>
+                );
+              })}
+              {group.title === "App" && (
+                <button className="settings-option" type="button" onClick={() => {
+                  setRedeemMessage("");
+                  setShowRedeemCode(true);
+                }}>
+                  <span className="settings-option-icon">
+                    <Ticket size={18} />
+                  </span>
+                  <span>
+                    <strong>Redeem code</strong>
+                    <small>Program access</small>
+                  </span>
+                  <Plus size={17} />
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
-
-      <button className="secondary redeem-code-button" type="button" onClick={() => {
-        setRedeemMessage("");
-        setShowRedeemCode(true);
-      }}>
-        <Plus size={18} />
-        Redeem code
-      </button>
 
       <p className="app-version">Version {appVersion}</p>
 
