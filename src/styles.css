@@ -372,9 +372,8 @@ select:focus {
   z-index: 8;
   width: min(calc(100% - 28px), 520px);
   min-height: 62px;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
+  display: flex;
+  justify-content: space-around;
   padding: 8px;
   background: rgba(15, 11, 21, 0.94);
   border: 1px solid #33243f;
@@ -386,6 +385,7 @@ select:focus {
 
 .bottom-nav-button {
   min-width: 0;
+  width: fit-content;
   min-height: 46px;
   display: inline-flex;
   align-items: center;
@@ -425,6 +425,7 @@ select:focus {
 .bottom-nav-add {
   color: #fff;
   background: #8b5cf6;
+  width: 50px;
 }
 
 .bottom-nav-add:hover,

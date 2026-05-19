@@ -23,9 +23,9 @@ export function BottomNav({ onAddWorkout, onOpenView, view }) {
           <span>{item.label}</span>
         </button>
       ))}
-      <button className="bottom-nav-button bottom-nav-add" type="button" onClick={onAddWorkout} aria-label="Add workout for today" title="Add workout">
-        <Plus size={24} />
-      </button>
+        <button className="bottom-nav-button bottom-nav-add" type="button" onClick={onAddWorkout} aria-label="Add workout for today" title="Add workout">
+          <Plus size={24} />
+        </button>
     </nav>
   );
 }
