@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { CheckCircle2, ChevronRight, Dumbbell } from "lucide-react";
 import { importedProgramMeta } from "../../data/programData";
-import { formatDate, groupWorkouts, workoutLogKey } from "../../utils/appHelpers";
+import { formatDate, groupWorkouts, isWorkoutCompleted, workoutLogKey, workoutProgramId } from "../../utils/appHelpers";
 
 export function StoredWorkoutsPage({ user, scheduledWorkouts, workouts, programs, onOpenWorkout }) {
   const [activeTab, setActiveTab] = useState("upcoming");
@@ -13,7 +13,7 @@ export function StoredWorkoutsPage({ user, scheduledWorkouts, workouts, programs
     .sort((a, b) => `${a.date || ""}`.localeCompare(`${b.date || ""}`));
   const savedWorkouts = Array.isArray(user?.workoutTemplates) ? user.workoutTemplates.slice(0, 10) : [];
   const historyWorkouts = Object.entries(workouts)
-    .filter(([, workout]) => workout?.completed || workout?.status === "completed")
+    .filter(([, workout]) => isWorkoutCompleted(workout))
     .map(([id, workout]) => ({ id, ...workout }))
     .sort((a, b) => `${b.completedAt || b.updatedAt || b.date || ""}`.localeCompare(`${a.completedAt || a.updatedAt || a.date || ""}`));
   const visibleHistory = historyWorkouts.slice(0, visibleHistoryCount);
@@ -49,9 +49,11 @@ export function StoredWorkoutsPage({ user, scheduledWorkouts, workouts, programs
       {activeTab === "upcoming" && (upcomingWorkouts.length ? (
         <div className="stored-workout-list">
           {upcomingWorkouts.map((workout) => {
-            const programName = programOptions.find((program) => program.id === (workout.programId || "default"))?.name || importedProgramMeta.name;
+            const programName = workout.programId === null
+              ? "Standalone"
+              : programOptions.find((program) => program.id === workoutProgramId(workout))?.name || importedProgramMeta.name;
             const logKey = workoutLogKey(workout.date, workout.key);
-            const completed = Boolean(workouts[logKey]?.completed || workouts[workout.date]?.completed);
+            const completed = isWorkoutCompleted(workouts[logKey]) || isWorkoutCompleted(workouts[workout.date]);
             return (
               <button className="stored-workout-card" key={workout.key} type="button" onClick={() => workout.date && onOpenWorkout(workout.date, workout.key)}>
                 <div>

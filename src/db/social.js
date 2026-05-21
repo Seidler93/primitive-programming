@@ -1,5 +1,5 @@
 import { collection, doc, getDoc, getDocs, setDoc } from "firebase/firestore";
-import { db, isDevUserId, readJson, withTimeout } from "../services/firebaseClient";
+import { db, readJson, withTimeout } from "../services/firebaseClient";
 import { normalizeConversation, normalizeConversations, normalizeFriend, normalizeFriends, userSocialLocalKey } from "./helpers";
 import { addUserNotification, dismissUserNotification } from "./notifications";
 
@@ -26,7 +26,7 @@ async function loadRootSocial(userId) {
   if (!userId) return socialFromData();
   let social = socialFromData(readJson(localStorage.getItem(userSocialLocalKey(userId)), {}));
 
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       const snapshot = await withTimeout(getDoc(doc(db, "users", userId)), "Social request timed out.");
       if (snapshot.exists()) {
@@ -55,7 +55,7 @@ async function saveRootSocial(userId, social) {
     ...payload,
   });
 
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       await setDoc(doc(db, "users", userId), payload, { merge: true });
       return { synced: true };
@@ -191,7 +191,7 @@ export async function loadUserConversations(userId) {
   const localSocial = socialFromData(readJson(localStorage.getItem(userSocialLocalKey(userId)), {}));
   let conversations = localSocial.conversations;
 
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       const snapshot = await withTimeout(
         getDocs(collection(db, "users", userId, "conversations")),
@@ -243,7 +243,6 @@ async function saveConversationForUsers(conversation) {
 
   if (db) {
     const cloudWrites = payload.users
-      .filter((participantUserId) => !isDevUserId(participantUserId))
       .map((participantUserId) =>
         setDoc(doc(db, "users", participantUserId, "conversations", payload.id), payload, { merge: true }),
       );
@@ -328,3 +327,4 @@ export async function markConversationRead(userId, conversationId) {
   });
   return saveConversationForUsers(nextConversation);
 }
+

@@ -2,6 +2,7 @@ import { collection, doc, getDocs, orderBy, query, setDoc } from "firebase/fires
 import { db, flexibleProgramScheduleMode, localKey, withTimeout } from "../services/firebaseClient";
 import { loadUserActivePrograms, saveUserActiveProgram } from "./activePrograms";
 import { grantUserProgramAccess, loadUserProgramIds } from "./users";
+import { exerciseIntensityFromSets, exercisePrescriptionFromSets, templateWorkoutDate } from "../utils/appHelpers";
 
 // Program documents live in `programs`; workout templates live under `programs/{programId}/workouts`.
 
@@ -83,9 +84,8 @@ export async function saveProgram(program) {
 export async function loadCustomWorkouts(programId = "default") {
   if (db) {
     try {
-      const q = query(collection(db, "programs", programId, "workouts"), orderBy("date"));
-      const snapshot = await withTimeout(getDocs(q), "Custom workouts request timed out.");
-      return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
+      const snapshot = await withTimeout(getDocs(collection(db, "programs", programId, "workouts")), "Custom workouts request timed out.");
+      return snapshot.docs.flatMap((item) => normalizeProgramWorkoutDocument(programId, { id: item.id, ...item.data() }));
     } catch (error) {
       console.warn("Falling back to local custom workouts.", error);
     }
@@ -105,4 +105,24 @@ export async function saveCustomWorkout(programId, workout) {
   const workouts = await loadCustomWorkouts(programId);
   const next = [...workouts.filter((item) => item.id !== id), { ...workout, id }];
   localStorage.setItem(localKey(`custom:${programId}`), JSON.stringify(next));
+}
+
+function normalizeProgramWorkoutDocument(programId, workout) {
+  if (!Array.isArray(workout.exercises)) return [{ ...workout, programId: workout.programId || programId }];
+
+  return workout.exercises.map((exercise, index) => ({
+    id: `${workout.id || "workout"}:${exercise.id || index}`,
+    programId: workout.programId || programId,
+    week: workout.week,
+    date: workout.date || templateWorkoutDate({ week: workout.week }, workout),
+    phase: workout.phase,
+    day: workout.day,
+    focus: workout.focus,
+    exercise: exercise.name,
+    prescription: exercisePrescriptionFromSets(exercise),
+    intensity: exerciseIntensityFromSets(exercise),
+    notes: exercise.note || "",
+    sets: exercise.sets || [],
+    sourceWorkoutId: workout.id,
+  }));
 }

@@ -1,5 +1,5 @@
 import { arrayUnion, collection, doc, getDoc, getDocs, setDoc } from "firebase/firestore";
-import { db, isDevUserId, readJson, withTimeout } from "../services/firebaseClient";
+import { db, readJson, withTimeout } from "../services/firebaseClient";
 import { communitiesLocalKey, communityFromData, communityPayload, normalizeCommunityId } from "./helpers";
 
 // Community documents live in the top-level `communities` collection.
@@ -8,7 +8,7 @@ export async function loadUserCommunities(userId) {
   if (!userId) return [];
   let communities = [];
 
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       const snapshot = await withTimeout(getDocs(collection(db, "communities")), "Communities request timed out.");
       communities = snapshot.docs
@@ -45,7 +45,7 @@ export async function createCommunity(userId, name) {
     payload,
   ]));
 
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       await setDoc(doc(db, "communities", id), payload, { merge: true });
       await setDoc(doc(db, "users", userId), {
@@ -68,7 +68,7 @@ export async function joinCommunity(userId, communityCode) {
   const localCommunities = readJson(localStorage.getItem(communitiesLocalKey()), []);
   let community = localCommunities.find((item) => item.id === id);
 
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       const snapshot = await withTimeout(getDoc(doc(db, "communities", id)), "Community lookup timed out.");
       if (!snapshot.exists()) throw new Error("Community not found.");
@@ -102,3 +102,4 @@ export async function joinCommunity(userId, communityCode) {
   ]));
   return { community: nextCommunity, synced: false, local: true };
 }
+

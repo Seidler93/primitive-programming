@@ -3,12 +3,12 @@ import { CalendarDays, ChevronRight, ClipboardList, Eye, Plus, UsersRound } from
 import { importedProgramMeta } from "../../data/programData";
 import { defaultSelectedDate, flexibleScheduleMode } from "../../app/config";
 import { loadAthletes, loadUserActivePrograms, saveCustomWorkout, saveProgram, saveUserActiveProgram } from "../../db";
-import { applyActiveProgramDates, buildWorkoutDatesForProgram, formatDate, programDayGroups, programSlug, progressSummary } from "../../utils/appHelpers";
+import { applyActiveProgramDates, buildWorkoutDatesForProgram, formatDate, programDayGroups, programSlug, progressSummary, workoutProgramId as resolveWorkoutProgramId } from "../../utils/appHelpers";
 import { ProgramWorkoutViewer } from "../programs/ProgramWorkoutViewer";
 
 export function ProgramBuilderPage({ user, isTrainer, programs, programWorkouts, workouts, selectedDate, onProgramCreated, onWorkoutCreated }) {
   const [programName, setProgramName] = useState("");
-  const [athleteEmail, setAthleteEmail] = useState("dev-athlete@primitive.local");
+  const [athleteEmail, setAthleteEmail] = useState("");
   const [startDate, setStartDate] = useState(selectedDate || defaultSelectedDate);
   const [programGoal, setProgramGoal] = useState("");
   const [programNotes, setProgramNotes] = useState("");
@@ -34,7 +34,7 @@ export function ProgramBuilderPage({ user, isTrainer, programs, programWorkouts,
   const savedDefaultProgram = programs.find((program) => program.id === "default");
   const defaultProgram = {
     ...importedProgramMeta,
-    athleteEmail: "dev-athlete@primitive.local",
+    athleteEmail: "",
     ...savedDefaultProgram,
   };
   const programOptions = [defaultProgram, ...programs.filter((program) => program.id !== "default")];
@@ -164,7 +164,7 @@ export function ProgramBuilderPage({ user, isTrainer, programs, programWorkouts,
       statusUpdatedAt: new Date().toISOString(),
     };
     const nextProgramWorkouts = programWorkouts
-      .filter((item) => (item.programId || "default") === startingProgram.id && item.date)
+      .filter((item) => resolveWorkoutProgramId(item) === startingProgram.id && item.date)
       .sort((a, b) => a.date.localeCompare(b.date));
     const scheduled = programScheduleMode !== flexibleScheduleMode;
     const activeProgram = {
@@ -196,7 +196,7 @@ export function ProgramBuilderPage({ user, isTrainer, programs, programWorkouts,
     if (!assigningProgram || !assignAthleteId || !assignStartDate) return;
 
     const nextProgramWorkouts = programWorkouts
-      .filter((item) => (item.programId || "default") === assigningProgram.id && item.date)
+      .filter((item) => resolveWorkoutProgramId(item) === assigningProgram.id && item.date)
       .sort((a, b) => a.date.localeCompare(b.date));
     const scheduled = assignScheduleMode !== flexibleScheduleMode;
     await saveUserActiveProgram(assignAthleteId, {
@@ -221,7 +221,7 @@ export function ProgramBuilderPage({ user, isTrainer, programs, programWorkouts,
   }
 
   function programLengthLabel(programWorkouts) {
-    const workoutGroups = programDayGroups(programWorkouts, programWorkouts[0]?.programId || "default");
+    const workoutGroups = programDayGroups(programWorkouts, resolveWorkoutProgramId(programWorkouts[0]));
     const weeks = new Set(programWorkouts.map((item) => item.week).filter(Boolean));
     const workoutLabel = workoutGroups.length === 1 ? "1 workout" : `${workoutGroups.length} workouts`;
     return weeks.size > 1 ? `${weeks.size} weeks | ${workoutLabel}` : workoutLabel;
@@ -229,7 +229,7 @@ export function ProgramBuilderPage({ user, isTrainer, programs, programWorkouts,
 
   if (viewingProgram) {
     const viewingProgramWorkouts = programWorkouts.filter((item) => (
-      !item.scheduledPlaceholder && (item.programId || "default") === viewingProgram.id
+      !item.scheduledPlaceholder && resolveWorkoutProgramId(item) === viewingProgram.id
     ));
     return (
       <ProgramWorkoutViewer
@@ -256,7 +256,7 @@ export function ProgramBuilderPage({ user, isTrainer, programs, programWorkouts,
           </div>
           <div className="program-card-grid">
             {visiblePrograms.map((program) => {
-              const nextProgramWorkouts = programWorkouts.filter((item) => !item.scheduledPlaceholder && (item.programId || "default") === program.id);
+              const nextProgramWorkouts = programWorkouts.filter((item) => !item.scheduledPlaceholder && resolveWorkoutProgramId(item) === program.id);
               const summary = progressSummary(nextProgramWorkouts, workouts);
               const ownActiveProgram = ownActivePrograms.find((item) => item.id === program.id);
               const isProgramActive = Boolean(ownActiveProgram);
@@ -336,7 +336,7 @@ export function ProgramBuilderPage({ user, isTrainer, programs, programWorkouts,
           </div>
           <div className="progress-list">
             {visiblePrograms.filter((program) => ownActivePrograms.some((item) => item.id === program.id)).map((program) => {
-              const nextProgramWorkouts = programWorkouts.filter((item) => !item.scheduledPlaceholder && (item.programId || "default") === program.id);
+              const nextProgramWorkouts = programWorkouts.filter((item) => !item.scheduledPlaceholder && resolveWorkoutProgramId(item) === program.id);
               const ownActiveProgram = ownActivePrograms.find((item) => item.id === program.id);
               const progressWorkouts = ownActiveProgram?.scheduled
                 ? applyActiveProgramDates(nextProgramWorkouts, [{ ...program, activeProgram: ownActiveProgram }])

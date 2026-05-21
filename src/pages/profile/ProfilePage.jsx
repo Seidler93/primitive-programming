@@ -5,6 +5,7 @@ import { saveUserProfile } from "../../db";
 import { uploadUserProfileImage } from "../../services/firebase";
 import {
   dataUrlToBlob,
+  isWorkoutCompleted,
   imageFileToDataUrl,
   loadUserMaxes,
 } from "../../utils/appHelpers";
@@ -19,7 +20,7 @@ export function ProfileAvatar({ user, iconSize = 34 }) {
 
 export function ProfilePage({ user, isTrainer, workouts, onOpenEdit }) {
   const maxes = loadUserMaxes(user.uid);
-  const completedCount = Object.values(workouts).filter((workout) => workout.completed).length;
+  const completedCount = Object.values(workouts).filter((workout) => isWorkoutCompleted(workout)).length;
   const lastUpdated = Object.values(workouts)
     .map((workout) => workout.updatedAt)
     .filter(Boolean)

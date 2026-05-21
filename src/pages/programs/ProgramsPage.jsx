@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { CalendarDays, ChevronRight, ClipboardList, Eye, Minus } from "lucide-react";
 import { defaultSelectedDate, flexibleScheduleMode } from "../../app/config";
-import { deleteUserWorkout, loadAthletes, removeUserActiveProgram, saveUserActiveProgram, saveUserWorkout } from "../../db";
-import { applyActiveProgramDates, buildWorkoutDatesForProgram, formatDate, groupWorkouts, logDateFromKey, programDayGroups, progressSummary } from "../../utils/appHelpers";
+import { deleteUserWorkout, loadAthletes, removeUserActiveProgram, saveUserActiveProgram } from "../../db";
+import { applyActiveProgramDates, buildWorkoutDatesForProgram, formatDate, logDateFromKey, programDayGroups, progressSummary, workoutProgramId } from "../../utils/appHelpers";
 import { ProgramWorkoutViewer } from "./ProgramWorkoutViewer";
 
 export function ProgramsPage({ user, isTrainer, programs, programWorkouts, workouts, onProgramStarted }) {
@@ -64,7 +64,7 @@ export function ProgramsPage({ user, isTrainer, programs, programWorkouts, worko
 
   function programWorkoutItems(program) {
     return programWorkouts
-      .filter((item) => !item.scheduledPlaceholder && (item.programId || "default") === program.id && item.date)
+      .filter((item) => !item.scheduledPlaceholder && workoutProgramId(item) === program.id && item.date)
       .sort((a, b) => a.date.localeCompare(b.date));
   }
 
@@ -73,51 +73,13 @@ export function ProgramsPage({ user, isTrainer, programs, programWorkouts, worko
     const scheduled = selectedScheduleMode !== flexibleScheduleMode;
     return {
       id: program.id,
+      status: "active",
       startDate: selectedStartDate,
       scheduled,
       currentWeek: 1,
       nextWorkoutIndex: 0,
       ...(scheduled ? { workoutDates: buildWorkoutDatesForProgram(nextProgramWorkouts, selectedStartDate) } : {}),
     };
-  }
-
-  async function createUserProgramWorkouts(userId, program, activeProgram, selectedScheduleMode) {
-    const sourceWorkouts = programWorkoutItems(program);
-    if (!userId || !sourceWorkouts.length) return;
-
-    const scheduledWorkouts = activeProgram.scheduled
-      ? applyActiveProgramDates(sourceWorkouts, [{ ...program, activeProgram }])
-      : sourceWorkouts;
-    const createdAt = new Date().toISOString();
-    const scheduleMode = activeProgram.scheduled ? "fixed" : selectedScheduleMode;
-
-    await Promise.all(groupWorkouts(scheduledWorkouts).map((group) => {
-      const firstItem = group.items[0] || {};
-      const workoutRecord = {
-        date: group.date,
-        programId: group.programId,
-        programWeek: group.week,
-        week: group.week,
-        workoutFocus: group.title,
-        focus: group.title,
-        workoutType: firstItem.workoutType || "strength",
-        phase: group.phase,
-        sourceDate: firstItem.sourceDate || firstItem.date,
-        scheduleMode,
-        status: "scheduled",
-        completed: false,
-        completedAt: null,
-        createdAt,
-        items: group.items.map((item) => ({
-          ...item,
-          date: group.date,
-          sourceDate: item.sourceDate || item.date,
-          scheduleMode,
-        })),
-      };
-
-      return saveUserWorkout(userId, group.date, workoutRecord);
-    }));
   }
 
   async function removeCancelableProgramWorkouts(userId, program) {
@@ -127,7 +89,7 @@ export function ProgramsPage({ user, isTrainer, programs, programWorkouts, worko
     const workoutIds = Object.entries(workouts)
       .filter(([workoutId, workout]) => {
         const workoutDate = workout?.date || logDateFromKey(workoutId);
-        return (workout?.programId || "default") === program.id
+        return workoutProgramId(workout) === program.id
           && workoutDate > programStartDate
           && workout?.status !== "in-progress";
       })
@@ -144,7 +106,6 @@ export function ProgramsPage({ user, isTrainer, programs, programWorkouts, worko
 
     const activeProgram = activeProgramPayload(program, programStartDate, programScheduleMode);
     await saveUserActiveProgram(user.uid, activeProgram);
-    await createUserProgramWorkouts(user.uid, program, activeProgram, programScheduleMode);
     setStatusMessage(`${program.name} started.`);
     setActivePanel("");
     setProgramStartDate(defaultSelectedDate);
@@ -158,7 +119,6 @@ export function ProgramsPage({ user, isTrainer, programs, programWorkouts, worko
 
     const activeProgram = activeProgramPayload(program, assignStartDate, assignScheduleMode);
     await saveUserActiveProgram(assignAthleteId, activeProgram);
-    await createUserProgramWorkouts(assignAthleteId, program, activeProgram, assignScheduleMode);
     const athlete = athleteOptions.find((item) => item.uid === assignAthleteId);
     setStatusMessage(`${program.name} assigned to ${athlete?.displayName || athlete?.email || "athlete"}.`);
     setActivePanel("");
@@ -178,7 +138,7 @@ export function ProgramsPage({ user, isTrainer, programs, programWorkouts, worko
 
   if (viewingProgram) {
     const viewingProgramWorkouts = programWorkouts.filter((item) => (
-      !item.scheduledPlaceholder && (item.programId || "default") === viewingProgram.id
+      !item.scheduledPlaceholder && workoutProgramId(item) === viewingProgram.id
     ));
     return (
       <ProgramWorkoutViewer
@@ -200,7 +160,7 @@ export function ProgramsPage({ user, isTrainer, programs, programWorkouts, worko
       {programOptions.length ? (
         <div className="program-card-grid">
           {programOptions.map((program) => {
-          const nextProgramWorkouts = programWorkouts.filter((item) => !item.scheduledPlaceholder && (item.programId || "default") === program.id);
+          const nextProgramWorkouts = programWorkouts.filter((item) => !item.scheduledPlaceholder && workoutProgramId(item) === program.id);
           const isActiveProgram = Boolean(program.activeProgram);
           const progressWorkouts = program.activeProgram?.scheduled
             ? applyActiveProgramDates(nextProgramWorkouts, [{ ...program, activeProgram: program.activeProgram }])

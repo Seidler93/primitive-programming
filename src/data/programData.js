@@ -1,132 +1,3845 @@
-const byWeek = [
-  {
-    week: 1,
-    phase: "Accumulation",
-    start: "2026-05-11",
-    monday: ["Work to 82%, then 3 x 2 @ 75%", "3 x 3", "5 x 5 @ 72-75%"],
-    tuesday: ["Clean + Jerk x 7 sets", "3 x 3", "4 x 4 @ 70-75%"],
-    wednesday: ["6 x 2", "5-6 x 2+1", "3-5 sets"],
-    friday: ["Daily heavy to 85%", "Daily heavy to 85%", "3 x 3 @ 78-80%"],
-  },
-  {
-    week: 2,
-    phase: "Accumulation",
-    start: "2026-05-18",
-    monday: ["Work to 84%, then 4 x 2 @ 76-78%", "3 x 3", "5 x 4 @ 75-78%"],
-    tuesday: ["2 Cleans + 1 Jerk x 6 sets", "3 x 3", "5 x 3 @ 75-78%"],
-    wednesday: ["7 x 2", "5-6 x 2+1", "3-5 sets"],
-    friday: ["Daily heavy to 86-88%", "Daily heavy to 86-88%", "4 x 3 @ 80-82%"],
-  },
-  {
-    week: 3,
-    phase: "Accumulation",
-    start: "2026-05-25",
-    monday: ["Work to 85%, then 3 x 2 @ 78-80%", "3 x 3", "5 x 3 @ 78-82%"],
-    tuesday: ["Clean + Jerk x 6-7 sets", "3 x 3", "5 x 3 @ 78-80%"],
-    wednesday: ["6 x 2", "5-6 x 2+1", "3-5 sets"],
-    friday: ["Daily heavy to 88%", "Daily heavy to 88%", "4 x 2 @ 82-84%"],
-  },
-  {
-    week: 4,
-    phase: "Intensification",
-    start: "2026-06-01",
-    monday: ["6-8 singles", "3 x 2-3", "5 x 3 @ 82-85%"],
-    tuesday: ["5-7 singles or 1+1 complexes", "3 x 2-3", "5 x 2 @ 80-83%"],
-    wednesday: ["5-6 x 2", "5 x 1+1", "4-5 sets"],
-    friday: ["Daily heavy single", "Daily heavy single", "3 x 2"],
-  },
-  {
-    week: 5,
-    phase: "Intensification",
-    start: "2026-06-08",
-    monday: ["6-8 singles", "3 x 2-3", "4 x 2 @ 85-88%"],
-    tuesday: ["5-7 singles or 1+1 complexes", "3 x 2-3", "4 x 2 @ 83-86%"],
-    wednesday: ["5-6 x 2", "5 x 1+1", "4-5 sets"],
-    friday: ["Daily heavy single", "Daily heavy single", "3 x 2"],
-  },
-  {
-    week: 6,
-    phase: "Intensification",
-    start: "2026-06-15",
-    monday: ["6-8 singles", "3 x 2-3", "3 x 2 @ 87-90%"],
-    tuesday: ["5-7 singles or 1+1 complexes", "3 x 2-3", "3 x 2 @ 85-88%"],
-    wednesday: ["5-6 x 2", "5 x 1+1", "4-5 sets"],
-    friday: ["Daily heavy single", "Daily heavy single", "3 x 2"],
-  },
-  {
-    week: 7,
-    phase: "Peak",
-    start: "2026-06-22",
-    monday: ["5-6 singles", "2 x 2", "3 x 2"],
-    tuesday: ["4-5 singles", "2-3 x 2"],
-    wednesday: ["4-5 x 1-2", "4 x 1+1"],
-    friday: ["Daily heavy single", "Daily heavy single", "2 x 2"],
-  },
-  {
-    week: 8,
-    phase: "Peak",
-    start: "2026-06-29",
-    monday: ["5-6 singles", "2 x 2", "3 x 2"],
-    tuesday: ["4-5 singles", "2-3 x 2"],
-    wednesday: ["4-5 x 1-2", "4 x 1+1"],
-    friday: ["Daily heavy single", "Daily heavy single", "2 x 2"],
-  },
-];
-
-export const importedProgramMeta = {
-  id: "default",
-  name: "9-week weightlifting program",
-  goal: "Nine-week Olympic lifting meet prep",
-  scheduleMode: "fixed",
-  status: "idle",
+export const weightliftingProgram = {
+  "id": "default",
+  "name": "9-week weightlifting program",
+  "details": "Nine-week Olympic lifting meet prep",
+  "scheduleMode": "fixed",
+  "weeks": [
+    {
+      "week": 1,
+      "phase": "Accumulation",
+      "notes": "",
+      "workouts": [
+        {
+          "id": "week-1-monday-heavy-snatch-back-squat",
+          "day": "Monday",
+          "focus": "Heavy Snatch + Back Squat",
+          "exercises": [
+            {
+              "id": "snatch",
+              "name": "Snatch",
+              "note": "Work to 82%, then 3x2. Clean reps only",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": null
+                  },
+                  "target": "work to"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": null
+                  }
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": null
+                  }
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": null
+                  }
+                }
+              ]
+            },
+            {
+              "id": "snatch-pull",
+              "name": "Snatch Pull",
+              "note": "Stay over bar; finish tall",
+              "sets": [
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": 105,
+                    "of": "snatch"
+                  },
+                  "target": "3 x 3"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": 105,
+                    "of": "snatch"
+                  },
+                  "target": "3 x 3"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": 105,
+                    "of": "snatch"
+                  },
+                  "target": "3 x 3"
+                }
+              ]
+            },
+            {
+              "id": "back-squat",
+              "name": "Back Squat",
+              "note": "No grinding",
+              "sets": [
+                {
+                  "reps": 5,
+                  "percentageRange": {
+                    "min": 72,
+                    "max": 75
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 5,
+                  "percentageRange": {
+                    "min": 72,
+                    "max": 75
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 5,
+                  "percentageRange": {
+                    "min": 72,
+                    "max": 75
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 5,
+                  "percentageRange": {
+                    "min": 72,
+                    "max": 75
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 5,
+                  "percentageRange": {
+                    "min": 72,
+                    "max": 75
+                  },
+                  "target": "Moderate-heavy"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-1-tuesday-c-j-volume-front-squat",
+          "day": "Tuesday",
+          "focus": "C&J Volume + Front Squat",
+          "exercises": [
+            {
+              "id": "clean-and-jerk",
+              "name": "Clean & Jerk",
+              "note": "Repeatable timing",
+              "sets": [
+                {
+                  "reps": "Clean + Jerk",
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 80
+                  },
+                  "target": "Clean + Jerk x 7 sets"
+                },
+                {
+                  "reps": "Clean + Jerk",
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 80
+                  },
+                  "target": "Clean + Jerk x 7 sets"
+                },
+                {
+                  "reps": "Clean + Jerk",
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 80
+                  },
+                  "target": "Clean + Jerk x 7 sets"
+                },
+                {
+                  "reps": "Clean + Jerk",
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 80
+                  },
+                  "target": "Clean + Jerk x 7 sets"
+                },
+                {
+                  "reps": "Clean + Jerk",
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 80
+                  },
+                  "target": "Clean + Jerk x 7 sets"
+                },
+                {
+                  "reps": "Clean + Jerk",
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 80
+                  },
+                  "target": "Clean + Jerk x 7 sets"
+                },
+                {
+                  "reps": "Clean + Jerk",
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 80
+                  },
+                  "target": "Clean + Jerk x 7 sets"
+                }
+              ]
+            },
+            {
+              "id": "clean-pull",
+              "name": "Clean Pull",
+              "note": "Same start as clean",
+              "sets": [
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": 105,
+                    "of": "clean"
+                  },
+                  "target": "3 x 3"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": 105,
+                    "of": "clean"
+                  },
+                  "target": "3 x 3"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": 105,
+                    "of": "clean"
+                  },
+                  "target": "3 x 3"
+                }
+              ]
+            },
+            {
+              "id": "front-squat",
+              "name": "Front Squat",
+              "note": "Strong rack position",
+              "sets": [
+                {
+                  "reps": 4,
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 75
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 4,
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 75
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 4,
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 75
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 4,
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 75
+                  },
+                  "target": "Moderate-heavy"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-1-wednesday-technical-speed",
+          "day": "Wednesday",
+          "focus": "Technical / Speed",
+          "exercises": [
+            {
+              "id": "power-snatch",
+              "name": "Power Snatch",
+              "note": "Fast, crisp, easy",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "6 x 2"
+                }
+              ]
+            },
+            {
+              "id": "power-clean-power-jerk",
+              "name": "Power Clean + Power Jerk",
+              "note": "Speed and footwork",
+              "sets": [
+                {
+                  "reps": "2+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5-6 x 2+1"
+                },
+                {
+                  "reps": "2+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5-6 x 2+1"
+                },
+                {
+                  "reps": "2+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5-6 x 2+1"
+                },
+                {
+                  "reps": "2+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5-6 x 2+1"
+                },
+                {
+                  "reps": "2+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5-6 x 2+1"
+                },
+                {
+                  "reps": "2+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5-6 x 2+1"
+                }
+              ]
+            },
+            {
+              "id": "jerk-skill",
+              "name": "Jerk Skill",
+              "note": "Tempo/pause optional",
+              "sets": [
+                {
+                  "reps": "3-5 sets",
+                  "target": "Light-moderate"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-1-friday-competition-day",
+          "day": "Friday",
+          "focus": "Competition Day",
+          "exercises": [
+            {
+              "id": "snatch",
+              "name": "Snatch",
+              "note": "Meet rhythm",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": null
+                  },
+                  "target": "daily heavy"
+                }
+              ]
+            },
+            {
+              "id": "clean-and-jerk",
+              "name": "Clean & Jerk",
+              "note": "Meet rhythm",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": null
+                  },
+                  "target": "daily heavy"
+                }
+              ]
+            },
+            {
+              "id": "back-squat",
+              "name": "Back Squat",
+              "note": "Leave one rep in tank",
+              "sets": [
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 80
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 80
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 80
+                  },
+                  "target": "Moderate-heavy"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "week": 2,
+      "phase": "Accumulation",
+      "notes": "",
+      "workouts": [
+        {
+          "id": "week-2-monday-heavy-snatch-back-squat",
+          "day": "Monday",
+          "focus": "Heavy Snatch + Back Squat",
+          "exercises": [
+            {
+              "id": "snatch",
+              "name": "Snatch",
+              "note": "Work to 84%, then 4x2. Clean reps only",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 84,
+                    "max": null
+                  },
+                  "target": "work to"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 76,
+                    "max": 78
+                  }
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 76,
+                    "max": 78
+                  }
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 76,
+                    "max": 78
+                  }
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 76,
+                    "max": 78
+                  }
+                }
+              ]
+            },
+            {
+              "id": "snatch-pull",
+              "name": "Snatch Pull",
+              "note": "Stay over bar; finish tall",
+              "sets": [
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": 105,
+                    "of": "snatch"
+                  },
+                  "target": "3 x 3"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": 105,
+                    "of": "snatch"
+                  },
+                  "target": "3 x 3"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": 105,
+                    "of": "snatch"
+                  },
+                  "target": "3 x 3"
+                }
+              ]
+            },
+            {
+              "id": "back-squat",
+              "name": "Back Squat",
+              "note": "No grinding",
+              "sets": [
+                {
+                  "reps": 4,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": 78
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 4,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": 78
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 4,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": 78
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 4,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": 78
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 4,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": 78
+                  },
+                  "target": "Moderate-heavy"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-2-tuesday-c-j-volume-front-squat",
+          "day": "Tuesday",
+          "focus": "C&J Volume + Front Squat",
+          "exercises": [
+            {
+              "id": "clean-and-jerk",
+              "name": "Clean & Jerk",
+              "note": "Repeatable timing",
+              "sets": [
+                {
+                  "reps": "2 Cleans + 1 Jerk",
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 80
+                  },
+                  "target": "2 Cleans + 1 Jerk x 6 sets"
+                },
+                {
+                  "reps": "2 Cleans + 1 Jerk",
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 80
+                  },
+                  "target": "2 Cleans + 1 Jerk x 6 sets"
+                },
+                {
+                  "reps": "2 Cleans + 1 Jerk",
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 80
+                  },
+                  "target": "2 Cleans + 1 Jerk x 6 sets"
+                },
+                {
+                  "reps": "2 Cleans + 1 Jerk",
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 80
+                  },
+                  "target": "2 Cleans + 1 Jerk x 6 sets"
+                },
+                {
+                  "reps": "2 Cleans + 1 Jerk",
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 80
+                  },
+                  "target": "2 Cleans + 1 Jerk x 6 sets"
+                },
+                {
+                  "reps": "2 Cleans + 1 Jerk",
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 80
+                  },
+                  "target": "2 Cleans + 1 Jerk x 6 sets"
+                }
+              ]
+            },
+            {
+              "id": "clean-pull",
+              "name": "Clean Pull",
+              "note": "Same start as clean",
+              "sets": [
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": 105,
+                    "of": "clean"
+                  },
+                  "target": "3 x 3"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": 105,
+                    "of": "clean"
+                  },
+                  "target": "3 x 3"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": 105,
+                    "of": "clean"
+                  },
+                  "target": "3 x 3"
+                }
+              ]
+            },
+            {
+              "id": "front-squat",
+              "name": "Front Squat",
+              "note": "Strong rack position",
+              "sets": [
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": 78
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": 78
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": 78
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": 78
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": 78
+                  },
+                  "target": "Moderate-heavy"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-2-wednesday-technical-speed",
+          "day": "Wednesday",
+          "focus": "Technical / Speed",
+          "exercises": [
+            {
+              "id": "power-snatch",
+              "name": "Power Snatch",
+              "note": "Fast, crisp, easy",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "7 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "7 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "7 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "7 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "7 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "7 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "7 x 2"
+                }
+              ]
+            },
+            {
+              "id": "power-clean-power-jerk",
+              "name": "Power Clean + Power Jerk",
+              "note": "Speed and footwork",
+              "sets": [
+                {
+                  "reps": "2+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5-6 x 2+1"
+                },
+                {
+                  "reps": "2+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5-6 x 2+1"
+                },
+                {
+                  "reps": "2+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5-6 x 2+1"
+                },
+                {
+                  "reps": "2+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5-6 x 2+1"
+                },
+                {
+                  "reps": "2+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5-6 x 2+1"
+                },
+                {
+                  "reps": "2+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5-6 x 2+1"
+                }
+              ]
+            },
+            {
+              "id": "jerk-skill",
+              "name": "Jerk Skill",
+              "note": "Tempo/pause optional",
+              "sets": [
+                {
+                  "reps": "3-5 sets",
+                  "target": "Light-moderate"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-2-friday-competition-day",
+          "day": "Friday",
+          "focus": "Competition Day",
+          "exercises": [
+            {
+              "id": "snatch",
+              "name": "Snatch",
+              "note": "Meet rhythm",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 86,
+                    "max": 88
+                  },
+                  "target": "daily heavy"
+                }
+              ]
+            },
+            {
+              "id": "clean-and-jerk",
+              "name": "Clean & Jerk",
+              "note": "Meet rhythm",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 86,
+                    "max": 88
+                  },
+                  "target": "daily heavy"
+                }
+              ]
+            },
+            {
+              "id": "back-squat",
+              "name": "Back Squat",
+              "note": "Leave one rep in tank",
+              "sets": [
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 80,
+                    "max": 82
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 80,
+                    "max": 82
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 80,
+                    "max": 82
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 80,
+                    "max": 82
+                  },
+                  "target": "Moderate-heavy"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "week": 3,
+      "phase": "Accumulation",
+      "notes": "",
+      "workouts": [
+        {
+          "id": "week-3-monday-heavy-snatch-back-squat",
+          "day": "Monday",
+          "focus": "Heavy Snatch + Back Squat",
+          "exercises": [
+            {
+              "id": "snatch",
+              "name": "Snatch",
+              "note": "Clean reps only",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": null
+                  },
+                  "target": "work to"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 80
+                  }
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 80
+                  }
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 80
+                  }
+                }
+              ]
+            },
+            {
+              "id": "snatch-pull",
+              "name": "Snatch Pull",
+              "note": "Stay over bar; finish tall",
+              "sets": [
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": 105,
+                    "of": "snatch"
+                  },
+                  "target": "3 x 3"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": 105,
+                    "of": "snatch"
+                  },
+                  "target": "3 x 3"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": 105,
+                    "of": "snatch"
+                  },
+                  "target": "3 x 3"
+                }
+              ]
+            },
+            {
+              "id": "back-squat",
+              "name": "Back Squat",
+              "note": "No grinding",
+              "sets": [
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 82
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 82
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 82
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 82
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 82
+                  },
+                  "target": "Moderate-heavy"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-3-tuesday-c-j-volume-front-squat",
+          "day": "Tuesday",
+          "focus": "C&J Volume + Front Squat",
+          "exercises": [
+            {
+              "id": "clean-and-jerk",
+              "name": "Clean & Jerk",
+              "note": "Repeatable timing",
+              "sets": [
+                {
+                  "reps": "Clean + Jerk",
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 80
+                  },
+                  "target": "Clean + Jerk x 6-7 sets"
+                },
+                {
+                  "reps": "Clean + Jerk",
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 80
+                  },
+                  "target": "Clean + Jerk x 6-7 sets"
+                },
+                {
+                  "reps": "Clean + Jerk",
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 80
+                  },
+                  "target": "Clean + Jerk x 6-7 sets"
+                },
+                {
+                  "reps": "Clean + Jerk",
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 80
+                  },
+                  "target": "Clean + Jerk x 6-7 sets"
+                },
+                {
+                  "reps": "Clean + Jerk",
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 80
+                  },
+                  "target": "Clean + Jerk x 6-7 sets"
+                },
+                {
+                  "reps": "Clean + Jerk",
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 80
+                  },
+                  "target": "Clean + Jerk x 6-7 sets"
+                },
+                {
+                  "reps": "Clean + Jerk",
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 80
+                  },
+                  "target": "Clean + Jerk x 6-7 sets"
+                }
+              ]
+            },
+            {
+              "id": "clean-pull",
+              "name": "Clean Pull",
+              "note": "Same start as clean",
+              "sets": [
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": 105,
+                    "of": "clean"
+                  },
+                  "target": "3 x 3"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": 105,
+                    "of": "clean"
+                  },
+                  "target": "3 x 3"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": 105,
+                    "of": "clean"
+                  },
+                  "target": "3 x 3"
+                }
+              ]
+            },
+            {
+              "id": "front-squat",
+              "name": "Front Squat",
+              "note": "Strong rack position",
+              "sets": [
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 80
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 80
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 80
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 80
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 80
+                  },
+                  "target": "Moderate-heavy"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-3-wednesday-technical-speed",
+          "day": "Wednesday",
+          "focus": "Technical / Speed",
+          "exercises": [
+            {
+              "id": "power-snatch",
+              "name": "Power Snatch",
+              "note": "Fast, crisp, easy",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "6 x 2"
+                }
+              ]
+            },
+            {
+              "id": "power-clean-power-jerk",
+              "name": "Power Clean + Power Jerk",
+              "note": "Speed and footwork",
+              "sets": [
+                {
+                  "reps": "2+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5-6 x 2+1"
+                },
+                {
+                  "reps": "2+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5-6 x 2+1"
+                },
+                {
+                  "reps": "2+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5-6 x 2+1"
+                },
+                {
+                  "reps": "2+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5-6 x 2+1"
+                },
+                {
+                  "reps": "2+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5-6 x 2+1"
+                },
+                {
+                  "reps": "2+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5-6 x 2+1"
+                }
+              ]
+            },
+            {
+              "id": "jerk-skill",
+              "name": "Jerk Skill",
+              "note": "Tempo/pause optional",
+              "sets": [
+                {
+                  "reps": "3-5 sets",
+                  "target": "Light-moderate"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-3-friday-competition-day",
+          "day": "Friday",
+          "focus": "Competition Day",
+          "exercises": [
+            {
+              "id": "snatch",
+              "name": "Snatch",
+              "note": "Meet rhythm",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 88,
+                    "max": null
+                  },
+                  "target": "daily heavy"
+                }
+              ]
+            },
+            {
+              "id": "clean-and-jerk",
+              "name": "Clean & Jerk",
+              "note": "Meet rhythm",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 88,
+                    "max": null
+                  },
+                  "target": "daily heavy"
+                }
+              ]
+            },
+            {
+              "id": "back-squat",
+              "name": "Back Squat",
+              "note": "Leave one rep in tank",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 84
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 84
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 84
+                  },
+                  "target": "Moderate-heavy"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 84
+                  },
+                  "target": "Moderate-heavy"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "week": 4,
+      "phase": "Intensification",
+      "notes": "",
+      "workouts": [
+        {
+          "id": "week-4-monday-heavy-snatch-back-squat",
+          "day": "Monday",
+          "focus": "Heavy Snatch + Back Squat",
+          "exercises": [
+            {
+              "id": "snatch",
+              "name": "Snatch",
+              "note": "Clean reps only",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                }
+              ]
+            },
+            {
+              "id": "snatch-pull",
+              "name": "Snatch Pull",
+              "note": "Stay over bar; finish tall",
+              "sets": [
+                {
+                  "reps": "2-3",
+                  "percentageRange": {
+                    "min": 100,
+                    "max": 110
+                  },
+                  "target": "3 x 2-3"
+                },
+                {
+                  "reps": "2-3",
+                  "percentageRange": {
+                    "min": 100,
+                    "max": 110
+                  },
+                  "target": "3 x 2-3"
+                },
+                {
+                  "reps": "2-3",
+                  "percentageRange": {
+                    "min": 100,
+                    "max": 110
+                  },
+                  "target": "3 x 2-3"
+                }
+              ]
+            },
+            {
+              "id": "back-squat",
+              "name": "Back Squat",
+              "note": "No grinding",
+              "sets": [
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 85
+                  },
+                  "target": "Heavy"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 85
+                  },
+                  "target": "Heavy"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 85
+                  },
+                  "target": "Heavy"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 85
+                  },
+                  "target": "Heavy"
+                },
+                {
+                  "reps": 3,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 85
+                  },
+                  "target": "Heavy"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-4-tuesday-c-j-volume-front-squat",
+          "day": "Tuesday",
+          "focus": "C&J Volume + Front Squat",
+          "exercises": [
+            {
+              "id": "clean-and-jerk",
+              "name": "Clean & Jerk",
+              "note": "Repeatable timing",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 85
+                  },
+                  "target": "5-7 singles or 1+1 complexes"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 85
+                  },
+                  "target": "5-7 singles or 1+1 complexes"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 85
+                  },
+                  "target": "5-7 singles or 1+1 complexes"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 85
+                  },
+                  "target": "5-7 singles or 1+1 complexes"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 85
+                  },
+                  "target": "5-7 singles or 1+1 complexes"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 85
+                  },
+                  "target": "5-7 singles or 1+1 complexes"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 85
+                  },
+                  "target": "5-7 singles or 1+1 complexes"
+                }
+              ]
+            },
+            {
+              "id": "clean-pull",
+              "name": "Clean Pull",
+              "note": "Same start as clean",
+              "sets": [
+                {
+                  "reps": "2-3",
+                  "percentageRange": {
+                    "min": 100,
+                    "max": 110
+                  },
+                  "target": "3 x 2-3"
+                },
+                {
+                  "reps": "2-3",
+                  "percentageRange": {
+                    "min": 100,
+                    "max": 110
+                  },
+                  "target": "3 x 2-3"
+                },
+                {
+                  "reps": "2-3",
+                  "percentageRange": {
+                    "min": 100,
+                    "max": 110
+                  },
+                  "target": "3 x 2-3"
+                }
+              ]
+            },
+            {
+              "id": "front-squat",
+              "name": "Front Squat",
+              "note": "Strong rack position",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 80,
+                    "max": 83
+                  },
+                  "target": "Heavy"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 80,
+                    "max": 83
+                  },
+                  "target": "Heavy"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 80,
+                    "max": 83
+                  },
+                  "target": "Heavy"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 80,
+                    "max": 83
+                  },
+                  "target": "Heavy"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 80,
+                    "max": 83
+                  },
+                  "target": "Heavy"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-4-wednesday-technical-speed",
+          "day": "Wednesday",
+          "focus": "Technical / Speed",
+          "exercises": [
+            {
+              "id": "power-snatch",
+              "name": "Power Snatch",
+              "note": "Recovery speed",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "5-6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "5-6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "5-6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "5-6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "5-6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "5-6 x 2"
+                }
+              ]
+            },
+            {
+              "id": "power-clean-power-jerk",
+              "name": "Power Clean + Power Jerk",
+              "note": "Sharp footwork",
+              "sets": [
+                {
+                  "reps": "1+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5 x 1+1"
+                },
+                {
+                  "reps": "1+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5 x 1+1"
+                },
+                {
+                  "reps": "1+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5 x 1+1"
+                },
+                {
+                  "reps": "1+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5 x 1+1"
+                },
+                {
+                  "reps": "1+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5 x 1+1"
+                }
+              ]
+            },
+            {
+              "id": "jerk-skill",
+              "name": "Jerk Skill",
+              "note": "Footwork and lockout",
+              "sets": [
+                {
+                  "reps": "4-5 sets",
+                  "target": "Light-moderate"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-4-friday-competition-day",
+          "day": "Friday",
+          "focus": "Competition Day",
+          "exercises": [
+            {
+              "id": "snatch",
+              "name": "Snatch",
+              "note": "Stop while sharp",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 88,
+                    "max": 90
+                  },
+                  "target": "daily heavy single"
+                }
+              ]
+            },
+            {
+              "id": "clean-and-jerk",
+              "name": "Clean & Jerk",
+              "note": "Stop while sharp",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 88,
+                    "max": 90
+                  },
+                  "target": "daily heavy single"
+                }
+              ]
+            },
+            {
+              "id": "back-squat",
+              "name": "Back Squat",
+              "note": "Maintain strength",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 87
+                  },
+                  "target": "3 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 87
+                  },
+                  "target": "3 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 87
+                  },
+                  "target": "3 x 2"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "week": 5,
+      "phase": "Intensification",
+      "notes": "",
+      "workouts": [
+        {
+          "id": "week-5-monday-heavy-snatch-back-squat",
+          "day": "Monday",
+          "focus": "Heavy Snatch + Back Squat",
+          "exercises": [
+            {
+              "id": "snatch",
+              "name": "Snatch",
+              "note": "Clean reps only",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                }
+              ]
+            },
+            {
+              "id": "snatch-pull",
+              "name": "Snatch Pull",
+              "note": "Stay over bar; finish tall",
+              "sets": [
+                {
+                  "reps": "2-3",
+                  "percentageRange": {
+                    "min": 100,
+                    "max": 110
+                  },
+                  "target": "3 x 2-3"
+                },
+                {
+                  "reps": "2-3",
+                  "percentageRange": {
+                    "min": 100,
+                    "max": 110
+                  },
+                  "target": "3 x 2-3"
+                },
+                {
+                  "reps": "2-3",
+                  "percentageRange": {
+                    "min": 100,
+                    "max": 110
+                  },
+                  "target": "3 x 2-3"
+                }
+              ]
+            },
+            {
+              "id": "back-squat",
+              "name": "Back Squat",
+              "note": "No grinding",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 88
+                  },
+                  "target": "Heavy"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 88
+                  },
+                  "target": "Heavy"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 88
+                  },
+                  "target": "Heavy"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 88
+                  },
+                  "target": "Heavy"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-5-tuesday-c-j-volume-front-squat",
+          "day": "Tuesday",
+          "focus": "C&J Volume + Front Squat",
+          "exercises": [
+            {
+              "id": "clean-and-jerk",
+              "name": "Clean & Jerk",
+              "note": "Repeatable timing",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 85
+                  },
+                  "target": "5-7 singles or 1+1 complexes"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 85
+                  },
+                  "target": "5-7 singles or 1+1 complexes"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 85
+                  },
+                  "target": "5-7 singles or 1+1 complexes"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 85
+                  },
+                  "target": "5-7 singles or 1+1 complexes"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 85
+                  },
+                  "target": "5-7 singles or 1+1 complexes"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 85
+                  },
+                  "target": "5-7 singles or 1+1 complexes"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 85
+                  },
+                  "target": "5-7 singles or 1+1 complexes"
+                }
+              ]
+            },
+            {
+              "id": "clean-pull",
+              "name": "Clean Pull",
+              "note": "Same start as clean",
+              "sets": [
+                {
+                  "reps": "2-3",
+                  "percentageRange": {
+                    "min": 100,
+                    "max": 110
+                  },
+                  "target": "3 x 2-3"
+                },
+                {
+                  "reps": "2-3",
+                  "percentageRange": {
+                    "min": 100,
+                    "max": 110
+                  },
+                  "target": "3 x 2-3"
+                },
+                {
+                  "reps": "2-3",
+                  "percentageRange": {
+                    "min": 100,
+                    "max": 110
+                  },
+                  "target": "3 x 2-3"
+                }
+              ]
+            },
+            {
+              "id": "front-squat",
+              "name": "Front Squat",
+              "note": "Strong rack position",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 83,
+                    "max": 86
+                  },
+                  "target": "Heavy"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 83,
+                    "max": 86
+                  },
+                  "target": "Heavy"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 83,
+                    "max": 86
+                  },
+                  "target": "Heavy"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 83,
+                    "max": 86
+                  },
+                  "target": "Heavy"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-5-wednesday-technical-speed",
+          "day": "Wednesday",
+          "focus": "Technical / Speed",
+          "exercises": [
+            {
+              "id": "power-snatch",
+              "name": "Power Snatch",
+              "note": "Recovery speed",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "5-6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "5-6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "5-6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "5-6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "5-6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "5-6 x 2"
+                }
+              ]
+            },
+            {
+              "id": "power-clean-power-jerk",
+              "name": "Power Clean + Power Jerk",
+              "note": "Sharp footwork",
+              "sets": [
+                {
+                  "reps": "1+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5 x 1+1"
+                },
+                {
+                  "reps": "1+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5 x 1+1"
+                },
+                {
+                  "reps": "1+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5 x 1+1"
+                },
+                {
+                  "reps": "1+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5 x 1+1"
+                },
+                {
+                  "reps": "1+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5 x 1+1"
+                }
+              ]
+            },
+            {
+              "id": "jerk-skill",
+              "name": "Jerk Skill",
+              "note": "Footwork and lockout",
+              "sets": [
+                {
+                  "reps": "4-5 sets",
+                  "target": "Light-moderate"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-5-friday-competition-day",
+          "day": "Friday",
+          "focus": "Competition Day",
+          "exercises": [
+            {
+              "id": "snatch",
+              "name": "Snatch",
+              "note": "Stop while sharp",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": null
+                  },
+                  "target": "daily heavy single"
+                }
+              ]
+            },
+            {
+              "id": "clean-and-jerk",
+              "name": "Clean & Jerk",
+              "note": "Stop while sharp",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": null
+                  },
+                  "target": "daily heavy single"
+                }
+              ]
+            },
+            {
+              "id": "back-squat",
+              "name": "Back Squat",
+              "note": "Maintain strength",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 87
+                  },
+                  "target": "3 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 87
+                  },
+                  "target": "3 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 87
+                  },
+                  "target": "3 x 2"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "week": 6,
+      "phase": "Intensification",
+      "notes": "",
+      "workouts": [
+        {
+          "id": "week-6-monday-heavy-snatch-back-squat",
+          "day": "Monday",
+          "focus": "Heavy Snatch + Back Squat",
+          "exercises": [
+            {
+              "id": "snatch",
+              "name": "Snatch",
+              "note": "Clean reps only",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 88
+                  },
+                  "target": "6-8 singles"
+                }
+              ]
+            },
+            {
+              "id": "snatch-pull",
+              "name": "Snatch Pull",
+              "note": "Stay over bar; finish tall",
+              "sets": [
+                {
+                  "reps": "2-3",
+                  "percentageRange": {
+                    "min": 100,
+                    "max": 110
+                  },
+                  "target": "3 x 2-3"
+                },
+                {
+                  "reps": "2-3",
+                  "percentageRange": {
+                    "min": 100,
+                    "max": 110
+                  },
+                  "target": "3 x 2-3"
+                },
+                {
+                  "reps": "2-3",
+                  "percentageRange": {
+                    "min": 100,
+                    "max": 110
+                  },
+                  "target": "3 x 2-3"
+                }
+              ]
+            },
+            {
+              "id": "back-squat",
+              "name": "Back Squat",
+              "note": "No grinding",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 87,
+                    "max": 90
+                  },
+                  "target": "Heavy"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 87,
+                    "max": 90
+                  },
+                  "target": "Heavy"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 87,
+                    "max": 90
+                  },
+                  "target": "Heavy"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-6-tuesday-c-j-volume-front-squat",
+          "day": "Tuesday",
+          "focus": "C&J Volume + Front Squat",
+          "exercises": [
+            {
+              "id": "clean-and-jerk",
+              "name": "Clean & Jerk",
+              "note": "Repeatable timing",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 85
+                  },
+                  "target": "5-7 singles or 1+1 complexes"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 85
+                  },
+                  "target": "5-7 singles or 1+1 complexes"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 85
+                  },
+                  "target": "5-7 singles or 1+1 complexes"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 85
+                  },
+                  "target": "5-7 singles or 1+1 complexes"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 85
+                  },
+                  "target": "5-7 singles or 1+1 complexes"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 85
+                  },
+                  "target": "5-7 singles or 1+1 complexes"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 78,
+                    "max": 85
+                  },
+                  "target": "5-7 singles or 1+1 complexes"
+                }
+              ]
+            },
+            {
+              "id": "clean-pull",
+              "name": "Clean Pull",
+              "note": "Same start as clean",
+              "sets": [
+                {
+                  "reps": "2-3",
+                  "percentageRange": {
+                    "min": 100,
+                    "max": 110
+                  },
+                  "target": "3 x 2-3"
+                },
+                {
+                  "reps": "2-3",
+                  "percentageRange": {
+                    "min": 100,
+                    "max": 110
+                  },
+                  "target": "3 x 2-3"
+                },
+                {
+                  "reps": "2-3",
+                  "percentageRange": {
+                    "min": 100,
+                    "max": 110
+                  },
+                  "target": "3 x 2-3"
+                }
+              ]
+            },
+            {
+              "id": "front-squat",
+              "name": "Front Squat",
+              "note": "Strong rack position",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 88
+                  },
+                  "target": "Heavy"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 88
+                  },
+                  "target": "Heavy"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 88
+                  },
+                  "target": "Heavy"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-6-wednesday-technical-speed",
+          "day": "Wednesday",
+          "focus": "Technical / Speed",
+          "exercises": [
+            {
+              "id": "power-snatch",
+              "name": "Power Snatch",
+              "note": "Recovery speed",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "5-6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "5-6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "5-6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "5-6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "5-6 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 72
+                  },
+                  "target": "5-6 x 2"
+                }
+              ]
+            },
+            {
+              "id": "power-clean-power-jerk",
+              "name": "Power Clean + Power Jerk",
+              "note": "Sharp footwork",
+              "sets": [
+                {
+                  "reps": "1+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5 x 1+1"
+                },
+                {
+                  "reps": "1+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5 x 1+1"
+                },
+                {
+                  "reps": "1+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5 x 1+1"
+                },
+                {
+                  "reps": "1+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5 x 1+1"
+                },
+                {
+                  "reps": "1+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 75
+                  },
+                  "target": "5 x 1+1"
+                }
+              ]
+            },
+            {
+              "id": "jerk-skill",
+              "name": "Jerk Skill",
+              "note": "Footwork and lockout",
+              "sets": [
+                {
+                  "reps": "4-5 sets",
+                  "target": "Light-moderate"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-6-friday-competition-day",
+          "day": "Friday",
+          "focus": "Competition Day",
+          "exercises": [
+            {
+              "id": "snatch",
+              "name": "Snatch",
+              "note": "Stop while sharp",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": 92
+                  },
+                  "target": "daily heavy single"
+                }
+              ]
+            },
+            {
+              "id": "clean-and-jerk",
+              "name": "Clean & Jerk",
+              "note": "Stop while sharp",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": 92
+                  },
+                  "target": "daily heavy single"
+                }
+              ]
+            },
+            {
+              "id": "back-squat",
+              "name": "Back Squat",
+              "note": "Maintain strength",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 87
+                  },
+                  "target": "3 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 87
+                  },
+                  "target": "3 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 87
+                  },
+                  "target": "3 x 2"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "week": 7,
+      "phase": "Peak",
+      "notes": "",
+      "workouts": [
+        {
+          "id": "week-7-monday-heavy-snatch-back-squat",
+          "day": "Monday",
+          "focus": "Heavy Snatch + Back Squat",
+          "exercises": [
+            {
+              "id": "snatch",
+              "name": "Snatch",
+              "note": "Clean reps only",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 90
+                  },
+                  "target": "5-6 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 90
+                  },
+                  "target": "5-6 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 90
+                  },
+                  "target": "5-6 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 90
+                  },
+                  "target": "5-6 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 90
+                  },
+                  "target": "5-6 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 90
+                  },
+                  "target": "5-6 singles"
+                }
+              ]
+            },
+            {
+              "id": "snatch-pull",
+              "name": "Snatch Pull",
+              "note": "Stay over bar; finish tall",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 100,
+                    "max": 105
+                  },
+                  "target": "2 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 100,
+                    "max": 105
+                  },
+                  "target": "2 x 2"
+                }
+              ]
+            },
+            {
+              "id": "back-squat",
+              "name": "Back Squat",
+              "note": "No grinding",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 87
+                  },
+                  "target": "3 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 87
+                  },
+                  "target": "3 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 87
+                  },
+                  "target": "3 x 2"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-7-tuesday-c-j-sharpening-front-squat",
+          "day": "Tuesday",
+          "focus": "C&J Sharpening + Front Squat",
+          "exercises": [
+            {
+              "id": "clean-and-jerk",
+              "name": "Clean & Jerk",
+              "note": "Jerk confidence",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 90
+                  },
+                  "target": "4-5 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 90
+                  },
+                  "target": "4-5 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 90
+                  },
+                  "target": "4-5 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 90
+                  },
+                  "target": "4-5 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 90
+                  },
+                  "target": "4-5 singles"
+                }
+              ]
+            },
+            {
+              "id": "front-squat",
+              "name": "Front Squat",
+              "note": "Easy heavy",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 80,
+                    "max": 85
+                  },
+                  "target": "2-3 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 80,
+                    "max": 85
+                  },
+                  "target": "2-3 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 80,
+                    "max": 85
+                  },
+                  "target": "2-3 x 2"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-7-wednesday-technical-speed",
+          "day": "Wednesday",
+          "focus": "Technical / Speed",
+          "exercises": [
+            {
+              "id": "power-snatch",
+              "name": "Power Snatch",
+              "note": "Very easy",
+              "sets": [
+                {
+                  "reps": "1-2",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 70
+                  },
+                  "target": "4-5 x 1-2"
+                },
+                {
+                  "reps": "1-2",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 70
+                  },
+                  "target": "4-5 x 1-2"
+                },
+                {
+                  "reps": "1-2",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 70
+                  },
+                  "target": "4-5 x 1-2"
+                },
+                {
+                  "reps": "1-2",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 70
+                  },
+                  "target": "4-5 x 1-2"
+                },
+                {
+                  "reps": "1-2",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 70
+                  },
+                  "target": "4-5 x 1-2"
+                }
+              ]
+            },
+            {
+              "id": "power-clean-power-jerk",
+              "name": "Power Clean + Power Jerk",
+              "note": "Very easy",
+              "sets": [
+                {
+                  "reps": "1+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 70
+                  },
+                  "target": "4 x 1+1"
+                },
+                {
+                  "reps": "1+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 70
+                  },
+                  "target": "4 x 1+1"
+                },
+                {
+                  "reps": "1+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 70
+                  },
+                  "target": "4 x 1+1"
+                },
+                {
+                  "reps": "1+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 70
+                  },
+                  "target": "4 x 1+1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-7-friday-competition-day",
+          "day": "Friday",
+          "focus": "Competition Day",
+          "exercises": [
+            {
+              "id": "snatch",
+              "name": "Snatch",
+              "note": "Near opener/second attempt feel",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": 92
+                  },
+                  "target": "daily heavy single"
+                }
+              ]
+            },
+            {
+              "id": "clean-and-jerk",
+              "name": "Clean & Jerk",
+              "note": "Near opener/second attempt feel",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 90,
+                    "max": 92
+                  },
+                  "target": "daily heavy single"
+                }
+              ]
+            },
+            {
+              "id": "back-squat",
+              "name": "Back Squat",
+              "note": "Do not create soreness",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": 82
+                  },
+                  "target": "2 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": 82
+                  },
+                  "target": "2 x 2"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "week": 8,
+      "phase": "Peak",
+      "notes": "",
+      "workouts": [
+        {
+          "id": "week-8-monday-heavy-snatch-back-squat",
+          "day": "Monday",
+          "focus": "Heavy Snatch + Back Squat",
+          "exercises": [
+            {
+              "id": "snatch",
+              "name": "Snatch",
+              "note": "Clean reps only",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 90
+                  },
+                  "target": "5-6 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 90
+                  },
+                  "target": "5-6 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 90
+                  },
+                  "target": "5-6 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 90
+                  },
+                  "target": "5-6 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 90
+                  },
+                  "target": "5-6 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 90
+                  },
+                  "target": "5-6 singles"
+                }
+              ]
+            },
+            {
+              "id": "snatch-pull",
+              "name": "Snatch Pull",
+              "note": "Stay over bar; finish tall",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 100,
+                    "max": 105
+                  },
+                  "target": "2 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 100,
+                    "max": 105
+                  },
+                  "target": "2 x 2"
+                }
+              ]
+            },
+            {
+              "id": "back-squat",
+              "name": "Back Squat",
+              "note": "No grinding",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 87
+                  },
+                  "target": "3 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 87
+                  },
+                  "target": "3 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 82,
+                    "max": 87
+                  },
+                  "target": "3 x 2"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-8-tuesday-c-j-sharpening-front-squat",
+          "day": "Tuesday",
+          "focus": "C&J Sharpening + Front Squat",
+          "exercises": [
+            {
+              "id": "clean-and-jerk",
+              "name": "Clean & Jerk",
+              "note": "Jerk confidence",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 90
+                  },
+                  "target": "4-5 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 90
+                  },
+                  "target": "4-5 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 90
+                  },
+                  "target": "4-5 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 90
+                  },
+                  "target": "4-5 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 85,
+                    "max": 90
+                  },
+                  "target": "4-5 singles"
+                }
+              ]
+            },
+            {
+              "id": "front-squat",
+              "name": "Front Squat",
+              "note": "Easy heavy",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 80,
+                    "max": 85
+                  },
+                  "target": "2-3 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 80,
+                    "max": 85
+                  },
+                  "target": "2-3 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 80,
+                    "max": 85
+                  },
+                  "target": "2-3 x 2"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-8-wednesday-technical-speed",
+          "day": "Wednesday",
+          "focus": "Technical / Speed",
+          "exercises": [
+            {
+              "id": "power-snatch",
+              "name": "Power Snatch",
+              "note": "Very easy",
+              "sets": [
+                {
+                  "reps": "1-2",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 70
+                  },
+                  "target": "4-5 x 1-2"
+                },
+                {
+                  "reps": "1-2",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 70
+                  },
+                  "target": "4-5 x 1-2"
+                },
+                {
+                  "reps": "1-2",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 70
+                  },
+                  "target": "4-5 x 1-2"
+                },
+                {
+                  "reps": "1-2",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 70
+                  },
+                  "target": "4-5 x 1-2"
+                },
+                {
+                  "reps": "1-2",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 70
+                  },
+                  "target": "4-5 x 1-2"
+                }
+              ]
+            },
+            {
+              "id": "power-clean-power-jerk",
+              "name": "Power Clean + Power Jerk",
+              "note": "Very easy",
+              "sets": [
+                {
+                  "reps": "1+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 70
+                  },
+                  "target": "4 x 1+1"
+                },
+                {
+                  "reps": "1+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 70
+                  },
+                  "target": "4 x 1+1"
+                },
+                {
+                  "reps": "1+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 70
+                  },
+                  "target": "4 x 1+1"
+                },
+                {
+                  "reps": "1+1",
+                  "percentageRange": {
+                    "min": 65,
+                    "max": 70
+                  },
+                  "target": "4 x 1+1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-8-friday-competition-day",
+          "day": "Friday",
+          "focus": "Competition Day",
+          "exercises": [
+            {
+              "id": "snatch",
+              "name": "Snatch",
+              "note": "Near opener/second attempt feel",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 92,
+                    "max": 93
+                  },
+                  "target": "daily heavy single"
+                }
+              ]
+            },
+            {
+              "id": "clean-and-jerk",
+              "name": "Clean & Jerk",
+              "note": "Near opener/second attempt feel",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 92,
+                    "max": 93
+                  },
+                  "target": "daily heavy single"
+                }
+              ]
+            },
+            {
+              "id": "back-squat",
+              "name": "Back Squat",
+              "note": "Do not create soreness",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": 82
+                  },
+                  "target": "2 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": 82
+                  },
+                  "target": "2 x 2"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "week": 9,
+      "phase": "Taper",
+      "notes": "",
+      "workouts": [
+        {
+          "id": "week-9-monday-sharp-easy",
+          "day": "Monday",
+          "focus": "Sharp + Easy",
+          "exercises": [
+            {
+              "id": "snatch",
+              "name": "Snatch",
+              "note": "Speed and confidence",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": 80
+                  },
+                  "target": "3-4 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": 80
+                  },
+                  "target": "3-4 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": 80
+                  },
+                  "target": "3-4 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": 80
+                  },
+                  "target": "3-4 singles"
+                }
+              ]
+            },
+            {
+              "id": "clean-and-jerk",
+              "name": "Clean & Jerk",
+              "note": "Speed and confidence",
+              "sets": [
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": 80
+                  },
+                  "target": "3-4 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": 80
+                  },
+                  "target": "3-4 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": 80
+                  },
+                  "target": "3-4 singles"
+                },
+                {
+                  "reps": 1,
+                  "percentageRange": {
+                    "min": 75,
+                    "max": 80
+                  },
+                  "target": "3-4 singles"
+                }
+              ]
+            },
+            {
+              "id": "back-squat",
+              "name": "Back Squat",
+              "note": "Easy",
+              "sets": [
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 75
+                  },
+                  "target": "2 x 2"
+                },
+                {
+                  "reps": 2,
+                  "percentageRange": {
+                    "min": 70,
+                    "max": 75
+                  },
+                  "target": "2 x 2"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-9-tuesday-openers",
+          "day": "Tuesday",
+          "focus": "Openers",
+          "exercises": [
+            {
+              "id": "snatch",
+              "name": "Snatch",
+              "note": "No misses",
+              "sets": [
+                {
+                  "reps": 1,
+                  "target": "opener"
+                }
+              ]
+            },
+            {
+              "id": "clean-and-jerk",
+              "name": "Clean & Jerk",
+              "note": "No misses",
+              "sets": [
+                {
+                  "reps": 1,
+                  "target": "opener"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-9-wednesday-light-movement",
+          "day": "Wednesday",
+          "focus": "Light Movement",
+          "exercises": [
+            {
+              "id": "technique-bar-work",
+              "name": "Technique bar work",
+              "note": "Feel good only",
+              "sets": [
+                {
+                  "reps": "15-25 minutes",
+                  "target": "Very light"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-9-friday-rest",
+          "day": "Friday",
+          "focus": "Rest",
+          "exercises": [
+            {
+              "id": "rest-travel-mobility",
+              "name": "Rest / Travel / Mobility",
+              "note": "No fatigue",
+              "sets": [
+                {
+                  "reps": "Optional easy mobility",
+                  "target": "None"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "week-9-saturday-competition",
+          "day": "Saturday",
+          "focus": "Competition",
+          "exercises": [
+            {
+              "id": "meet-day",
+              "name": "Meet Day",
+              "note": "Trust the prep",
+              "sets": [
+                {
+                  "reps": "Execute attempts",
+                  "target": "Competition"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
 };
 
-const templates = {
-  monday: {
-    offset: 0,
-    day: "Monday",
-    focus: "Heavy Snatch + Back Squat",
-    exercises: ["Snatch", "Snatch Pull", "Back Squat"],
-    notes: ["Clean reps only", "Stay over bar; finish tall", "No grinding"],
-    intensity: (week) =>
-      week < 4 ? ["75-85%", "90-105% of snatch", "Moderate-heavy"]
-        : week < 7 ? ["82-88%", "100-110%", "Heavy"]
-          : ["85-90%", "100-105%", "82-87%"],
-  },
-  tuesday: {
-    offset: 1,
-    day: "Tuesday",
-    focus: (week) => (week < 7 ? "C&J Volume + Front Squat" : "C&J Sharpening + Front Squat"),
-    exercises: (week) => (week < 7 ? ["Clean & Jerk", "Clean Pull", "Front Squat"] : ["Clean & Jerk", "Front Squat"]),
-    notes: (week) => (week < 7 ? ["Repeatable timing", "Same start as clean", "Strong rack position"] : ["Jerk confidence", "Easy heavy"]),
-    intensity: (week) =>
-      week < 4 ? ["70-80%", "90-105% of clean", "Moderate-heavy"]
-        : week < 7 ? ["78-85%", "100-110%", "Heavy"]
-          : ["85-90%", "80-85%"],
-  },
-  wednesday: {
-    offset: 2,
-    day: "Wednesday",
-    focus: "Technical / Speed",
-    exercises: (week) => (week < 7 ? ["Power Snatch", "Power Clean + Power Jerk", "Jerk Skill"] : ["Power Snatch", "Power Clean + Power Jerk"]),
-    notes: (week) => (week < 4 ? ["Fast, crisp, easy", "Speed and footwork", "Tempo/pause optional"] : week < 7 ? ["Recovery speed", "Sharp footwork", "Footwork and lockout"] : ["Very easy", "Very easy"]),
-    intensity: (week) => (week < 7 ? ["65-72%", "65-75%", "Light-moderate"] : ["65-70%", "65-70%"]),
-  },
-  friday: {
-    offset: 4,
-    day: "Friday",
-    focus: "Competition Day",
-    exercises: ["Snatch", "Clean & Jerk", "Back Squat"],
-    notes: (week) => (week < 4 ? ["Meet rhythm", "Meet rhythm", "Leave one rep in tank"] : week < 7 ? ["Stop while sharp", "Stop while sharp", "Maintain strength"] : ["Near opener/second attempt feel", "Near opener/second attempt feel", "Do not create soreness"]),
-    intensity: (week) => {
-      if (week < 4) return ["80-88%", "80-88%", "Moderate-heavy"];
-      if (week === 4) return ["88-90%", "88-90%", "82-87%"];
-      if (week === 5) return ["90%", "90%", "82-87%"];
-      if (week === 6) return ["90-92%", "90-92%", "82-87%"];
-      if (week === 7) return ["90-92%", "90-92%", "75-82%"];
-      return ["92-93% if sharp", "92-93% if sharp", "75-82%"];
-    },
-  },
+export const importedProgramMeta = {
+  id: weightliftingProgram.id,
+  name: weightliftingProgram.name,
+  details: weightliftingProgram.details,
+  scheduleMode: weightliftingProgram.scheduleMode,
+};
+
+const workoutDayOffsets = {
+  Monday: 0,
+  Tuesday: 1,
+  Wednesday: 2,
+  Thursday: 3,
+  Friday: 4,
+  Saturday: 5,
+  Sunday: 6,
 };
 
 function addDays(date, days) {
@@ -135,33 +3848,43 @@ function addDays(date, days) {
   return next.toISOString().slice(0, 10);
 }
 
-function items(value, week) {
-  return typeof value === "function" ? value(week) : value;
+function templateWorkoutDate(week, workout) {
+  return addDays("2026-05-11", ((week.week || 1) - 1) * 7 + (workoutDayOffsets[workout.day] || 0));
 }
 
-export const importedProgram = byWeek.flatMap((week) =>
-  Object.entries(templates).flatMap(([key, template]) => {
-    const exercises = items(template.exercises, week.week);
-    return exercises.map((exercise, index) => ({
-      id: `mock-${week.week}-${key}-${index}`,
+function setPercentageLabel(percentageRange) {
+  if (!percentageRange) return "";
+  const high = percentageRange.max ? `-${percentageRange.max}` : "";
+  const of = percentageRange.of ? ` of ${percentageRange.of}` : "";
+  return `${percentageRange.min}${high}%${of}`;
+}
+
+function exercisePrescription(exercise) {
+  const sets = exercise.sets || [];
+  if (!sets.length) return "";
+  const reps = sets[0]?.reps || "set";
+  return `${sets.length} x ${reps}`;
+}
+
+function exerciseIntensity(exercise) {
+  const firstSet = (exercise.sets || [])[0] || {};
+  return setPercentageLabel(firstSet.percentageRange) || firstSet.target || "";
+}
+
+export const importedProgram = weightliftingProgram.weeks.flatMap((week) => (
+  week.workouts.flatMap((workout) => (
+    workout.exercises.map((exercise) => ({
+      id: exercise.id,
       week: week.week,
-      date: addDays(week.start, template.offset),
+      date: templateWorkoutDate(week, workout),
       phase: week.phase,
-      day: template.day,
-      focus: items(template.focus, week.week),
-      exercise,
-      prescription: week[key][index],
-      intensity: items(template.intensity, week.week)[index],
-      notes: items(template.notes, week.week)[index],
-    }));
-  }),
-).concat([
-  { id: "mock-9-mon-0", week: 9, date: "2026-07-06", phase: "Taper", day: "Monday", focus: "Sharp + Easy", exercise: "Snatch", prescription: "3-4 singles", intensity: "75-80%", notes: "Speed and confidence" },
-  { id: "mock-9-mon-1", week: 9, date: "2026-07-06", phase: "Taper", day: "Monday", focus: "Sharp + Easy", exercise: "Clean & Jerk", prescription: "3-4 singles", intensity: "75-80%", notes: "Speed and confidence" },
-  { id: "mock-9-mon-2", week: 9, date: "2026-07-06", phase: "Taper", day: "Monday", focus: "Sharp + Easy", exercise: "Back Squat", prescription: "2 x 2", intensity: "70-75%", notes: "Easy" },
-  { id: "mock-9-tue-0", week: 9, date: "2026-07-07", phase: "Taper", day: "Tuesday", focus: "Openers", exercise: "Snatch", prescription: "Work to opener", intensity: "Opener", notes: "No misses" },
-  { id: "mock-9-tue-1", week: 9, date: "2026-07-07", phase: "Taper", day: "Tuesday", focus: "Openers", exercise: "Clean & Jerk", prescription: "Work to opener", intensity: "Opener", notes: "No misses" },
-  { id: "mock-9-wed-0", week: 9, date: "2026-07-08", phase: "Taper", day: "Wednesday", focus: "Light Movement", exercise: "Technique bar work", prescription: "15-25 minutes", intensity: "Very light", notes: "Feel good only" },
-  { id: "mock-9-fri-0", week: 9, date: "2026-07-10", phase: "Taper", day: "Friday", focus: "Rest", exercise: "Rest / Travel / Mobility", prescription: "Optional easy mobility", intensity: "None", notes: "No fatigue" },
-  { id: "mock-9-sat-0", week: 9, date: "2026-07-11", phase: "Taper", day: "Saturday", focus: "Competition", exercise: "Meet Day", prescription: "Execute attempts", intensity: "Competition", notes: "Trust the prep" },
-]);
+      day: workout.day,
+      focus: workout.focus,
+      exercise: exercise.name,
+      prescription: exercisePrescription(exercise),
+      intensity: exerciseIntensity(exercise),
+      notes: exercise.note || "",
+      sets: exercise.sets || [],
+    }))
+  ))
+));

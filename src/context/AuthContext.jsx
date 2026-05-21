@@ -2,26 +2,21 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import {
   ensureUserDocument,
   isTrainerUser,
-  loadUserMaxes as loadCloudUserMaxes,
+  loadUserMaxes,
   loadUserPreferences,
   loadUserProfile,
   saveUserMaxes as saveCloudUserMaxes,
 } from "../db";
 import { logout, observeAuth } from "../services/firebase";
-import { mergeUserProfile, saveUserDistanceUnit, saveUserMaxes, saveUserWeightUnit } from "../utils/appHelpers";
+import { mergeUserProfile, saveUserDistanceUnit, saveUserMaxes as saveLocalUserMaxes, saveUserWeightUnit } from "../utils/appHelpers";
 
 const AuthContext = createContext(null);
-
-export async function syncUserMaxes(userId, maxes) {
-  saveUserMaxes(userId, maxes);
-  return saveCloudUserMaxes(userId, maxes);
-}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(true);
-  const [isTrainer, setIsTrainer] = useState(false);
   const [showProfileSetup, setShowProfileSetup] = useState(false);
+  const [isTrainer, setIsTrainer] = useState(false);
 
   async function hydrateUser(nextUser) {
     if (!nextUser) {
@@ -33,15 +28,15 @@ export function AuthProvider({ children }) {
 
     const [profile, cloudMaxes, preferences, rootUser] = await Promise.all([
       loadUserProfile(nextUser.uid),
-      loadCloudUserMaxes(nextUser.uid),
+      loadUserMaxes(nextUser.uid),
       loadUserPreferences(nextUser.uid),
       ensureUserDocument(nextUser),
     ]);
-    saveUserMaxes(nextUser.uid, cloudMaxes);
+    saveLocalUserMaxes(nextUser.uid, cloudMaxes);
     saveUserWeightUnit(nextUser.uid, preferences.weightUnit);
     saveUserDistanceUnit(nextUser.uid, preferences.distanceUnit);
     const profiledUser = mergeUserProfile(nextUser, { ...rootUser, ...profile, preferences });
-    const nextTrainer = await isTrainerUser(nextUser);
+    const nextTrainer = await isTrainerUser(profiledUser);
     setUser(profiledUser);
     setIsTrainer(nextTrainer);
     setShowProfileSetup(profile.profileSetupCompleted !== true);
@@ -61,6 +56,16 @@ export function AuthProvider({ children }) {
   function handleProfileSetupComplete(profile) {
     setUser((currentUser) => ({ ...currentUser, ...profile }));
     setShowProfileSetup(false);
+  }
+
+  async function syncUserMaxes(userId, maxes) {
+    if (!userId) return { synced: false };
+    saveLocalUserMaxes(userId, maxes);
+    const result = await saveCloudUserMaxes(userId, maxes);
+    setUser((currentUser) => (
+      currentUser?.uid === userId ? { ...currentUser, maxes } : currentUser
+    ));
+    return result;
   }
 
   async function handleLogout() {

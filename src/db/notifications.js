@@ -1,5 +1,5 @@
 import { arrayUnion, collection, doc, getDoc, getDocs, setDoc } from "firebase/firestore";
-import { db, isDevUserId, localKey, readJson, tokenId } from "../services/firebaseClient";
+import { db, localKey, readJson, tokenId } from "../services/firebaseClient";
 import { normalizeConversation, normalizeNotifications, userNotificationsLocalKey } from "./helpers";
 
 // Notification tokens are saved per user/device.
@@ -12,7 +12,7 @@ export async function saveNotificationToken(userId, token) {
   };
   localStorage.setItem(localKey(`push-token:${userId}`), JSON.stringify(payload));
 
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       await setDoc(doc(db, "users", userId, "notificationTokens", tokenId(token)), payload, { merge: true });
     } catch (error) {
@@ -30,7 +30,7 @@ export async function loadUserNotifications(userId) {
   if (!userId) return [];
   let notifications = normalizeNotifications(readJson(localStorage.getItem(userNotificationsLocalKey(userId)), []));
 
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       const snapshot = await getDoc(doc(db, "users", userId));
       notifications = normalizeNotifications(snapshot.exists() ? snapshot.data().notifications : notifications);
@@ -50,7 +50,7 @@ export async function saveUserNotifications(userId, notifications) {
   };
   saveLocalNotifications(userId, payload.notifications);
 
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       await setDoc(doc(db, "users", userId), payload, { merge: true });
       return { notifications: payload.notifications, synced: true };
@@ -74,7 +74,7 @@ export async function addUserNotification(userId, notification) {
   const localNotifications = await loadUserNotifications(userId);
   saveLocalNotifications(userId, normalizeNotifications([payload, ...localNotifications]));
 
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       await setDoc(doc(db, "users", userId), {
         notifications: arrayUnion(payload),
@@ -98,7 +98,7 @@ export async function dismissUserNotification(userId, notificationId) {
 
 async function loadConversationNotifications(userId) {
   if (!userId) return [];
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       const snapshot = await getDocs(collection(db, "users", userId, "conversations"));
       return snapshot.docs
@@ -134,3 +134,4 @@ export async function loadAppNotificationSummary(userId) {
   const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
   return { counts, notifications, total };
 }
+

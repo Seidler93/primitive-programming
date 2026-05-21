@@ -1,5 +1,5 @@
 import { doc, getDoc, setDoc } from "firebase/firestore";
-import { db, isDevUserId, localKey, withTimeout } from "../services/firebaseClient";
+import { db, localKey, withTimeout } from "../services/firebaseClient";
 
 // Profile documents live under `users/{uid}/profile`.
 
@@ -11,7 +11,7 @@ function normalizeUserPreferences(preferences = {}) {
 }
 
 export async function loadUserProfile(userId) {
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       const snapshot = await withTimeout(
         getDoc(doc(db, "users", userId, "profile", "details")),
@@ -35,7 +35,7 @@ export async function saveUserProfile(userId, profile) {
   const nextLocalProfile = { ...localProfile, ...payload };
   localStorage.setItem(localKey(`profile:${userId}`), JSON.stringify(nextLocalProfile));
 
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       await setDoc(doc(db, "users", userId, "profile", "details"), payload, { merge: true });
       await setDoc(doc(db, "users", userId), {
@@ -54,7 +54,7 @@ export async function saveUserProfile(userId, profile) {
 }
 
 export async function loadUserMaxes(userId) {
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       const snapshot = await withTimeout(
         getDoc(doc(db, "users", userId, "profile", "maxes")),
@@ -79,7 +79,7 @@ export async function saveUserMaxes(userId, maxes) {
   const payload = { maxes, updatedAt: new Date().toISOString() };
   localStorage.setItem(localKey(`maxes:${userId}`), JSON.stringify(maxes));
 
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       await setDoc(doc(db, "users", userId, "profile", "maxes"), payload, { merge: true });
       return { synced: true };
@@ -93,7 +93,7 @@ export async function saveUserMaxes(userId, maxes) {
 }
 
 export async function loadUserPreferences(userId) {
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       const snapshot = await withTimeout(
         getDoc(doc(db, "users", userId, "profile", "preferences")),
@@ -119,7 +119,7 @@ export async function saveUserPreferences(userId, preferences) {
   const payload = { ...normalizedPreferences, updatedAt: new Date().toISOString() };
   localStorage.setItem(localKey(`preferences:${userId}`), JSON.stringify(normalizedPreferences));
 
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       await setDoc(doc(db, "users", userId, "profile", "preferences"), payload, { merge: true });
       return { synced: true, preferences: normalizedPreferences };
@@ -131,3 +131,4 @@ export async function saveUserPreferences(userId, preferences) {
 
   return { synced: false, local: true, preferences: normalizedPreferences };
 }
+

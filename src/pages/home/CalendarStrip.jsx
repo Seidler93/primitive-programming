@@ -1,6 +1,6 @@
 import React from "react";
 import { CheckCircle2 } from "lucide-react";
-import { formatDate } from "../../utils/appHelpers";
+import { formatDate, isWorkoutCompleted } from "../../utils/appHelpers";
 
 export function CalendarStrip({ sections, selectedDate, onSelectDate, workouts, workoutsByDate, onShowMoreMonths }) {
   return (
@@ -12,16 +12,17 @@ export function CalendarStrip({ sections, selectedDate, onSelectDate, workouts, 
             <div className="date-grid">
               {section.dates.map((date) => {
                 const isOutsideMonth = new Date(`${date}T12:00:00`).getMonth() !== section.month;
+                const isCompleted = isWorkoutCompleted(workouts[date]);
                 return (
                   <button
-                    className={`date-tile ${workoutsByDate[date] ? "" : "empty"} ${workouts[date]?.completed ? "completed" : ""} ${isOutsideMonth ? "outside-month" : ""} ${selectedDate === date && !isOutsideMonth ? "selected" : ""}`}
+                    className={`date-tile ${workoutsByDate[date] ? "" : "empty"} ${isCompleted ? "completed" : ""} ${isOutsideMonth ? "outside-month" : ""} ${selectedDate === date && !isOutsideMonth ? "selected" : ""}`}
                     key={`${section.key}-${date}`}
                     onClick={() => onSelectDate(date)}
                     type="button"
                   >
                     <span>{formatDate(date).slice(0, 3)}</span>
                     <strong>{new Date(`${date}T12:00:00`).getDate()}</strong>
-                    {workouts[date]?.completed && <CheckCircle2 className="complete-day-icon" size={16} />}
+                    {isCompleted && <CheckCircle2 className="complete-day-icon" size={16} />}
                   </button>
                 );
               })}

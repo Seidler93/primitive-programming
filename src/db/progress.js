@@ -1,5 +1,5 @@
 import { doc, getDoc, setDoc } from "firebase/firestore";
-import { db, isDevUserId, localKey, withTimeout } from "../services/firebaseClient";
+import { db, localKey, withTimeout } from "../services/firebaseClient";
 
 // Goal/progress preferences live on the root user document.
 
@@ -11,7 +11,7 @@ function normalizeProgress(progress = {}) {
 }
 
 export async function loadUserProgress(userId) {
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       const snapshot = await withTimeout(getDoc(doc(db, "users", userId)), "User progress request timed out.");
       if (snapshot.exists()) {
@@ -32,7 +32,7 @@ export async function saveUserProgress(userId, progress) {
   const normalizedProgress = normalizeProgress(progress);
   localStorage.setItem(localKey(`progress:${userId}`), JSON.stringify(normalizedProgress));
 
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       await setDoc(doc(db, "users", userId), {
         progress: normalizedProgress,
@@ -47,3 +47,4 @@ export async function saveUserProgress(userId, progress) {
 
   return { synced: false, local: true };
 }
+

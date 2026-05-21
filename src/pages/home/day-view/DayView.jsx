@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { ArrowLeft, CalendarDays, CheckCircle2, Dumbbell, Play, Plus, Trash2 } from "lucide-react";
 import { WorkoutAddModal } from "../../../components/workout/WorkoutAddModal";
 import { importedProgramMeta } from "../../../data/programData";
-import { formatDate, loadWorkoutDraft, shiftDate, workoutExerciseCount, workoutLogKey } from "../../../utils/appHelpers";
+import { formatDate, isWorkoutCompleted, loadWorkoutDraft, shiftDate, workoutExerciseCount, workoutLogKey } from "../../../utils/appHelpers";
 
 export function DayView({ date, user, workoutGroups, workouts, programs, onOpenWorkout, onAddWorkout, onChangeDate, onMoveWorkout, onDeleteWorkout }) {
   const [showAddWorkoutOptions, setShowAddWorkoutOptions] = useState(false);
@@ -32,7 +32,7 @@ export function DayView({ date, user, workoutGroups, workouts, programs, onOpenW
   const workoutStarted = (group) => {
     const workout = workouts[workoutLogKey(group.date, group.key)] || {};
     const draft = user?.uid ? loadWorkoutDraft(user.uid, group.date, group.key) : {};
-    return Boolean(workout.completed) || workout.status === "completed" || hasCompletedSet(workout) || hasCompletedSet(draft);
+    return Boolean(workout.started) || isWorkoutCompleted(workout) || hasCompletedSet(workout) || hasCompletedSet(draft);
   };
   const goToPreviousDay = () => onChangeDate(shiftDate(date, -1));
   const goToNextDay = () => onChangeDate(shiftDate(date, 1));
@@ -98,7 +98,7 @@ export function DayView({ date, user, workoutGroups, workouts, programs, onOpenW
                     <h3>{group.title}</h3>
                     <span>{group.week ? `Week ${group.week}` : group.phase} | {exerciseCount} exercise{exerciseCount === 1 ? "" : "s"}</span>
                   </div>
-                  {workouts[workoutLogKey(group.date, group.key)]?.completed ? <CheckCircle2 size={20} /> : <Dumbbell size={20} />}
+                  {isWorkoutCompleted(workouts[workoutLogKey(group.date, group.key)]) ? <CheckCircle2 size={20} /> : <Dumbbell size={20} />}
                 </button>
                 {isExpanded && (
                   <div className="workout-card-actions">

@@ -27,7 +27,6 @@ export const defaultProgramAccess = [];
 export const flexibleProgramScheduleMode = "unknown-days";
 
 export const localKey = (key) => `primitive-programming:${key}`;
-export const isDevUserId = (userId = "") => userId.startsWith("dev-");
 
 export function withTimeout(promise, message) {
   return Promise.race([

@@ -1,16 +1,16 @@
 import React from "react";
 import { UsersRound } from "lucide-react";
 import { importedProgramMeta } from "../../data/programData";
-import { formatDate, progressSummary } from "../../utils/appHelpers";
+import { formatDate, progressSummary, workoutProgramId } from "../../utils/appHelpers";
 
 export function AthletesPage({ programs, programWorkouts, workouts }) {
-  const defaultProgram = { ...importedProgramMeta, athleteEmail: "dev-athlete@primitive.local" };
+  const defaultProgram = { ...importedProgramMeta, athleteEmail: "" };
   const programOptions = [defaultProgram, ...programs.filter((program) => program.id !== "default")];
   const athletes = Array.from(
     programOptions.reduce((map, program) => {
       const email = program.athleteEmail || "Unassigned athlete";
       const current = map.get(email) || { email, programs: [], workouts: [] };
-      const nextProgramWorkouts = programWorkouts.filter((item) => (item.programId || "default") === program.id);
+      const nextProgramWorkouts = programWorkouts.filter((item) => workoutProgramId(item) === program.id);
       current.programs.push(program);
       current.workouts.push(...nextProgramWorkouts);
       map.set(email, current);

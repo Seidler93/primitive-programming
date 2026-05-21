@@ -112,10 +112,6 @@ export function saveUserDistanceUnit(userId, unit) {
   localStorage.setItem(userDistanceUnitKey(userId), unit === "mi" ? "mi" : "km");
 }
 
-export function isDevUser(userId = "") {
-  return String(userId).startsWith("dev-");
-}
-
 export function userGoalsKey(userId) {
   return `primitive-programming:goals:${userId}`;
 }
@@ -298,12 +294,16 @@ export function groupByDate(items) {
 
 export function workoutGroupKey(item) {
   return [
-    item.programId || "default",
+    workoutProgramId(item),
     item.date,
     item.week || "",
     item.phase || "",
     item.focus || "Workout",
   ].join("|");
+}
+
+export function workoutProgramId(item = {}) {
+  return item.programId === null ? null : item.programId || "default";
 }
 
 export function groupWorkouts(items) {
@@ -316,7 +316,7 @@ export function groupWorkouts(items) {
         title: item.focus || "Workout",
         phase: item.phase || "Program",
         week: item.week,
-        programId: item.programId || "default",
+        programId: workoutProgramId(item),
         items: [],
       };
     }
@@ -407,6 +407,16 @@ export function inferMaxKey(exercise, text = "") {
 }
 
 export function percentages(item) {
+  if (Array.isArray(item.sets) && item.sets.length) {
+    return item.sets
+      .map((set) => set.percentageRange)
+      .filter(Boolean)
+      .map((range) => ({
+        low: Number(range.min),
+        high: Number(range.max || range.min),
+      }))
+      .filter((range) => Number.isFinite(range.low) && Number.isFinite(range.high));
+  }
   const text = `${item.prescription} ${item.intensity}`.replace(/–/g, "-");
   const matches = [...text.matchAll(/(\d{2,3})(?:-(\d{2,3}))?%/g)];
   return matches.map((match) => ({
@@ -421,6 +431,13 @@ export function highNumber(value) {
 }
 
 export function setRows(item) {
+  if (Array.isArray(item.sets) && item.sets.length) {
+    return item.sets.map((set, index) => ({
+      ...set,
+      key: `${item.id}:${index + 1}`,
+      reps: set.reps ?? "set",
+    }));
+  }
   const text = item.prescription.replace(/–/g, "-");
   const setsByReps = [...text.matchAll(/(\d+(?:-\d+)?)\s*x\s*(\d+(?:-\d+)?(?:\+\d+)*)/gi)].at(-1);
   if (setsByReps) {
@@ -468,14 +485,69 @@ export function prescribedPreview(item, maxes, weightUnit) {
     .join(" | ");
 }
 
+export function setPercentageLabel(percentageRange) {
+  if (!percentageRange) return "";
+  const high = percentageRange.max ? `-${percentageRange.max}` : "";
+  const of = percentageRange.of ? ` of ${percentageRange.of}` : "";
+  return `${percentageRange.min}${high}%${of}`;
+}
+
+export function exercisePrescriptionFromSets(exercise = {}) {
+  const sets = exercise.sets || [];
+  if (!sets.length) return "";
+  const reps = sets[0]?.reps || "set";
+  return `${sets.length} x ${reps}`;
+}
+
+export function exerciseIntensityFromSets(exercise = {}) {
+  const firstSet = (exercise.sets || [])[0] || {};
+  return setPercentageLabel(firstSet.percentageRange) || firstSet.target || "";
+}
+
+export const workoutDayOffsets = {
+  Monday: 0,
+  Tuesday: 1,
+  Wednesday: 2,
+  Thursday: 3,
+  Friday: 4,
+  Saturday: 5,
+  Sunday: 6,
+};
+
+export function templateWorkoutDate(week, workout, anchorDate = "2026-05-11") {
+  return shiftDate(anchorDate, ((Number(week.week) || 1) - 1) * 7 + (workoutDayOffsets[workout.day] || 0));
+}
+
+export function flattenProgramWeeks(program = {}) {
+  if (!Array.isArray(program.weeks)) return [];
+  return program.weeks.flatMap((week) => (
+    (week.workouts || []).flatMap((workout) => (
+      (workout.exercises || []).map((exercise) => ({
+        id: exercise.id,
+        week: week.week,
+        date: templateWorkoutDate(week, workout),
+        phase: week.phase,
+        day: workout.day,
+        focus: workout.focus,
+        exercise: exercise.name,
+        prescription: exercisePrescriptionFromSets(exercise),
+        intensity: exerciseIntensityFromSets(exercise),
+        notes: exercise.note || "",
+        sets: exercise.sets || [],
+        programId: program.id || "default",
+      }))
+    ))
+  ));
+}
+
 export function programSlug(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || `program-${Date.now()}`;
 }
 
 export function progressSummary(programWorkouts, workouts) {
   const dates = [...new Set(programWorkouts.map((item) => item.date))].sort();
-  const completed = dates.filter((date) => workouts[date]?.completed).length;
-  const nextDate = dates.find((date) => !workouts[date]?.completed);
+  const completed = dates.filter((date) => isWorkoutCompleted(workouts[date])).length;
+  const nextDate = dates.find((date) => !isWorkoutCompleted(workouts[date]));
   return {
     total: dates.length,
     completed,
@@ -487,7 +559,7 @@ export function progressSummary(programWorkouts, workouts) {
 export function programDayGroups(workouts, programId) {
   return groupWorkouts(
     workouts
-      .filter((item) => (item.programId || "default") === programId && item.date)
+      .filter((item) => workoutProgramId(item) === programId && item.date)
       .sort((a, b) => a.date.localeCompare(b.date) || String(a.focus || "").localeCompare(String(b.focus || ""))),
   );
 }
@@ -498,7 +570,7 @@ export function programWeekNumber(program, date) {
 }
 
 export function workoutDateMapKey(workout, index = 0) {
-  return workout.id || `${workout.programId || "default"}:${workout.week || "week"}:${workout.day || "day"}:${workout.exercise || "exercise"}:${index}`;
+  return workout.id || `${workoutProgramId(workout) || "standalone"}:${workout.week || "week"}:${workout.day || "day"}:${workout.exercise || "exercise"}:${index}`;
 }
 
 export function buildWorkoutDatesForProgram(programWorkouts, startDate) {
@@ -519,7 +591,7 @@ export function applyActiveProgramDates(workouts, programs) {
   const programAccess = new Map(programs.map((program) => [program.id, program.activeProgram]));
   const mappedDates = new Map();
   Object.values(workouts.reduce((groups, workout) => {
-    const programId = workout.programId || "default";
+    const programId = workoutProgramId(workout);
     groups[programId] = [...(groups[programId] || []), workout];
     return groups;
   }, {})).forEach((group) => {
@@ -527,7 +599,7 @@ export function applyActiveProgramDates(workouts, programs) {
       .filter((workout) => workout.date)
       .sort((a, b) => `${a.date}`.localeCompare(`${b.date}`))
       .forEach((workout, index) => {
-        const activeProgram = programAccess.get(workout.programId || "default");
+        const activeProgram = programAccess.get(workoutProgramId(workout));
         const mappedDate = activeProgram?.scheduled && activeProgram.workoutDates?.[workoutDateMapKey(workout, index)];
         if (mappedDate) mappedDates.set(workout.id, mappedDate);
       });
@@ -546,7 +618,7 @@ export function applyActiveProgramDates(workouts, programs) {
 
 export function completedFlexibleProgramDaysThisWeek(workouts, programId, date) {
   return Object.entries(workouts).filter(([key, workout]) => {
-    if (!workout?.completed || workout.programId !== programId || workout.scheduleMode !== flexibleScheduleMode) return false;
+    if (!isWorkoutCompleted(workout) || workout.programId !== programId || workout.scheduleMode !== flexibleScheduleMode) return false;
     const workoutDate = logDateFromKey(workout.date || key);
     return workoutDate && isDateInSameWeek(workoutDate, date);
   }).length;
@@ -598,9 +670,13 @@ export function logDateFromKey(key) {
   return match ? match[0] : "";
 }
 
+export function isWorkoutCompleted(workout) {
+  return workout?.status === "completed" || workout?.completed === true;
+}
+
 export function completedWorkoutDates(workouts) {
   return Object.entries(workouts)
-    .filter(([, workout]) => workout?.completed)
+    .filter(([, workout]) => isWorkoutCompleted(workout))
     .map(([key, workout]) => logDateFromKey(workout.date || key))
     .filter(Boolean)
     .sort();
@@ -662,7 +738,7 @@ export function goalProgress(goal, workouts, maxes, weightUnit) {
     label = `${current || 0}/${target}${unit}`;
   } else {
     current = Object.values(workouts).filter((workout) => {
-      if (!workout.completed) return false;
+      if (!isWorkoutCompleted(workout)) return false;
       if (!goal.startDate) return true;
       return !workout.updatedAt || workout.updatedAt.slice(0, 10) >= goal.startDate;
     }).length;

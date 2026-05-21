@@ -2,13 +2,12 @@ import { createUserWithEmailAndPassword, fetchSignInMethodsForEmail, onAuthState
 import { getToken, onMessage } from "firebase/messaging";
 import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { ensureUserDocument, saveNotificationToken } from "../db";
-import { auth, hasPushConfig, isDevUserId, localKey, messagingClient, storage, vapidKey } from "./firebaseClient";
+import { auth, hasPushConfig, localKey, messagingClient, storage, vapidKey } from "./firebaseClient";
 
 export * from "./firebaseClient";
 export * from "../db";
 
 export function observeAuth(callback) {
-  localStorage.removeItem(localKey("devUser"));
   if (auth) return onAuthStateChanged(auth, callback);
   const stored = JSON.parse(localStorage.getItem(localKey("demoUser")) || "null");
   callback(stored);
@@ -41,7 +40,6 @@ export async function login(email, password, mode = "login") {
 }
 
 export async function logout() {
-  localStorage.removeItem(localKey("devUser"));
   if (auth) return signOut(auth);
   localStorage.removeItem(localKey("demoUser"));
 }
@@ -49,7 +47,7 @@ export async function logout() {
 export async function uploadUserProfileImage(userId, file, fallbackDataUrl) {
   if (!file) throw new Error("No profile image selected.");
 
-  if (storage && !isDevUserId(userId)) {
+  if (storage) {
     const extension = file.name?.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
     const path = `users/${userId}/profile/profile-image-${Date.now()}.${extension}`;
     const imageRef = storageRef(storage, path);
@@ -101,3 +99,4 @@ export async function listenForForegroundMessages(callback) {
   if (!messaging) return () => {};
   return onMessage(messaging, callback);
 }
+

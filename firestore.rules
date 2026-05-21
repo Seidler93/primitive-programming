@@ -26,6 +26,12 @@ service cloud.firestore {
         && request.resource.data.notifications.size() >= (resource.data.notifications is list ? resource.data.notifications.size() : 0);
     }
 
+    function creatingNotificationOnly() {
+      return signedIn()
+        && request.resource.data.keys().hasOnly(["notifications", "updatedAt"])
+        && request.resource.data.notifications is list;
+    }
+
     function appendingFriend() {
       return signedIn()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["friends", "updatedAt"])
@@ -35,8 +41,13 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if signedIn();
-      allow create, delete: if isOwner(userId) || isTrainer();
+      allow create: if isOwner(userId) || isTrainer() || creatingNotificationOnly();
+      allow delete: if isOwner(userId) || isTrainer();
       allow update: if isOwner(userId) || isTrainer() || appendingNotification() || appendingFriend();
+    }
+
+    match /users/{userId}/notificationTokens/{tokenId} {
+      allow read, write: if isOwner(userId) || isTrainer();
     }
 
     match /users/{userId}/conversations/{conversationId} {

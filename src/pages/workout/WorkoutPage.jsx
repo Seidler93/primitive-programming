@@ -3,35 +3,16 @@ import { CheckCircle2, Dumbbell, Minus, PencilLine, Plus, Save } from "lucide-re
 import { flexibleScheduleMode, maxFields, warmupPresets } from "../../app/config";
 import { ExerciseAutocomplete, SimilarExerciseButtons } from "../../components/exercise/ExerciseAutocomplete";
 import { saveUserWorkout } from "../../db";
-import { metricWorkoutPages } from "./layouts";
-import {
-  formatDate,
-  loadUserDistanceUnit,
-  loadUserMaxes,
-  loadUserWeightUnit,
-  loadWorkoutDraft,
-  needsMaxes,
-  prescribedPreview,
-  setRows,
-  workoutLogKey,
-} from "../../utils/appHelpers";
+import { AddCardioModalLayout, AddExerciseModalLayout, AddWarmupModalLayout, WarmupLayout, workoutTypeLayouts } from "./layouts";
+import {formatDate, inferMaxKey, isWorkoutCompleted, loadUserDistanceUnit, loadUserMaxes, loadUserWeightUnit, needsMaxes, prescribedPreview, setPercentageLabel, setRows, workoutLogKey, workoutProgramId } from "../../utils/appHelpers";
 
 export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWorkouts, onDone, onSaveStatus, onSaveMaxes }) {
   const logKey = workoutLogKey(date, workoutKey);
   const existing = workouts[logKey] || {};
-  const initialDraft = loadWorkoutDraft(user.uid, date, workoutKey);
   const savedMaxes = loadUserMaxes(user.uid);
   const mergedMaxes = (sessionMaxes = {}) => ({ ...savedMaxes, ...(sessionMaxes || {}) });
-  const [hydratedDraftFor, setHydratedDraftFor] = useState(`${user.uid}:${date}:${workoutKey}`);
   const isBlankWorkout = workout.length === 0;
-  const [started, setStarted] = useState(initialDraft.started || isBlankWorkout);
-  const [maxes, setMaxes] = useState(mergedMaxes(initialDraft.maxes || existing.maxes));
-  const [loads, setLoads] = useState(initialDraft.loads || existing.loads || {});
-  const [notes, setNotes] = useState(initialDraft.notes ?? existing.notes ?? "");
-  const [warmupSetCounts, setWarmupSetCounts] = useState(initialDraft.warmupSetCounts || existing.warmupSetCounts || {});
-  const [programmedSetCounts, setProgrammedSetCounts] = useState(initialDraft.programmedSetCounts || existing.programmedSetCounts || {});
-  const [exerciseOverrides, setExerciseOverrides] = useState(initialDraft.exerciseOverrides || existing.exerciseOverrides || {});
-  const [customExercises, setCustomExercises] = useState(initialDraft.customExercises || existing.customExercises || []);
+  const [maxes, setMaxes] = useState(() => user.maxes || {});
   const [showAddExercise, setShowAddExercise] = useState(false);
   const [showAddCardio, setShowAddCardio] = useState(false);
   const [newCardioName, setNewCardioName] = useState("");
@@ -44,86 +25,81 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
   const [newExerciseTracksWeight, setNewExerciseTracksWeight] = useState(true);
   const [openExerciseMenu, setOpenExerciseMenu] = useState("");
   const [collapsedExercises, setCollapsedExercises] = useState({});
+  const [started, setStarted] = useState(Boolean(existing.started));
+  const [loads, setLoads] = useState(existing.loads || {});
+  const [notes, setNotes] = useState(existing.notes || "");
+  const [customExercises, setCustomExercises] = useState(existing.customExercises || []);
+  const [warmupSetCounts, setWarmupSetCounts] = useState(existing.warmupSetCounts || {});
+  const [programmedSetCounts, setProgrammedSetCounts] = useState(existing.programmedSetCounts || {});
+  const [exerciseOverrides, setExerciseOverrides] = useState(existing.exerciseOverrides || {});
   const requiredMaxes = useMemo(() => needsMaxes(workout), [workout]);
   const weightUnit = loadUserWeightUnit(user.uid);
   const distanceUnit = loadUserDistanceUnit(user.uid);
-  const maxValue = (key) => maxes[key]?.value ?? maxes[key] ?? "";
+  const maxValue = (key) => maxes?.[key]?.value ?? maxes?.[key] ?? "";
   const missingMaxes = requiredMaxes.filter((key) => !Number(maxValue(key)));
-  const workoutPhase = workout[0]?.phase || "Custom workout";
   const workoutTitle = workout[0]
     ? workout[0].workoutType && workout[0].workoutType !== "strength"
       ? workout[0].focus
       : `${workout[0].focus} - Week ${workout[0].week}`
     : workoutKey === "blank" ? "Create workout" : "Scheduled Workout";
   const isFutureWorkout = date > new Date().toISOString().slice(0, 10);
+  const hasUnfinishedWorkout = !isFutureWorkout && existing.started && !isWorkoutCompleted(existing);
   const finishButtonLabel = "Save";
   const workoutType = workout[0]?.workoutType || "strength";
-  const MetricWorkoutPage = metricWorkoutPages[workoutType] || null;
   const metricWorkoutTitle = workout[0]?.focus || workoutTitle;
+  const isStrengthWorkout = workoutType === "strength";
+  const workoutTypeLayout = workoutTypeLayouts[workoutType] || workoutTypeLayouts.strength;
   const cardioTypeOptions = [
     { value: "metcon", label: "Metcon" },
     { value: "hiit", label: "HIIT" },
-    { value: "running", label: "Running" },
-    { value: "swimming", label: "Swimming" },
-    { value: "biking", label: "Biking" },
-    { value: "rowing", label: "Rowing" },
-    { value: "walking", label: "Walking" },
-    { value: "sport", label: "Sport" },
+    ...Object.values(workoutTypeLayouts)
+      .filter((layout) => layout.type !== "strength")
+      .map((layout) => ({ value: layout.type, label: layout.label })),
   ];
-  const cardioMetricLayouts = {
-    running: [
-      { key: "distance", label: "Distance" },
-      { key: "duration", label: "Duration", kind: "time" },
-      { key: "pace", label: "Pace", kind: "time" },
-      { key: "surface", label: "Surface", options: ["Pavement", "Trail", "Treadmill"], defaultValue: "pavement" },
-    ],
-    swimming: [
-      { key: "distance", label: "Distance" },
-      { key: "duration", label: "Duration", kind: "time" },
-      { key: "pace", label: "Pace", kind: "time" },
-      { key: "location", label: "Location", options: ["Pool", "Open water"] },
-    ],
-    biking: [
-      { key: "distance", label: "Distance" },
-      { key: "duration", label: "Duration", kind: "time" },
-      { key: "pace", label: "Pace", kind: "time" },
-      { key: "surface", label: "Surface", options: ["Pavement", "Trail", "Stationary"], defaultValue: "pavement" },
-    ],
-    rowing: [
-      { key: "distance", label: "Distance" },
-      { key: "duration", label: "Duration", kind: "time" },
-      { key: "pace", label: "Pace", kind: "time" },
-    ],
-    walking: [
-      { key: "distance", label: "Distance" },
-      { key: "duration", label: "Duration", kind: "time" },
-      { key: "pace", label: "Pace", kind: "time" },
-      { key: "surface", label: "Surface", options: ["Pavement", "Trail", "Treadmill"], defaultValue: "pavement" },
-    ],
-  };
-  const isMetricCardioType = (type) => Boolean(cardioMetricLayouts[type]);
-  const cardioTypeLabel = (type) => cardioTypeOptions.find((option) => option.value === type)?.label || "Cardio";
+
+  const isMetricCardioType = (type) => Boolean(workoutTypeLayouts[type]?.fields?.length);
+  const cardioTypeLabel = (type) => workoutTypeLayouts[type]?.label || cardioTypeOptions.find((option) => option.value === type)?.label || "Cardio";
   const cardioTextRows = (value = "") => Math.max(
     4,
     String(value || "").split("\n").reduce((rows, line) => rows + Math.max(1, Math.ceil(line.length / 44)), 0),
   );
 
-  function stripCompletionFields(workoutRecord) {
-    const { completed, completedAt, status, ...rest } = workoutRecord;
-    return rest;
+  function workoutMeta() {
+    return workout[0] ? {
+      date,
+      programId: workoutProgramId(workout[0]),
+      programWeek: workout[0].week,
+      workoutType: workout[0].workoutType,
+      week: workout[0].week,
+      sourceDate: workout[0].sourceDate || workout[0].date,
+    } : { date };
+  }
+
+  function workoutDraftState(overrides = {}) {
+    return {
+      started,
+      maxes,
+      loads,
+      notes,
+      customExercises,
+      warmupSetCounts,
+      programmedSetCounts,
+      exerciseOverrides,
+      ...overrides,
+    };
   }
 
   useEffect(() => {
-    const draft = loadWorkoutDraft(user.uid, date, workoutKey);
-    setStarted(draft.started || workout.length === 0);
-    const nextSavedMaxes = loadUserMaxes(user.uid);
-    setMaxes({ ...nextSavedMaxes, ...(draft.maxes || existing.maxes || {}) });
-    setLoads(draft.loads || existing.loads || {});
-    setNotes(draft.notes ?? existing.notes ?? "");
-    setWarmupSetCounts(draft.warmupSetCounts || existing.warmupSetCounts || {});
-    setProgrammedSetCounts(draft.programmedSetCounts || existing.programmedSetCounts || {});
-    setExerciseOverrides(draft.exerciseOverrides || existing.exerciseOverrides || {});
-    setCustomExercises(draft.customExercises || existing.customExercises || []);
+    // console.log(maxes);
+    const nextExisting = workouts[workoutLogKey(date, workoutKey)] || {};
+    setMaxes(mergedMaxes(nextExisting.maxes));
+    setStarted(Boolean(nextExisting.started));
+    setLoads(nextExisting.loads || {});
+    setNotes(nextExisting.notes || "");
+    setCustomExercises(nextExisting.customExercises || []);
+    setWarmupSetCounts(nextExisting.warmupSetCounts || {});
+    setProgrammedSetCounts(nextExisting.programmedSetCounts || {});
+    setExerciseOverrides(nextExisting.exerciseOverrides || {});
     setShowAddExercise(false);
     setShowAddCardio(false);
     setNewCardioName("");
@@ -136,11 +112,38 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
     setNewExerciseTracksWeight(true);
     setOpenExerciseMenu("");
     setCollapsedExercises({});
-    setHydratedDraftFor(`${user.uid}:${date}:${workoutKey}`);
   }, [date, user.uid, workout.length, workoutKey]);
 
   useEffect(() => {
-    if (hydratedDraftFor !== `${user.uid}:${date}:${workoutKey}` || !requiredMaxes.length) return;
+    if (!started && !existing.started) return;
+    const draft = {
+      ...existing,
+      ...workoutMeta(),
+      ...workoutDraftState(),
+      status: isWorkoutCompleted(existing) ? "completed" : "in_progress",
+      updatedAt: new Date().toISOString(),
+    };
+    setWorkouts((current) => {
+      const currentWorkout = current[logKey] || {};
+      const next = { ...currentWorkout, ...draft };
+      if (JSON.stringify(currentWorkout) === JSON.stringify(next)) return current;
+      return { ...current, [logKey]: next };
+    });
+  }, [
+    customExercises,
+    date,
+    exerciseOverrides,
+    loads,
+    logKey,
+    maxes,
+    notes,
+    programmedSetCounts,
+    started,
+    warmupSetCounts,
+    workoutKey,
+  ]);
+
+  useEffect(() => {
     const nextSavedMaxes = loadUserMaxes(user.uid);
     let changed = false;
     requiredMaxes.forEach((key) => {
@@ -154,63 +157,41 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
     if (changed) {
       void onSaveMaxes(user.uid, nextSavedMaxes);
     }
-  }, [date, hydratedDraftFor, maxes, requiredMaxes, user.uid, weightUnit, workoutKey]);
+  }, [date, maxes, requiredMaxes, user.uid, weightUnit, workoutKey]);
 
   async function persist(payload = {}, stateOverrides = {}, statusContext) {
-    const payloadControlsCompletion = payload.completed === true || payload.status === "completed";
-    const payloadClearsCompletion = payload.completed === false || ["scheduled", "deleted", "moved"].includes(payload.status);
-    const workoutMeta = workout[0] ? {
-      date,
-      programId: workout[0].programId || "default",
-      programWeek: workout[0].week,
-      workoutFocus: workout[0].focus,
-      workoutType: workout[0].workoutType,
-      scheduledPlaceholder: workout[0].scheduledPlaceholder,
-      phase: workout[0].phase,
-      week: workout[0].week,
-      focus: workout[0].focus,
-      sourceDate: workout[0].sourceDate || workout[0].date,
-      scheduleMode: workout[0].scheduleMode,
-    } : { date };
-    const nextState = {
-      maxes,
-      loads,
-      notes,
-      warmupSetCounts,
-      programmedSetCounts,
-      exerciseOverrides,
-      customExercises,
-      ...stateOverrides,
-    };
-    const baseCompleted = existing.completed === true || existing.status === "completed";
-    const completed = payloadControlsCompletion || (baseCompleted && !payloadClearsCompletion);
-    const completionPayload = completed ? {
-      completed: true,
+    const payloadCompletesWorkout = payload.status === "completed";
+    const payloadClearsCompletion = ["scheduled", "in_progress", "deleted", "moved"].includes(payload.status);
+    const nextState = workoutDraftState(stateOverrides);
+    const completed = payloadCompletesWorkout || (isWorkoutCompleted(existing) && !payloadClearsCompletion);
+    const statusPayload = completed ? {
       completedAt: payload.completedAt || existing.completedAt || new Date().toISOString(),
       status: "completed",
-    } : {};
-    const next = { ...existing, ...workoutMeta, ...nextState, ...payload, ...completionPayload, updatedAt: new Date().toISOString() };
+    } : {
+      completedAt: null,
+      status: payload.status || "in_progress",
+    };
+    const next = { ...existing, ...workoutMeta(), ...nextState, ...payload, ...statusPayload, updatedAt: new Date().toISOString() };
+    delete next.completed;
     setWorkouts((current) => {
       const currentWorkout = current[logKey];
-      const shouldPreserveCompleted = currentWorkout?.completed && !payloadClearsCompletion;
+      const shouldPreserveCompleted = isWorkoutCompleted(currentWorkout) && !payloadClearsCompletion;
       return {
         ...current,
         [logKey]: shouldPreserveCompleted ? {
           ...next,
-          completed: true,
           completedAt: currentWorkout.completedAt || next.completedAt || new Date().toISOString(),
           status: "completed",
         } : next,
       };
     });
-    const savePayload = statusContext?.action ? next : stripCompletionFields(next);
-    const result = await saveUserWorkout(user.uid, logKey, savePayload);
+    const result = await saveUserWorkout(user.uid, logKey, next);
     onSaveStatus?.(result, statusContext);
     return result;
   }
 
   async function finishWorkout(payload = {}) {
-    await persist(payload, {}, { action: payload.completed ? "completed" : "saved" });
+    await persist(payload, {}, { action: payload.status === "completed" ? "completed" : "saved" });
     onDone?.();
   }
 
@@ -379,7 +360,7 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
   }
 
   function renderCardioMetricFields(type, details, onChange, idPrefix) {
-    const fields = cardioMetricLayouts[type] || [];
+    const fields = workoutTypeLayouts[type]?.fields || [];
     return fields.map((field) => {
       const value = details[field.key] ?? field.defaultValue ?? "";
       if (field.options) {
@@ -429,6 +410,71 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
     });
   }
 
+  function renderWorkoutTypeCard(type, title, details, onChange, idPrefix) {
+    const layout = workoutTypeLayouts[type] || workoutTypeLayout;
+    const fields = layout.fields || [];
+    const Icon = layout.icon || Dumbbell;
+    const label = layout.label || cardioTypeLabel(type);
+
+    return (
+      <div className={`typed-workout-layout typed-workout-${type}`}>
+        <div className="typed-workout-heading">
+          <Icon size={24} />
+          <div>
+            <p className="eyebrow">{label}</p>
+            <h3>{title}</h3>
+          </div>
+        </div>
+        {fields.length ? (
+          <div className="typed-workout-grid">
+            {renderCardioMetricFields(type, details, onChange, idPrefix)}
+          </div>
+        ) : (
+          <label className="notes-field">
+            Session details
+            <textarea value={details.workout || ""} onChange={(event) => onChange({ workout: event.target.value })} rows={3} />
+          </label>
+        )}
+      </div>
+    );
+  }
+
+  function metricDetailsForWorkout(type) {
+    const fields = workoutTypeLayouts[type]?.fields || [];
+    return fields.reduce((details, field) => {
+      if (field.key === "distance") {
+        details.distance = loads[`typed:${type}:distance`] || "";
+        details.distanceUnit = loads[`typed:${type}:distanceUnit`] || distanceUnit;
+      } else if (field.kind === "time") {
+        details[`${field.key}Min`] = loads[`typed:${type}:${field.key}:min`] || "";
+        details[`${field.key}Sec`] = loads[`typed:${type}:${field.key}:sec`] || "";
+      } else {
+        details[field.key] = loads[`typed:${type}:${field.key}`] || field.defaultValue || "";
+      }
+      return details;
+    }, {});
+  }
+
+  function updateWorkoutTypeDetails(type, patch) {
+    setLoads((current) => {
+      const next = { ...current };
+      Object.entries(patch).forEach(([key, value]) => {
+        if (key === "distance") {
+          next[`typed:${type}:distance`] = value;
+        } else if (key === "distanceUnit") {
+          next[`typed:${type}:distanceUnit`] = value;
+        } else if (key.endsWith("Min")) {
+          next[`typed:${type}:${key.slice(0, -3)}:min`] = value;
+        } else if (key.endsWith("Sec")) {
+          next[`typed:${type}:${key.slice(0, -3)}:sec`] = value;
+        } else {
+          next[`typed:${type}:${key}`] = value;
+        }
+      });
+      return next;
+    });
+  }
+
   function removeCustomExercise(exerciseId) {
     const nextExercises = customExercises.filter((exercise) => exercise.id !== exerciseId);
     setCustomExercises(nextExercises);
@@ -468,6 +514,27 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
       key: `${item.id}:${index + 1}`,
       reps: lastReps,
     });
+  }
+
+  function programmedWeightPlaceholder(item, set) {
+    const percentageLabel = setPercentageLabel(set.percentageRange);
+    if (!percentageLabel || !set.percentageRange) {
+      return set.target || prescribedPreview(item, maxes, weightUnit) || "Actual";
+    }
+
+    const maxKey = inferMaxKey(item.exercise, `${item.prescription} ${item.intensity}`);
+    const max = Number(maxes?.[maxKey]?.value ?? maxes?.[maxKey]);
+    if (!maxKey || !max) return percentageLabel;
+
+    const low = Number(set.percentageRange.min);
+    const high = Number(set.percentageRange.max || set.percentageRange.min);
+    if (!Number.isFinite(low) || !Number.isFinite(high)) return percentageLabel;
+
+    const unit = weightUnit || maxes?.[maxKey]?.unit || "";
+    const lowWeight = Math.round((max * low) / 100);
+    const highWeight = Math.round((max * high) / 100);
+    const weightLabel = low === high ? `${lowWeight}${unit}` : `${lowWeight}-${highWeight}${unit}`;
+    return `${percentageLabel} · ${weightLabel}`;
   }
 
   function warmupRows(item) {
@@ -518,93 +585,26 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
     setProgrammedSetCounts(nextCounts);
   }
 
-  const metricWarmups = (
-    <>
-      {customExercises.filter((exercise) => exercise.section === "warmup").map((exercise) => (
-        <div className={`exercise-row custom-exercise-row warmup-exercise-row typed-warmup-row ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] ? "collapsed" : ""} ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] && isCustomExerciseComplete(exercise) ? "exercise-complete" : ""}`} key={exercise.id}>
-          <div className="exercise-info" onClick={() => toggleExerciseCollapse(exerciseCollapseId("custom", exercise.id))} role="button" tabIndex={0}>
-            <div>
-              <strong>{exercise.name}</strong>
-              <small>{exercise.trackWeights ? "Warm-up | Track weights" : "Warm-up | Completion only"}</small>
-              <span className="collapsed-set-summary">{customSetSummary(exercise)}</span>
-            </div>
-            <div className="exercise-edit-wrap">
-              <button className="icon-button exercise-edit-button" type="button" onClick={(event) => {
-                event.stopPropagation();
-                setOpenExerciseMenu(openExerciseMenu === exerciseMenuId("custom", exercise.id) ? "" : exerciseMenuId("custom", exercise.id));
-              }} aria-label={`Edit ${exercise.name}`} title="Edit warm-up">
-                <PencilLine size={16} />
-              </button>
-              {openExerciseMenu === exerciseMenuId("custom", exercise.id) && (
-                <div className="exercise-edit-menu">
-                  <div className="exercise-edit-menu-header">
-                    <strong>Change warm-up</strong>
-                    <span>Replaces this warm-up for this session.</span>
-                  </div>
-                  <label>
-                    New warm-up
-                    <ExerciseAutocomplete value={exercise.name} onChange={(value) => updateCustomExerciseField(exercise.id, { name: value })} id={`typed-warmup-edit-${exercise.id}`} placeholder="Mobility, drills, easy prep" />
-                  </label>
-                  <label className="checkbox-field">
-                    <input
-                      checked={exercise.trackWeights}
-                      onChange={(event) => updateCustomExerciseField(exercise.id, { trackWeights: event.target.checked })}
-                      type="checkbox"
-                    />
-                    Track weights used
-                  </label>
-                  <div className="exercise-edit-action-row">
-                    <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomExercise(exercise.id)}>
-                      Remove warm-up
-                    </button>
-                    <button className="quiet-button" type="button" onClick={saveExerciseEdit}>
-                      <Save size={16} />
-                      Save
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-          {!collapsedExercises[exerciseCollapseId("custom", exercise.id)] && <div className="set-list">
-            {exercise.sets.map((set) => (
-              <label className={`set-row ${exercise.trackWeights ? "tracked-set-row" : "check-set-row"}`} key={set.id}>
-                <input
-                  value={set.reps}
-                  onChange={(event) => updateCustomSet(exercise.id, set.id, { reps: event.target.value })}
-                  placeholder="Prep"
-                />
-                {exercise.trackWeights && (
-                  <input
-                    value={set.weight}
-                    onChange={(event) => updateCustomSet(exercise.id, set.id, { weight: event.target.value })}
-                    placeholder="Weight"
-                  />
-                )}
-                <input
-                  checked={set.done}
-                  onChange={(event) => updateCustomSet(exercise.id, set.id, { done: event.target.checked })}
-                  type="checkbox"
-                />
-              </label>
-            ))}
-            <div className="set-action-row">
-              <div className="set-action-group">
-                <button className="quiet-button" type="button" onClick={() => addCustomSet(exercise.id)}>
-                  <Plus size={16} />
-                  Add set
-                </button>
-                <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomSetOrExercise(exercise)}>
-                  <Minus size={16} />
-                  {exercise.sets.length <= 1 ? "Remove warm-up" : "Remove set"}
-                </button>
-              </div>
-            </div>
-          </div>}
-        </div>
-      ))}
-    </>
-  );
+  const warmups = customExercises.filter((exercise) => exercise.section === "warmup");
+  const warmupLayoutProps = {
+    addCustomSet,
+    collapsedExercises,
+    customSetSummary,
+    exerciseCollapseId,
+    exerciseMenuId,
+    isCustomExerciseComplete,
+    onToggleCollapse: toggleExerciseCollapse,
+    onToggleMenu: (menuId) => setOpenExerciseMenu(openExerciseMenu === menuId ? "" : menuId),
+    openExerciseMenu,
+    removeCustomExercise,
+    removeCustomSetOrExercise,
+    saveExerciseEdit,
+    updateCustomExerciseField,
+    updateCustomSet,
+    warmups,
+  };
+
+  const metricWarmups = <WarmupLayout {...warmupLayoutProps} typed />;
 
   return (
     <section className="workout-panel">
@@ -612,7 +612,7 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
         <div className="start-panel">
           <div className="workout-title-row">
             <div>
-              <p className="eyebrow">{formatDate(date)} | {workoutPhase}</p>
+              <p className="eyebrow">{formatDate(date)}</p>
               <h2>{workoutTitle}</h2>
             </div>
           </div>
@@ -645,132 +645,60 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
             }}
           >
             <Dumbbell size={18} />
-            Start workout
+            {hasUnfinishedWorkout ? "Resume workout" : "Start workout"}
           </button>
         </div>
       ) : (
         <>
           <div className="workout-title-row">
             <div>
-              <p className="eyebrow">{formatDate(date)} | {workoutPhase}</p>
+              <p className="eyebrow">{formatDate(date)}</p>
               <h2>{workoutTitle}</h2>
             </div>
             <div className="workout-title-actions">
-              <button className="icon-button" type="button" onClick={() => finishWorkout({ completed: true })} aria-label="Mark complete" title="Mark complete">
+              <button className="icon-button" type="button" onClick={() => finishWorkout({ status: "completed" })} aria-label="Mark complete" title="Mark complete">
                 <CheckCircle2 size={20} />
               </button>
             </div>
           </div>
-          {MetricWorkoutPage ? (
-            <MetricWorkoutPage
-              finishButtonLabel={finishButtonLabel}
-              distanceUnit={distanceUnit}
-              isFutureWorkout={isFutureWorkout}
-              loads={loads}
-              notes={notes}
-              onAddWarmup={() => setShowAddWarmup(true)}
-              onCompleteWorkout={finishWorkout}
-              onFinishWorkout={finishWorkout}
-              setLoads={setLoads}
-              setNotes={setNotes}
-              title={metricWorkoutTitle}
-              warmups={metricWarmups}
-            />
-          ) : (
+          <div className="workout-add-section-action">
+            <button className="secondary" type="button" onClick={() => setShowAddWarmup(true)}>
+              <Plus size={18} />
+              Add warm-up
+            </button>
+          </div>
+          {!isStrengthWorkout && (
             <>
-          <button className="secondary" type="button" onClick={() => setShowAddWarmup(true)}>
-            <Plus size={18} />
-            Add warm-up
-          </button>
+              {renderWorkoutTypeCard(
+                workoutType,
+                metricWorkoutTitle,
+                metricDetailsForWorkout(workoutType),
+                (patch) => updateWorkoutTypeDetails(workoutType, patch),
+                `workout-${workoutType}`,
+              )}
+              {metricWarmups}
+              <label className="notes-field">
+                Session notes
+                <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} />
+              </label>
+              <button className="secondary" type="button" onClick={() => finishWorkout({ status: "in_progress" })}>
+                <Save size={18} />
+                {finishButtonLabel}
+              </button>
+              <button className="primary" type="button" onClick={() => finishWorkout({ status: "completed" })}>
+                <CheckCircle2 size={18} />
+                Complete
+              </button>
+            </>
+          )}
+          {isStrengthWorkout && (
+            <>
           <div className="exercise-table">
             <div className="table-head">
               <span>Exercise</span>
               <span>Sets</span>
             </div>
-            {customExercises.filter((exercise) => exercise.section === "warmup").map((exercise) => (
-              <div className={`exercise-row custom-exercise-row warmup-exercise-row ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] ? "collapsed" : ""} ${collapsedExercises[exerciseCollapseId("custom", exercise.id)] && isCustomExerciseComplete(exercise) ? "exercise-complete" : ""}`} key={exercise.id}>
-                <div className="exercise-info" onClick={() => toggleExerciseCollapse(exerciseCollapseId("custom", exercise.id))} role="button" tabIndex={0}>
-                  <div>
-                    <strong>{exercise.name}</strong>
-                    <small>{exercise.trackWeights ? "Warm-up | Track weights" : "Warm-up | Completion only"}</small>
-                    <span className="collapsed-set-summary">{customSetSummary(exercise)}</span>
-                  </div>
-                  <div className="exercise-edit-wrap">
-                    <button className="icon-button exercise-edit-button" type="button" onClick={(event) => {
-                      event.stopPropagation();
-                      setOpenExerciseMenu(openExerciseMenu === exerciseMenuId("custom", exercise.id) ? "" : exerciseMenuId("custom", exercise.id));
-                    }} aria-label={`Edit ${exercise.name}`} title="Edit exercise">
-                      <PencilLine size={16} />
-                    </button>
-                    {openExerciseMenu === exerciseMenuId("custom", exercise.id) && (
-                      <div className="exercise-edit-menu">
-                        <div className="exercise-edit-menu-header">
-                          <strong>Change exercise</strong>
-                          <span>Replaces this warm-up for this session.</span>
-                        </div>
-                        <label>
-                          New exercise
-                          <ExerciseAutocomplete value={exercise.name} onChange={(value) => updateCustomExerciseField(exercise.id, { name: value })} id={`exercise-edit-${exercise.id}`} placeholder="Type RDL, squat, clean..." />
-                        </label>
-                        <SimilarExerciseButtons exerciseName={exercise.name} onSelect={(value) => updateCustomExerciseField(exercise.id, { name: value })} />
-                        <label className="checkbox-field">
-                          <input
-                            checked={exercise.trackWeights}
-                            onChange={(event) => updateCustomExerciseField(exercise.id, { trackWeights: event.target.checked })}
-                            type="checkbox"
-                          />
-                          Track weights used
-                        </label>
-                        <div className="exercise-edit-action-row">
-                          <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomExercise(exercise.id)}>
-                            Remove warm-up
-                          </button>
-                          <button className="quiet-button" type="button" onClick={saveExerciseEdit}>
-                            <Save size={16} />
-                            Save
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {!collapsedExercises[exerciseCollapseId("custom", exercise.id)] && <div className="set-list">
-                  {exercise.sets.map((set) => (
-                    <label className={`set-row ${exercise.trackWeights ? "tracked-set-row" : "check-set-row"}`} key={set.id}>
-                      <input
-                        value={set.reps}
-                        onChange={(event) => updateCustomSet(exercise.id, set.id, { reps: event.target.value })}
-                        placeholder="Reps"
-                      />
-                      {exercise.trackWeights && (
-                        <input
-                          value={set.weight}
-                          onChange={(event) => updateCustomSet(exercise.id, set.id, { weight: event.target.value })}
-                          placeholder="Weight"
-                        />
-                      )}
-                      <input
-                        checked={set.done}
-                        onChange={(event) => updateCustomSet(exercise.id, set.id, { done: event.target.checked })}
-                        type="checkbox"
-                      />
-                    </label>
-                  ))}
-                  <div className="set-action-row">
-                    <div className="set-action-group">
-                      <button className="quiet-button" type="button" onClick={() => addCustomSet(exercise.id)}>
-                        <Plus size={16} />
-                        Add set
-                      </button>
-                      <button className="quiet-button danger-text-button" type="button" onClick={() => removeCustomSetOrExercise(exercise)}>
-                        <Minus size={16} />
-                        {exercise.sets.length <= 1 ? "Remove warm-up" : "Remove set"}
-                      </button>
-                    </div>
-                  </div>
-                </div>}
-              </div>
-            ))}
+            <WarmupLayout {...warmupLayoutProps} />
             {workout.map((item) => {
               const displayItem = programmedExercise(item);
               const menuId = exerciseMenuId("programmed", item.id);
@@ -866,7 +794,7 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
                         <input
                           value={loads[set.key] ?? (set.key.endsWith(":1") ? loads[item.id] || "" : "")}
                           onChange={(event) => setLoads({ ...loads, [set.key]: event.target.value })}
-                          placeholder={prescribedPreview(displayItem, maxes, weightUnit) || "Actual"}
+                          placeholder={programmedWeightPlaceholder(displayItem, set)}
                         />
                       )}
                       <input
@@ -1047,9 +975,13 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
                 </div>
                 {!collapsedExercises[exerciseCollapseId("custom", exercise.id)] && (
                   isMetricCardioType(exercise.cardioType) ? (
-                    <div className="cardio-metric-fields">
-                      {renderCardioMetricFields(exercise.cardioType, exercise.cardioDetails || {}, (patch) => updateCustomCardioDetails(exercise, patch), `cardio-${exercise.id}`)}
-                    </div>
+                    renderWorkoutTypeCard(
+                      exercise.cardioType,
+                      exercise.name,
+                      exercise.cardioDetails || {},
+                      (patch) => updateCustomCardioDetails(exercise, patch),
+                      `cardio-${exercise.id}`,
+                    )
                   ) : (
                     <div className="cardio-text-fields">
                       <div className="cardio-workout-display">
@@ -1071,144 +1003,65 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
             ))}
             
           </div>
-          <button className="secondary" type="button" onClick={() => setShowAddCardio(true)}>
-            <Plus size={18} />
-            Add cardio
-          </button>
-          <label className="notes-field">
-            Session notes
-            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} />
-          </label>
-          <button className="secondary" type="button" onClick={() => finishWorkout({})}>
-            <Save size={18} />
-            {finishButtonLabel}
-          </button>
-          <button className="primary" type="button" onClick={() => finishWorkout({ completed: true })}>
-            <CheckCircle2 size={18} />
-            Complete
-          </button>
-          {showAddExercise && (
-            <div className="modal-backdrop" role="presentation">
-              <div className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="add-exercise-title">
-                <div>
-                  <p className="eyebrow">Session exercise</p>
-                  <h2 id="add-exercise-title">Add exercise</h2>
-                </div>
-                <form className="modal-form" onSubmit={addCustomExercise}>
-                  <label>
-                    Exercise name
-                    <ExerciseAutocomplete value={newExerciseName} onChange={setNewExerciseName} id="new-exercise-name" placeholder="Accessory, abs, RDL, extra pulls" />
-                  </label>
-                  <label className="checkbox-field">
-                    <input
-                      checked={newExerciseTracksWeight}
-                      onChange={(event) => setNewExerciseTracksWeight(event.target.checked)}
-                      type="checkbox"
-                    />
-                    Track weights used
-                  </label>
-                  <button className="primary" type="submit">
-                    <Plus size={18} />
-                    Add exercise
-                  </button>
-                  <button className="text-button" type="button" onClick={() => setShowAddExercise(false)}>
-                    Cancel
-                  </button>
-                </form>
-              </div>
+          <div className="workout-bottom-actions">
+            <button className="secondary workout-add-section-button" type="button" onClick={() => setShowAddCardio(true)}>
+              <Plus size={18} />
+              Add cardio
+            </button>
+            <div className="workout-save-actions">
+              <button className="secondary" type="button" onClick={() => finishWorkout({ status: "in_progress" })}>
+                <Save size={18} />
+                {finishButtonLabel}
+              </button>
+              <button className="primary" type="button" onClick={() => finishWorkout({ status: "completed" })}>
+                <CheckCircle2 size={18} />
+                Complete
+              </button>
             </div>
+          </div>
+          </>
+          )}
+          {showAddExercise && (
+            <AddExerciseModalLayout
+              newExerciseName={newExerciseName}
+              newExerciseTracksWeight={newExerciseTracksWeight}
+              onClose={() => setShowAddExercise(false)}
+              onNameChange={setNewExerciseName}
+              onSubmit={addCustomExercise}
+              onTrackWeightsChange={setNewExerciseTracksWeight}
+            />
           )}
           {showAddCardio && (
-            <div className="modal-backdrop" role="presentation">
-              <div className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="add-cardio-title">
-                <div>
-                  <p className="eyebrow">Workout cardio</p>
-                  <h2 id="add-cardio-title">Add cardio</h2>
-                </div>
-                <form className="modal-form" onSubmit={addCardioExercise}>
-                  <label>
-                    Type
-                    <select value={newCardioType} onChange={(event) => {
-                      setNewCardioType(event.target.value);
-                      setNewCardioDetails({});
-                    }}>
-                      {cardioTypeOptions.map((option) => (
-                        <option value={option.value} key={option.value}>{option.label}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Title
-                    <input value={newCardioName} onChange={(event) => setNewCardioName(event.target.value)} id="new-cardio-name" placeholder={cardioTypeLabel(newCardioType)} />
-                  </label>
-                  {isMetricCardioType(newCardioType) ? (
-                    <div className="cardio-metric-fields">
-                      {renderCardioMetricFields(newCardioType, newCardioDetails, updateNewCardioDetails, "new-cardio")}
-                    </div>
-                  ) : (
-                    <>
-                      <label>
-                        Workout
-                        <textarea
-                          value={newCardioDetails.workout || ""}
-                          onChange={(event) => updateNewCardioDetails({ workout: event.target.value })}
-                          rows={cardioTextRows(newCardioDetails.workout)}
-                          placeholder="Type the workout here"
-                        />
-                      </label>
-                    </>
-                  )}
-                  <button className="primary" type="submit">
-                    <Plus size={18} />
-                    Add cardio
-                  </button>
-                  <button className="text-button" type="button" onClick={() => setShowAddCardio(false)}>
-                    Cancel
-                  </button>
-                </form>
-              </div>
-            </div>
+            <AddCardioModalLayout
+              cardioTextRows={cardioTextRows}
+              cardioTypeLabel={cardioTypeLabel}
+              cardioTypeOptions={cardioTypeOptions}
+              isMetricCardioType={isMetricCardioType}
+              newCardioDetails={newCardioDetails}
+              newCardioName={newCardioName}
+              newCardioType={newCardioType}
+              onClose={() => setShowAddCardio(false)}
+              onDetailsChange={updateNewCardioDetails}
+              onNameChange={setNewCardioName}
+              onSubmit={addCardioExercise}
+              onTypeChange={(type) => {
+                setNewCardioType(type);
+                setNewCardioDetails({});
+              }}
+              renderCardioMetricFields={renderCardioMetricFields}
+            />
           )}
           {showAddWarmup && (
-            <div className="modal-backdrop" role="presentation">
-              <div className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="add-warmup-title">
-                <div>
-                  <p className="eyebrow">Workout warm-up</p>
-                  <h2 id="add-warmup-title">Add warm-up</h2>
-                </div>
-                <div className="preset-grid">
-                  {warmupPresets.map((preset) => (
-                    <button className="preset-button" type="button" key={preset.id} onClick={() => addWarmupPreset(preset)}>
-                      <strong>{preset.title}</strong>
-                      <span>{preset.exercises.join(" | ")}</span>
-                    </button>
-                  ))}
-                </div>
-                <form className="modal-form" onSubmit={addWarmupExercise}>
-                  <label>
-                    Custom warm-up exercise
-                    <ExerciseAutocomplete value={newWarmupName} onChange={setNewWarmupName} id="new-warmup-name" placeholder="Banded shoulder prep, hip flow, empty bar work" />
-                  </label>
-                  <label className="checkbox-field">
-                    <input
-                      checked={newWarmupTracksWeight}
-                      onChange={(event) => setNewWarmupTracksWeight(event.target.checked)}
-                      type="checkbox"
-                    />
-                    Track weights used
-                  </label>
-                  <button className="primary" type="submit">
-                    <Plus size={18} />
-                    Add custom warm-up
-                  </button>
-                  <button className="text-button" type="button" onClick={() => setShowAddWarmup(false)}>
-                    Cancel
-                  </button>
-                </form>
-              </div>
-            </div>
-          )}
-            </>
+            <AddWarmupModalLayout
+              newWarmupName={newWarmupName}
+              newWarmupTracksWeight={newWarmupTracksWeight}
+              onClose={() => setShowAddWarmup(false)}
+              onNameChange={setNewWarmupName}
+              onPresetSelect={addWarmupPreset}
+              onSubmit={addWarmupExercise}
+              onTrackWeightsChange={setNewWarmupTracksWeight}
+              warmupPresets={warmupPresets}
+            />
           )}
         </>
       )}

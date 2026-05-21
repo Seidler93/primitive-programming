@@ -1,5 +1,5 @@
 import { arrayUnion, collection, doc, getDoc, getDocs, setDoc } from "firebase/firestore";
-import { db, defaultProgramAccess, hasFirebaseConfig, isDevUserId, localKey, readJson, withTimeout } from "../services/firebaseClient";
+import { db, defaultProgramAccess, hasFirebaseConfig, localKey, readJson, withTimeout } from "../services/firebaseClient";
 import { normalizeActivePrograms, normalizeConversations, normalizeFriends, normalizeProgramAccess, userProgramsLocalKey } from "./helpers";
 
 // Root user document and user access helpers.
@@ -12,7 +12,7 @@ export async function ensureUserDocument(user, defaults = {}) {
   const role = defaults.role || user.role || localProfile.role || "athlete";
   let rootData = {};
 
-  if (db && !isDevUserId(user.uid)) {
+  if (db) {
     const payload = {
       uid: user.uid,
       email: user.email || "",
@@ -52,7 +52,7 @@ export async function ensureUserDocument(user, defaults = {}) {
 }
 
 export async function loadUserProgramIds(userId) {
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       const snapshot = await withTimeout(getDoc(doc(db, "users", userId)), "User programs request timed out.");
       if (snapshot.exists()) {
@@ -75,7 +75,7 @@ export async function grantUserProgramAccess(userId, programId) {
   const nextProgramIds = normalizeProgramAccess([...localProgramIds, programId]);
   localStorage.setItem(userProgramsLocalKey(userId), JSON.stringify(nextProgramIds));
 
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       await setDoc(doc(db, "users", userId), {
         programs: arrayUnion(programId),
@@ -106,8 +106,6 @@ export async function loadAthletes() {
 }
 
 export async function isTrainerUser(user) {
-  if (user?.uid === "dev-coach") return true;
-  if (user?.uid === "dev-athlete") return false;
   if (user?.role === "athlete") return false;
   if (!hasFirebaseConfig) return true;
   const configuredEmail = import.meta.env.VITE_TRAINER_EMAIL;
@@ -121,3 +119,4 @@ export async function isTrainerUser(user) {
     return false;
   }
 }
+

@@ -1,11 +1,11 @@
 import { arrayUnion, doc, getDoc, setDoc } from "firebase/firestore";
-import { db, isDevUserId, readJson, withTimeout } from "../services/firebaseClient";
+import { db, readJson, withTimeout } from "../services/firebaseClient";
 import { normalizeActivePrograms, userActiveProgramsLocalKey } from "./helpers";
 
 // Active programs are stored on the root user document.
 
 export async function loadUserActivePrograms(userId) {
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       const snapshot = await withTimeout(getDoc(doc(db, "users", userId)), "User active programs request timed out.");
       if (snapshot.exists()) {
@@ -27,7 +27,7 @@ export async function saveUserActiveProgram(userId, activeProgram) {
   ]);
   localStorage.setItem(userActiveProgramsLocalKey(userId), JSON.stringify(next));
 
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       await setDoc(doc(db, "users", userId), {
         activePrograms: next,
@@ -50,7 +50,7 @@ export async function removeUserActiveProgram(userId, programId) {
   const next = normalizeActivePrograms(current.filter((program) => program.id !== programId));
   localStorage.setItem(userActiveProgramsLocalKey(userId), JSON.stringify(next));
 
-  if (db && !isDevUserId(userId)) {
+  if (db) {
     try {
       await setDoc(doc(db, "users", userId), {
         activePrograms: next,
@@ -65,3 +65,4 @@ export async function removeUserActiveProgram(userId, programId) {
 
   return { synced: false, local: true };
 }
+

@@ -1,5 +1,6 @@
 export * from "./activePrograms";
 export * from "./communities";
+export * from "./initialUserInfo";
 export * from "./notifications";
 export * from "./profile";
 export * from "./progress";

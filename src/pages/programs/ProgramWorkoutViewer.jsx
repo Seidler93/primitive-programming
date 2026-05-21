@@ -1,6 +1,6 @@
 import React from "react";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
-import { formatDate, groupWorkouts, progressSummary } from "../../utils/appHelpers";
+import { formatDate, groupWorkouts, isWorkoutCompleted, progressSummary } from "../../utils/appHelpers";
 
 export function ProgramWorkoutViewer({ program, programWorkouts, workouts, onBack }) {
   const workoutGroups = groupWorkouts(
@@ -45,7 +45,7 @@ export function ProgramWorkoutViewer({ program, programWorkouts, workouts, onBac
       {workoutGroups.length ? (
         <div className="program-workout-list">
           {workoutGroups.map((group, index) => {
-            const completed = Boolean(workouts[group.date]?.completed);
+            const completed = isWorkoutCompleted(workouts[group.date]);
             return (
               <article className={`program-workout-card ${completed ? "completed" : ""}`} key={group.key}>
                 <div className="program-workout-card-header">
