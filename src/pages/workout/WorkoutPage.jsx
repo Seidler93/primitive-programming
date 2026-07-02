@@ -67,6 +67,8 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
   function workoutMeta() {
     return workout[0] ? {
       date,
+      workoutKey,
+      title: workoutTitle,
       programId: workoutProgramId(workout[0]),
       programWeek: workout[0].week,
       workoutType: workout[0].workoutType,
@@ -78,7 +80,7 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
   function workoutDraftState(overrides = {}) {
     return {
       started,
-      maxes,
+      items: workout.map((item) => programmedExercise(item)),
       loads,
       notes,
       customExercises,
@@ -92,7 +94,7 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
   useEffect(() => {
     // console.log(maxes);
     const nextExisting = workouts[workoutLogKey(date, workoutKey)] || {};
-    setMaxes(mergedMaxes(nextExisting.maxes));
+    setMaxes(mergedMaxes());
     setStarted(Boolean(nextExisting.started));
     setLoads(nextExisting.loads || {});
     setNotes(nextExisting.notes || "");
@@ -135,7 +137,6 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
     exerciseOverrides,
     loads,
     logKey,
-    maxes,
     notes,
     programmedSetCounts,
     started,
@@ -299,6 +300,10 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
   function customSetSummary(exercise) {
     const reps = exercise.sets.map((set) => set.reps || "set");
     return reps.length ? reps.join(", ") : "No sets";
+  }
+
+  function programmedExerciseMeta(item) {
+    return [item.prescription, item.notes || "No notes"].filter(Boolean).join(" | ");
   }
 
   function isProgrammedExerciseComplete(item) {
@@ -522,7 +527,7 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
       return set.target || prescribedPreview(item, maxes, weightUnit) || "Actual";
     }
 
-    const maxKey = inferMaxKey(item.exercise, `${item.prescription} ${item.intensity}`);
+    const maxKey = inferMaxKey(item.exercise, `${item.prescription}`);
     const max = Number(maxes?.[maxKey]?.value ?? maxes?.[maxKey]);
     if (!maxKey || !max) return percentageLabel;
 
@@ -708,7 +713,7 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
                 <div className="exercise-info" onClick={() => toggleExerciseCollapse(collapseId)} role="button" tabIndex={0}>
                   <div>
                     <strong>{displayItem.exercise}</strong>
-                    <small>{displayItem.intensity || "No intensity"} | {displayItem.notes || "No notes"}</small>
+                    <small>{programmedExerciseMeta(displayItem)}</small>
                     <span className="collapsed-set-summary">{programmedSetSummary(item)}</span>
                   </div>
                   <div className="exercise-edit-wrap">
@@ -732,10 +737,6 @@ export function WorkoutPage({ workout, workoutKey, date, user, workouts, setWork
                         <label>
                           Prescription
                           <input value={displayItem.prescription} onChange={(event) => updateProgrammedExercise(item, { prescription: event.target.value })} />
-                        </label>
-                        <label>
-                          Intensity
-                          <input value={displayItem.intensity || ""} onChange={(event) => updateProgrammedExercise(item, { intensity: event.target.value })} />
                         </label>
                         <label className="checkbox-field">
                           <input

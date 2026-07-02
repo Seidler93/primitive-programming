@@ -59,7 +59,7 @@ export function ProgramWorkoutViewer({ program, programWorkouts, workouts, onBac
                   {group.items.map((item, itemIndex) => (
                     <div className="program-workout-exercise" key={item.id || `${group.key}-${itemIndex}`}>
                       <strong>{item.exercise || "Exercise"}</strong>
-                      <span>{[item.prescription, item.intensity].filter(Boolean).join(" | ") || "No prescription yet"}</span>
+                      <span>{item.prescription || "No prescription yet"}</span>
                     </div>
                   ))}
                 </div>

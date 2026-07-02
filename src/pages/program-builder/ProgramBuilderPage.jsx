@@ -17,7 +17,6 @@ export function ProgramBuilderPage({ user, isTrainer, programs, programWorkouts,
   const [focus, setFocus] = useState("");
   const [exercise, setExercise] = useState("");
   const [prescription, setPrescription] = useState("");
-  const [intensity, setIntensity] = useState("");
   const [notes, setNotes] = useState("");
   const [expandedProgramId, setExpandedProgramId] = useState("");
   const [viewingProgram, setViewingProgram] = useState(null);
@@ -110,7 +109,6 @@ export function ProgramBuilderPage({ user, isTrainer, programs, programWorkouts,
       focus,
       exercise,
       prescription,
-      intensity,
       notes,
       programId: workoutProgramId || "default",
       day: new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date(`${scheduledDate}T12:00:00`)),
@@ -120,7 +118,6 @@ export function ProgramBuilderPage({ user, isTrainer, programs, programWorkouts,
     await saveCustomWorkout(workoutProgramId || "default", workout);
     setExercise("");
     setPrescription("");
-    setIntensity("");
     setNotes("");
     await onWorkoutCreated(scheduledDate);
   }
@@ -415,10 +412,6 @@ export function ProgramBuilderPage({ user, isTrainer, programs, programWorkouts,
             <label>
               Reps / prescription
               <input value={prescription} onChange={(event) => setPrescription(event.target.value)} placeholder="4 x 2 @ 80%" required />
-            </label>
-            <label>
-              Intensity
-              <input value={intensity} onChange={(event) => setIntensity(event.target.value)} placeholder="75-85%" />
             </label>
             <label className="wide">
               Coach notes

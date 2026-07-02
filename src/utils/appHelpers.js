@@ -417,7 +417,7 @@ export function percentages(item) {
       }))
       .filter((range) => Number.isFinite(range.low) && Number.isFinite(range.high));
   }
-  const text = `${item.prescription} ${item.intensity}`.replace(/–/g, "-");
+  const text = `${item.prescription}`.replace(/–/g, "-");
   const matches = [...text.matchAll(/(\d{2,3})(?:-(\d{2,3}))?%/g)];
   return matches.map((match) => ({
     low: Number(match[1]),
@@ -470,7 +470,7 @@ export function setRows(item) {
 }
 
 export function prescribedPreview(item, maxes, weightUnit) {
-  const maxKey = inferMaxKey(item.exercise, `${item.prescription} ${item.intensity}`);
+  const maxKey = inferMaxKey(item.exercise, `${item.prescription}`);
   const max = Number(maxes[maxKey]?.value ?? maxes[maxKey]);
   const percents = percentages(item);
   if (!maxKey || !max || percents.length === 0) return "";
@@ -497,11 +497,6 @@ export function exercisePrescriptionFromSets(exercise = {}) {
   if (!sets.length) return "";
   const reps = sets[0]?.reps || "set";
   return `${sets.length} x ${reps}`;
-}
-
-export function exerciseIntensityFromSets(exercise = {}) {
-  const firstSet = (exercise.sets || [])[0] || {};
-  return setPercentageLabel(firstSet.percentageRange) || firstSet.target || "";
 }
 
 export const workoutDayOffsets = {
@@ -531,7 +526,6 @@ export function flattenProgramWeeks(program = {}) {
         focus: workout.focus,
         exercise: exercise.name,
         prescription: exercisePrescriptionFromSets(exercise),
-        intensity: exerciseIntensityFromSets(exercise),
         notes: exercise.note || "",
         sets: exercise.sets || [],
         programId: program.id || "default",
@@ -833,8 +827,8 @@ export function metricLineChart(entries, key, targetValue) {
 
 export function needsMaxes(workout) {
   return [...new Set(workout.flatMap((item) => {
-    const needs = percentages(item).length > 0 || /opener/i.test(`${item.prescription} ${item.intensity}`);
-    const key = inferMaxKey(item.exercise, `${item.prescription} ${item.intensity}`);
+    const needs = percentages(item).length > 0 || /opener/i.test(`${item.prescription}`);
+    const key = inferMaxKey(item.exercise, `${item.prescription}`);
     return needs && key ? [key] : [];
   }))];
 }

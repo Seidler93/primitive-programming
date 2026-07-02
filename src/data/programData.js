@@ -3866,11 +3866,6 @@ function exercisePrescription(exercise) {
   return `${sets.length} x ${reps}`;
 }
 
-function exerciseIntensity(exercise) {
-  const firstSet = (exercise.sets || [])[0] || {};
-  return setPercentageLabel(firstSet.percentageRange) || firstSet.target || "";
-}
-
 export const importedProgram = weightliftingProgram.weeks.flatMap((week) => (
   week.workouts.flatMap((workout) => (
     workout.exercises.map((exercise) => ({
@@ -3882,7 +3877,6 @@ export const importedProgram = weightliftingProgram.weeks.flatMap((week) => (
       focus: workout.focus,
       exercise: exercise.name,
       prescription: exercisePrescription(exercise),
-      intensity: exerciseIntensity(exercise),
       notes: exercise.note || "",
       sets: exercise.sets || [],
     }))

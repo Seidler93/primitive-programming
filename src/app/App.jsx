@@ -335,14 +335,17 @@ function AppContent() {
     ...groupWorkouts(workoutsByDate[selectedDate] || []),
     ...flexibleWorkoutGroupsForSelectedDate,
   ], [flexibleWorkoutGroupsForSelectedDate, selectedDate, workoutsByDate]);
-  const selectedWorkout = selectedWorkoutKey === "blank"
-    ? []
-    : (selectedWorkoutGroups.find((group) => group.key === selectedWorkoutKey)?.items || selectedWorkoutGroups[0]?.items || [])
-      .filter((item) => !item.scheduledPlaceholder || (item.workoutType && item.workoutType !== "strength"));
   const activeWorkoutKey = selectedWorkoutKey || selectedWorkoutGroups[0]?.key || "blank";
   const activeWorkoutGroup = selectedWorkoutKey === "blank"
     ? null
     : selectedWorkoutGroups.find((group) => group.key === activeWorkoutKey) || selectedWorkoutGroups[0] || null;
+  const savedActiveWorkout = activeWorkoutGroup ? workouts[workoutLogKey(activeWorkoutGroup.date, activeWorkoutKey)] : null;
+  const selectedWorkout = selectedWorkoutKey === "blank"
+    ? []
+    : (Array.isArray(savedActiveWorkout?.items) && savedActiveWorkout.items.length
+      ? savedActiveWorkout.items
+      : activeWorkoutGroup?.items || [])
+      .filter((item) => !item.scheduledPlaceholder || (item.workoutType && item.workoutType !== "strength"));
   const today = new Date().toISOString().slice(0, 10);
   const todayTarget = workoutsByDate[today] ? today : dates.find((date) => date >= today) || dates[0] || today;
   const appData = useMemo(() => ({
@@ -443,7 +446,6 @@ function AppContent() {
       focus: workoutTitle,
       exercise: "",
       prescription: "",
-      intensity: "",
       notes: "",
       programId: null,
       workoutType,

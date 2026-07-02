@@ -2,7 +2,7 @@ import { collection, doc, getDocs, orderBy, query, setDoc } from "firebase/fires
 import { db, flexibleProgramScheduleMode, localKey, withTimeout } from "../services/firebaseClient";
 import { loadUserActivePrograms, saveUserActiveProgram } from "./activePrograms";
 import { grantUserProgramAccess, loadUserProgramIds } from "./users";
-import { exerciseIntensityFromSets, exercisePrescriptionFromSets, templateWorkoutDate } from "../utils/appHelpers";
+import { exercisePrescriptionFromSets, templateWorkoutDate } from "../utils/appHelpers";
 
 // Program documents live in `programs`; workout templates live under `programs/{programId}/workouts`.
 
@@ -120,7 +120,6 @@ function normalizeProgramWorkoutDocument(programId, workout) {
     focus: workout.focus,
     exercise: exercise.name,
     prescription: exercisePrescriptionFromSets(exercise),
-    intensity: exerciseIntensityFromSets(exercise),
     notes: exercise.note || "",
     sets: exercise.sets || [],
     sourceWorkoutId: workout.id,
